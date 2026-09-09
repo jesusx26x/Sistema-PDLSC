@@ -5,14 +5,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap');
 
 :root {
-  --bg-abyss: #f8fafc;
+  --bg-abyss: #eef2f6;
   --bg-surface: #ffffff;
-  --bg-surface-raised: #f1f5f9;
+  --bg-surface-raised: #e2e8f0;
   --bg-card: #ffffff;
   --bg-card-hover: #ffffff;
   --bg-input: #ffffff;
   
-  --border-subtle: rgba(15, 23, 42, 0.08);
+  --border-subtle: rgba(15, 23, 42, 0.12);
   --border-gold: rgba(212, 175, 55, 0.35);
   --border-gold-strong: rgba(212, 175, 55, 0.7);
   
@@ -63,21 +63,21 @@ html, body {
 /* Bento Card Luxury White */
 .bento-card {
   background: var(--bg-card);
-  border: 1px solid rgba(212, 175, 55, 0.28);
+  border: 1px solid rgba(203, 213, 225, 0.9);
   border-radius: 1.25rem;
   box-shadow: 
-    0 4px 20px -2px rgba(15, 23, 42, 0.05),
-    0 2px 6px -1px rgba(15, 23, 42, 0.02);
+    0 4px 18px -2px rgba(15, 23, 42, 0.05),
+    0 1px 3px 0 rgba(15, 23, 42, 0.02);
   transition: transform var(--duration-normal) var(--ease-spring),
               border-color var(--duration-normal) var(--ease-spring),
               box-shadow var(--duration-normal) var(--ease-spring);
 }
 
 .bento-card:hover {
-  border-color: rgba(212, 175, 55, 0.6);
+  border-color: rgba(184, 134, 11, 0.5);
   box-shadow: 
     0 12px 30px -4px rgba(15, 23, 42, 0.08),
-    0 0 20px 0 rgba(212, 175, 55, 0.15);
+    0 0 20px 0 rgba(212, 175, 55, 0.12);
   transform: translateY(-2px);
 }
 
@@ -429,22 +429,54 @@ html, body {
 
 /* Tarjetas de acción rápida en el Dashboard */
 .action-card-quick {
-  background: #ffffff;
-  border: 1.5px solid rgba(212, 175, 55, 0.25);
   border-radius: 1.25rem;
   padding: 1.25rem;
-  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
   transition: all var(--duration-normal) var(--ease-spring);
   cursor: pointer;
   user-select: none;
 }
 
-.action-card-quick:hover {
-  border-color: #b8860b;
-  box-shadow: 0 10px 28px -4px rgba(184, 134, 11, 0.18);
+.action-card-quick:active {
+  transform: translateY(0px) scale(0.98);
+}
+
+.action-card-sale {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+  border: 1.5px solid #bbf7d0;
+}
+.action-card-sale:hover {
+  border-color: #22c55e;
+  box-shadow: 0 10px 24px -4px rgba(34, 197, 94, 0.22);
   transform: translateY(-3px);
 }
 
-.action-card-quick:active {
-  transform: translateY(0px) scale(0.98);
+.action-card-tank {
+  background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);
+  border: 1.5px solid #bae6fd;
+}
+.action-card-tank:hover {
+  border-color: #0ea5e9;
+  box-shadow: 0 10px 24px -4px rgba(14, 165, 233, 0.22);
+  transform: translateY(-3px);
+}
+
+.action-card-prod {
+  background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%);
+  border: 1.5px solid #fde68a;
+}
+.action-card-prod:hover {
+  border-color: #f59e0b;
+  box-shadow: 0 10px 24px -4px rgba(245, 158, 11, 0.22);
+  transform: translateY(-3px);
+}
+
+.action-card-stock {
+  background: linear-gradient(135deg, #faf5ff 0%, #ffffff 100%);
+  border: 1.5px solid #e9d5ff;
+}
+.action-card-stock:hover {
+  border-color: #a855f7;
+  box-shadow: 0 10px 24px -4px rgba(168, 85, 247, 0.22);
+  transform: translateY(-3px);
 }

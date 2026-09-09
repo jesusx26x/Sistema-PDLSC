@@ -106,6 +106,23 @@
   - [x] Gráficas de Chart.js y tablas dinámicas optimizadas con colores nítidos de alto contraste.
   - [x] Página 404 personalizada adaptada al diseño White Luxury.
 
+### Fase 8: Reducción de Blancos (15%), Filtro de Stock Bajo & Deducción Automática de Stock (Completado)
+- [x] **Reducción de Blancos (15% menos blanco)**:
+  - [x] Fondo general suavizado de `#F8FAFC` a `#EEF2F6` (tono pizarra/perla cálido que descansa la vista).
+  - [x] Sidebar y Topbar con fondo contrastado `#F1F5F9` y bordes reforzados `#CBD5E1`.
+  - [x] Tarjetas de Acciones Rápidas con degradados pasteles sutiles (esmeralda, cielo, ámbar, violeta) para romper la monotonía del blanco plano.
+  - [x] Banner principal en champaña dorado y tarjetas KPI con fondos degradados sutiles.
+- [x] **Filtro Rápido por Estado de Stock en Inventario**:
+  - [x] Pills táctiles en el catálogo: `✨ Todos`, `🟢 En Stock`, `⚠️ Stock Bajo`, `🔴 Agotados` con conteo dinámico en tiempo real.
+  - [x] Sincronización automática entre selector y pills táctiles.
+  - [x] Enlace directo desde alertas del dashboard para ver inmediatamente los productos con stock bajo.
+- [x] **Reducción Automática e Instantánea de Stock en cada Venta**:
+  - [x] Descuento inmediato de existencias en el inventario visual y en caché local (0 ms de latencia percibida).
+  - [x] Validación contra sobreventa (no permite vender más de lo disponible).
+  - [x] Cálculo automático de cambio en efectivo y ganancia neta en vivo dentro del modal.
+  - [x] Sincronización atómica con Google Sheets en segundo plano.
+  - [x] Devolución automática de stock al anular una venta.
+
 ---
 
 ## 🚀 Pasos Restantes para el Desarrollador (jesusx26x)

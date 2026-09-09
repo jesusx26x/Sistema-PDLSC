@@ -512,11 +512,17 @@ const ThorApp = (function() {
   }
 
   function renderInventory() {
+    renderStockFilterPills();
     renderCategoryFilters();
 
     const tbody = document.getElementById('inventoryTableBody');
     const cardsContainer = document.getElementById('inventoryCardsMobile');
     const countBadge = document.getElementById('inventoryCountBadge');
+    const stockSelect = document.getElementById('inventoryStockSelect');
+
+    if (stockSelect && stockSelect.value !== state.selectedStockFilter) {
+      stockSelect.value = state.selectedStockFilter;
+    }
 
     let filtered = state.inventory.filter(item => {
       const matchQuery = !state.searchQuery || 
@@ -544,8 +550,8 @@ const ThorApp = (function() {
       const emptyMsg = `
         <div class="text-center py-12">
           <span class="text-4xl">📦</span>
-          <p class="mt-2 text-sm text-slate-400">No se encontraron productos con los filtros seleccionados.</p>
-          <button onclick="ThorApp.openNewProductModal()" class="mt-4 btn-tactile btn-gold text-xs py-2 px-4">Agregar Producto</button>
+          <p class="mt-2 text-sm text-slate-500 font-medium">No se encontraron productos con el filtro seleccionado (${state.selectedStockFilter === 'low' ? 'Stock Bajo' : state.selectedStockFilter === 'out' ? 'Agotados' : state.selectedStockFilter === 'in' ? 'En Stock' : 'Todos'}).</p>
+          <button onclick="ThorApp.filterInventoryStock('all')" class="mt-4 btn-tactile btn-outline-gold text-xs py-2 px-4 shadow-xs">Ver Todos los Productos</button>
         </div>
       `;
       if (tbody) tbody.innerHTML = `<tr><td colspan="7">${emptyMsg}</td></tr>`;
@@ -683,6 +689,48 @@ const ThorApp = (function() {
       });
       cardsContainer.innerHTML = cardsHtml;
     }
+  }
+
+  function renderStockFilterPills() {
+    const container = document.getElementById('stockFilterPillsContainer');
+    if (!container) return;
+
+    let total = state.inventory.length;
+    let inCount = 0;
+    let lowCount = 0;
+    let outCount = 0;
+
+    state.inventory.forEach(p => {
+      const q = parseInt(p.cantidad) || 0;
+      const m = parseInt(p.stock_minimo) || 3;
+      if (q === 0) outCount++;
+      else if (q <= m) lowCount++;
+      else inCount++;
+    });
+
+    const pills = [
+      { id: 'all', label: `✨ Todos (${total})`, activeClass: 'bg-slate-800 text-white font-bold shadow-xs border-slate-800' },
+      { id: 'in', label: `🟢 En Stock (${inCount})`, activeClass: 'bg-emerald-100 text-emerald-900 border-emerald-400 font-bold shadow-xs' },
+      { id: 'low', label: `⚠️ Stock Bajo (${lowCount})`, activeClass: 'bg-amber-100 text-amber-900 border-amber-400 font-bold shadow-xs ring-2 ring-amber-400/50' },
+      { id: 'out', label: `🔴 Agotados (${outCount})`, activeClass: 'bg-rose-100 text-rose-900 border-rose-400 font-bold shadow-xs ring-2 ring-rose-400/50' }
+    ];
+
+    let html = '';
+    pills.forEach(p => {
+      const isSelected = state.selectedStockFilter === p.id;
+      html += `
+        <button type="button" onclick="ThorApp.filterInventoryStock('${p.id}')" 
+          class="btn-tactile px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition border ${
+            isSelected 
+              ? p.activeClass 
+              : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-300 shadow-2xs'
+          }">
+          ${p.label}
+        </button>
+      `;
+    });
+
+    container.innerHTML = html;
   }
 
   function renderCategoryFilters() {
@@ -1075,92 +1123,195 @@ const ThorApp = (function() {
     const select = document.getElementById('saleProductSelect');
     if (!select) return;
 
-    select.innerHTML = '<option value="">-- Selecciona un producto --</option>';
+    select.innerHTML = '<option value="">-- Selecciona un producto a vender --</option>';
     state.inventory.forEach(p => {
       const disabled = p.cantidad <= 0 ? 'disabled' : '';
-      const stockTxt = p.cantidad <= 0 ? '(Agotado)' : `(${p.cantidad} disponibles)`;
+      const stockTxt = p.cantidad <= 0 ? '(Agotado)' : `(${p.cantidad} disp.)`;
       select.innerHTML += `
         <option value="${p.id}" ${disabled} ${selectedProductId === p.id ? 'selected' : ''}>
-          ${p.nombre} - RD$ ${Number(p.precio_venta_dop || 0).toLocaleString()} ${stockTxt}
+          ${p.nombre} — RD$ ${Number(p.precio_venta_dop || 0).toLocaleString()} ${stockTxt}
         </option>
       `;
     });
 
-    document.getElementById('formSale').reset();
-    document.getElementById('saleProductSelect').value = selectedProductId || '';
+    const formSale = document.getElementById('formSale');
+    if (formSale) formSale.reset();
+    
+    if (selectedProductId) {
+      select.value = selectedProductId;
+    }
+    
     handleSaleProductChange();
-
     document.getElementById('modalSale').classList.remove('hidden');
   }
 
   function handleSaleProductChange() {
-    const id = document.getElementById('saleProductSelect').value;
+    const id = (document.getElementById('saleProductSelect') || {}).value;
     const prod = state.inventory.find(p => p.id === id);
-    const stockBadge = document.getElementById('saleStockBadge');
+    const infoBox = document.getElementById('saleProductInfo');
+    const availableStock = document.getElementById('saleAvailableStock');
+    const unitCost = document.getElementById('saleUnitCost');
     const priceInput = document.getElementById('salePriceInput');
     const qtyInput = document.getElementById('saleQtyInput');
 
     if (prod) {
-      if (stockBadge) {
-        stockBadge.innerHTML = `Stock actual: <strong class="${prod.cantidad > 0 ? 'text-emerald-400' : 'text-rose-400'}">${prod.cantidad} unidades</strong>`;
+      if (infoBox) infoBox.classList.remove('hidden');
+      if (availableStock) {
+        const colorClass = prod.cantidad === 0 ? 'text-rose-600' : (prod.cantidad <= (prod.stock_minimo || 3) ? 'text-amber-600' : 'text-emerald-600');
+        availableStock.className = `font-bold text-sm ${colorClass}`;
+        availableStock.textContent = `${prod.cantidad} unidades disponibles`;
+      }
+      if (unitCost) {
+        unitCost.textContent = `RD$ ${Number(prod.costo_dop || 0).toLocaleString()}`;
       }
       if (priceInput) priceInput.value = prod.precio_venta_dop || 0;
       if (qtyInput) {
         qtyInput.max = prod.cantidad;
         if (parseInt(qtyInput.value) > prod.cantidad) qtyInput.value = prod.cantidad;
-        if (!qtyInput.value || qtyInput.value <= 0) qtyInput.value = 1;
+        if (!qtyInput.value || parseInt(qtyInput.value) <= 0) qtyInput.value = 1;
       }
     } else {
-      if (stockBadge) stockBadge.innerHTML = '';
+      if (infoBox) infoBox.classList.add('hidden');
       if (priceInput) priceInput.value = '';
     }
     recalcularTotalVenta();
   }
 
   function recalcularTotalVenta() {
-    const qty = parseInt(document.getElementById('saleQtyInput').value) || 0;
-    const price = parseFloat(document.getElementById('salePriceInput').value) || 0;
-    const totalElem = document.getElementById('saleTotalPreview');
+    const id = (document.getElementById('saleProductSelect') || {}).value;
+    const prod = state.inventory.find(p => p.id === id);
+    const qtyInput = document.getElementById('saleQtyInput');
+    const priceInput = document.getElementById('salePriceInput');
+    const totalElem = document.getElementById('saleTotalDop') || document.getElementById('saleTotalPreview');
+    const profitElem = document.getElementById('saleNetProfitDop');
+    const receivedInput = document.getElementById('saleReceivedInput');
+    const changeElem = document.getElementById('saleChangeDop');
+
+    const qty = parseInt(qtyInput ? qtyInput.value : 0) || 0;
+    const price = parseFloat(priceInput ? priceInput.value : 0) || 0;
     const total = qty * price;
 
     if (totalElem) {
       totalElem.textContent = `RD$ ${total.toLocaleString()}`;
     }
+
+    if (profitElem && prod) {
+      const costoUnitario = parseFloat(prod.costo_dop) || 0;
+      const ganancia = total - (costoUnitario * qty);
+      profitElem.textContent = `${ganancia >= 0 ? '+' : ''}RD$ ${Math.round(ganancia).toLocaleString()}`;
+      profitElem.className = `font-bold font-mono ${ganancia >= 0 ? 'text-emerald-600' : 'text-rose-600'}`;
+    }
+
+    if (receivedInput && changeElem) {
+      const recibido = parseFloat(receivedInput.value) || 0;
+      if (recibido > 0) {
+        const cambio = recibido - total;
+        changeElem.textContent = `RD$ ${cambio >= 0 ? cambio.toFixed(2) : '0.00'}`;
+        changeElem.className = `text-xs sm:text-sm font-bold font-mono ${cambio >= 0 ? 'text-amber-700' : 'text-rose-600'}`;
+      } else {
+        changeElem.textContent = 'RD$ 0.00';
+        changeElem.className = 'text-xs sm:text-sm font-bold text-amber-700 font-mono';
+      }
+    }
   }
 
   async function handleRegisterSale(e) {
-    e.preventDefault();
-    const idProd = document.getElementById('saleProductSelect').value;
-    const cant = parseInt(document.getElementById('saleQtyInput').value) || 0;
-    const precio = parseFloat(document.getElementById('salePriceInput').value) || 0;
-    const cliente = document.getElementById('saleCliente').value.trim() || 'Cliente General';
-    const metodo = document.getElementById('saleMetodoPago').value;
-    const notas = document.getElementById('saleNotas').value.trim();
+    if (e) e.preventDefault();
+    const idProd = (document.getElementById('saleProductSelect') || {}).value;
+    const qtyInput = document.getElementById('saleQtyInput');
+    const priceInput = document.getElementById('salePriceInput');
+    const customerInput = document.getElementById('saleCustomerInput') || document.getElementById('saleCliente');
+    const methodInput = document.getElementById('salePaymentMethod') || document.getElementById('saleMetodoPago');
 
-    if (!idProd || cant <= 0 || precio <= 0) {
-      Sonner.warning('Por favor completa todos los datos de la venta');
+    const cant = parseInt(qtyInput ? qtyInput.value : 0) || 0;
+    const precio = parseFloat(priceInput ? priceInput.value : 0) || 0;
+    const cliente = (customerInput && customerInput.value.trim()) || 'Cliente General';
+    const metodo = (methodInput && methodInput.value) || 'Efectivo';
+
+    if (!idProd) {
+      Sonner.warning('Por favor selecciona un producto para vender');
       return;
     }
 
-    const saleData = {
-      id_articulo: idProd,
+    const prod = state.inventory.find(p => p.id === idProd);
+    if (!prod) {
+      Sonner.error('El producto seleccionado no existe en inventario');
+      return;
+    }
+
+    if (cant <= 0) {
+      Sonner.warning('La cantidad a vender debe ser al menos 1 unidad');
+      return;
+    }
+
+    if (prod.cantidad < cant) {
+      Sonner.error(`Stock insuficiente: Solo quedan ${prod.cantidad} unidades disponibles.`);
+      return;
+    }
+
+    // =========================================================================
+    // REDUCCIÓN AUTOMÁTICA DE STOCK INMEDIATA (0 LATENCIA VISUAL)
+    // =========================================================================
+    prod.cantidad = Math.max(0, prod.cantidad - cant);
+    const stockMin = parseInt(prod.stock_minimo) || 3;
+    prod.estado = prod.cantidad === 0 ? 'Agotado' : (prod.cantidad <= stockMin ? 'Stock Bajo' : 'En Stock');
+
+    // Registrar venta en memoria local de inmediato
+    const totalVenta = cant * precio;
+    const costoUnit = parseFloat(prod.costo_dop) || 0;
+    const ganancia = totalVenta - (costoUnit * cant);
+    const idVentaLocal = 'VTA-' + Date.now().toString().slice(-6);
+    const nuevaVenta = {
+      id_venta: idVentaLocal,
+      fecha_venta: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      id_articulo: prod.id,
+      nombre_articulo: prod.nombre,
+      categoria: prod.categoria || 'Variedades',
+      cantidad: cant,
+      precio_unitario_dop: precio,
+      total_dop: totalVenta,
+      costo_unitario_dop: costoUnit,
+      ganancia_dop: ganancia,
+      cliente: cliente,
+      metodo_pago: metodo,
+      estado: 'Completada'
+    };
+
+    state.sales.unshift(nuevaVenta);
+
+    // Actualizar caché de inmediato en localStorage
+    const cached = ThorAPI.getCachedData();
+    if (cached && cached.inventario) {
+      const cp = cached.inventario.find(x => x.id === prod.id);
+      if (cp) {
+        cp.cantidad = prod.cantidad;
+        cp.estado = prod.estado;
+      }
+      if (cached.ventas) cached.ventas.unshift(nuevaVenta);
+      ThorAPI.setCachedData(cached);
+    }
+
+    // Cerrar modal y re-renderizar inmediatamente
+    closeAllModals();
+    renderAll();
+    Sonner.success(`¡Venta registrada! Total: RD$ ${Number(totalVenta).toLocaleString()} — Stock restante: ${prod.cantidad} un.`, 4500);
+
+    // Sincronizar con Google Sheets en segundo plano sin congelar la pantalla
+    const salePayload = {
+      id_articulo: prod.id,
       cantidad: cant,
       precio_unitario_dop: precio,
       cliente: cliente,
-      metodo_pago: metodo,
-      notas: notas
+      metodo_pago: metodo
     };
 
-    closeAllModals();
-
-    const res = await ThorAPI.registerSale(saleData);
-    if (res && res.status === 'success') {
-      Sonner.success(`¡Venta registrada! Total: RD$ ${Number(res.total_dop || (cant * precio)).toLocaleString()}`);
-      await sincronizarConNube(false);
-      renderAll();
-    } else {
-      Sonner.error(res.message || 'No se pudo procesar la venta');
-    }
+    ThorAPI.registerSale(salePayload).then(res => {
+      if (res && res.status === 'success') {
+        sincronizarConNube(false);
+      }
+    }).catch(err => {
+      console.warn('Error sincronizando venta con Google Sheets:', err);
+    });
   }
 
   function openTankModal() {
@@ -1337,16 +1488,31 @@ const ThorApp = (function() {
   }
 
   function confirmCancelSale(idVenta) {
-    if (confirm('¿Anular esta venta y devolver las unidades al inventario?')) {
-      ThorAPI.cancelSale(idVenta);
+    if (confirm('¿Anular esta venta y devolver las unidades al inventario automáticamente?')) {
       const v = state.sales.find(x => x.id_venta === idVenta);
-      if (v) {
+      if (v && v.estado !== 'Cancelada') {
         v.estado = 'Cancelada';
         const p = state.inventory.find(x => x.id === v.id_articulo);
-        if (p) p.cantidad += v.cantidad;
+        if (p) {
+          p.cantidad += (parseInt(v.cantidad) || 0);
+          const min = parseInt(p.stock_minimo) || 3;
+          p.estado = p.cantidad > min ? 'En Stock' : (p.cantidad > 0 ? 'Stock Bajo' : 'Agotado');
+        }
+        const cached = ThorAPI.getCachedData();
+        if (cached && cached.inventario) {
+          const cp = cached.inventario.find(x => x.id === v.id_articulo);
+          if (cp && p) {
+            cp.cantidad = p.cantidad;
+            cp.estado = p.estado;
+          }
+          const cv = (cached.ventas || []).find(x => x.id_venta === idVenta);
+          if (cv) cv.estado = 'Cancelada';
+          ThorAPI.setCachedData(cached);
+        }
+        renderAll();
+        Sonner.success(`Venta ${idVenta} anulada y ${v.cantidad} unidades devueltas al inventario`);
+        ThorAPI.cancelSale(idVenta).then(() => sincronizarConNube(false));
       }
-      renderAll();
-      Sonner.success('Venta anulada y stock devuelto');
     }
   }
 
@@ -1417,6 +1583,9 @@ const ThorApp = (function() {
 
     const salePrice = document.getElementById('salePriceInput');
     if (salePrice) salePrice.addEventListener('input', recalcularTotalVenta);
+
+    const saleReceived = document.getElementById('saleReceivedInput');
+    if (saleReceived) saleReceived.addEventListener('input', recalcularTotalVenta);
   }
 
   function actualizarTexto(id, texto) {
@@ -1453,7 +1622,13 @@ const ThorApp = (function() {
     confirmDeleteProduct,
     confirmCancelSale,
     filterInventoryCategory: (cat) => { state.selectedCategory = cat; renderInventory(); },
-    filterInventoryStock: (filter) => { state.selectedStockFilter = filter; switchTab('inventario'); },
+    filterInventoryStock: (filter) => { 
+      state.selectedStockFilter = filter; 
+      const select = document.getElementById('inventoryStockSelect');
+      if (select) select.value = filter;
+      switchTab('inventario'); 
+      renderInventory(); 
+    },
     sincronizarConNube: () => sincronizarConNube(true),
     actualizarTasaCambio: () => actualizarTasaCambio(true),
     exportInventoryToExcel,

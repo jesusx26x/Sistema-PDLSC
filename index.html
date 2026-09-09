@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 
-<body class="bg-[#F8FAFC] text-slate-900 min-h-screen flex flex-col md:flex-row pb-20 md:pb-0 selection:bg-amber-100 selection:text-amber-900">
+<body class="bg-[#EEF2F6] text-slate-900 min-h-screen flex flex-col md:flex-row pb-20 md:pb-0 selection:bg-amber-100 selection:text-amber-900">
 
   <!-- Contenedor de Toasts estilo Sonner -->
   <div id="sonner-container"></div>
@@ -51,7 +51,7 @@
   <!-- =========================================================================
        PORTAL DE ACCESO / LOGIN (WHITE LUXURY GLASSMORPHISM & RLS)
        ========================================================================= -->
-  <div id="view-login" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#F8FAFC]/95 backdrop-blur-xl overflow-hidden">
+  <div id="view-login" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#EEF2F6]/95 backdrop-blur-xl overflow-hidden">
     <!-- Luces ambientales de fondo (Warm Gold & Rose Glow) -->
     <div class="ambient-glow-gold -top-20 -left-20"></div>
     <div class="ambient-glow-navy -bottom-32 -right-32"></div>
@@ -75,39 +75,36 @@
       </div>
 
       <!-- Formulario de Autenticación -->
-      <form id="loginForm" onsubmit="ThorApp.handleLogin(event)" class="space-y-4">
+      <form id="formLogin" onsubmit="ThorApp.handleLogin(event)" class="space-y-4">
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1.5">Usuario del Sistema</label>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Usuario del Sistema</label>
           <div class="relative">
-            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">👤</span>
-            <input type="text" id="loginUsername" required autocomplete="username" placeholder="Ingresa tu usuario" value="Pameladlsantos" class="form-input pl-10 text-sm w-full font-medium">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">👤</span>
+            <input type="text" id="loginUsername" placeholder="Ingresa tu usuario..." required autocomplete="username" class="form-input pl-10 text-sm">
           </div>
         </div>
 
         <div>
-          <div class="flex items-center justify-between mb-1.5">
-            <label class="block text-xs font-bold text-slate-700">Contraseña</label>
-            <span class="text-[10px] text-amber-700 font-semibold font-mono">Thor Essence 2026</span>
-          </div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Contraseña</label>
           <div class="relative">
-            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔒</span>
-            <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••" value="Thorayka2419" class="form-input pl-10 pr-10 text-sm w-full font-mono">
-            <button type="button" onclick="ThorApp.togglePasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-700 text-xs transition">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">🔒</span>
+            <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password" class="form-input pl-10 pr-10 text-sm">
+            <button type="button" onclick="ThorApp.togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none">
               <span id="togglePasswordIcon">👁️</span>
             </button>
           </div>
         </div>
 
-        <div class="flex items-center justify-between pt-1">
-          <label class="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-700 font-medium">
+        <div class="flex items-center justify-between text-xs text-slate-600 pt-1">
+          <label class="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" id="loginRemember" checked class="rounded border-slate-300 text-amber-600 focus:ring-amber-500">
-            <span>Recordar mi sesión</span>
+            <span>Recordar en este equipo</span>
           </label>
         </div>
 
-        <button type="submit" id="btnLoginSubmit" class="btn-tactile btn-gold w-full py-3.5 text-sm font-bold shadow-lg flex items-center justify-center gap-2 mt-2">
+        <button type="submit" id="btnLoginSubmit" class="btn-tactile btn-gold w-full py-3 text-sm font-bold shadow-lg flex items-center justify-center gap-2">
           <span id="loginBtnIcon">✨</span>
-          <span id="loginBtnText">Iniciar Sesión</span>
+          <span id="loginBtnText">Iniciar Sesión en Servidor</span>
         </button>
 
         <p class="text-[11px] text-center text-slate-500 pt-2 border-t border-slate-200">
@@ -118,12 +115,12 @@
   </div>
 
   <!-- =========================================================================
-       SIDEBAR DESKTOP / TABLET (WHITE LUXURY)
+       SIDEBAR DESKTOP / TABLET (WHITE LUXURY LAYERED)
        ========================================================================= -->
-  <aside class="hidden md:flex md:w-64 lg:w-72 bg-white border-r border-slate-200/80 flex-col justify-between shrink-0 h-screen sticky top-0 z-30 shadow-sm">
+  <aside class="hidden md:flex md:w-64 lg:w-72 bg-[#F1F5F9] border-r border-slate-300/80 flex-col justify-between shrink-0 h-screen sticky top-0 z-30 shadow-xs">
     <div class="p-5">
       <!-- Logo Oficial de Thor Essence -->
-      <div class="flex items-center gap-3.5 pb-6 border-b border-slate-200/80">
+      <div class="flex items-center gap-3.5 pb-6 border-b border-slate-300/80">
         <div class="brand-logo-frame w-14 h-14 shrink-0 shadow-md">
           <img src="assets/logo.jpg" alt="Thor Essence Logo" class="w-full h-full object-cover">
         </div>
@@ -136,23 +133,23 @@
 
       <!-- Menú de Navegación enfocado 100% en Pamela -->
       <nav class="mt-6 space-y-1.5">
-        <a href="#" data-tab="dashboard" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition bg-amber-50 text-amber-900 border-l-4 border-amber-600">
+        <a href="#" data-tab="dashboard" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition bg-amber-50 text-amber-900 border-l-4 border-amber-600 shadow-xs">
           <span class="text-lg">📊</span>
           <span>Inicio</span>
         </a>
-        <a href="#" data-tab="inventario" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-600 hover:text-amber-900 hover:bg-slate-50">
+        <a href="#" data-tab="inventario" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-700 hover:text-amber-900 hover:bg-white/80">
           <span class="text-lg">📦</span>
           <span>Inventario</span>
         </a>
-        <a href="#" data-tab="ventas" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-600 hover:text-amber-900 hover:bg-slate-50">
+        <a href="#" data-tab="ventas" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-700 hover:text-amber-900 hover:bg-white/80">
           <span class="text-lg">💰</span>
           <span>Ventas</span>
         </a>
-        <a href="#" data-tab="tanques" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-600 hover:text-amber-900 hover:bg-slate-50">
+        <a href="#" data-tab="tanques" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-700 hover:text-amber-900 hover:bg-white/80">
           <span class="text-lg">🚢</span>
           <span>Tanques de EE.UU.</span>
         </a>
-        <a href="#" data-tab="reportes" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-600 hover:text-amber-900 hover:bg-slate-50">
+        <a href="#" data-tab="reportes" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-700 hover:text-amber-900 hover:bg-white/80">
           <span class="text-lg">📈</span>
           <span>Reportes</span>
         </a>
@@ -160,8 +157,8 @@
     </div>
 
     <!-- Pie del Sidebar: Tasa en vivo y Conexión Nube -->
-    <div class="p-4 border-t border-slate-200/80 bg-slate-50/60 space-y-3">
-      <div class="p-2.5 rounded-xl bg-white border border-amber-200/70 flex items-center justify-between shadow-xs">
+    <div class="p-4 border-t border-slate-300/80 bg-slate-200/40 space-y-3">
+      <div class="p-2.5 rounded-xl bg-white border border-amber-200/80 flex items-center justify-between shadow-xs">
         <div>
           <span class="text-[10px] text-slate-500 block font-medium">Tasa USD ➔ DOP</span>
           <span id="sidebarUsdRate" class="text-xs font-bold text-slate-900">1 USD = RD$ 60.50</span>
@@ -182,7 +179,7 @@
       </div>
 
       <!-- Tarjeta de Usuario Autenticado & Signout en Servidor (Sidebar) -->
-      <div class="pt-2 border-t border-slate-200/80">
+      <div class="pt-2 border-t border-slate-300/80">
         <div class="p-2.5 rounded-2xl bg-white border border-slate-200/80 flex items-center justify-between shadow-xs">
           <div class="flex items-center gap-2.5 min-w-0">
             <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-600 to-amber-400 p-0.5 shrink-0 shadow-sm">
@@ -198,8 +195,8 @@
               </span>
             </div>
           </div>
-          <button onclick="ThorApp.logout()" class="btn-tactile p-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs transition border border-red-200 shrink-0" title="Cerrar sesión en el servidor">
-            🚪
+          <button onclick="ThorApp.logout()" class="btn-tactile p-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs" title="Cerrar sesión en el servidor">
+            🚪 Salir
           </button>
         </div>
       </div>
@@ -212,7 +209,7 @@
   <div class="flex-1 flex flex-col min-w-0">
 
     <!-- Topbar Superior (Móvil y Desktop) -->
-    <header class="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 flex items-center justify-between gap-3 shadow-xs">
+    <header class="sticky top-0 z-20 bg-[#F1F5F9]/95 backdrop-blur-md border-b border-slate-300/80 px-4 py-3 flex items-center justify-between gap-3 shadow-xs">
       <!-- Identidad Móvil -->
       <div class="flex items-center gap-3 md:hidden">
         <div class="brand-logo-frame w-10 h-10 shrink-0 shadow-sm">
@@ -226,12 +223,12 @@
 
       <!-- Tasa en vivo en Desktop -->
       <div class="hidden md:flex items-center gap-3">
-        <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-300/80 text-xs shadow-xs">
           <span class="text-amber-700 font-bold">💵 Tasa Hoy:</span>
           <span id="headerUsdRate" class="font-mono text-slate-800 font-semibold">1 USD = RD$ 60.50</span>
           <button onclick="ThorApp.actualizarTasaCambio()" class="btn-tactile text-amber-600 hover:text-amber-800 transition ml-1" title="Actualizar en vivo">🔄</button>
         </div>
-        <button onclick="ThorApp.sincronizarConNube()" class="btn-tactile px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition shadow-xs">
+        <button onclick="ThorApp.sincronizarConNube()" class="btn-tactile px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-300/80 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition shadow-xs">
           ☁️ Sincronizar
         </button>
       </div>
@@ -246,24 +243,20 @@
           <span>🚢</span>
           <span>+ Tanque</span>
         </button>
-        <button onclick="ThorApp.openNewProductModal()" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 flex items-center gap-1 shadow-xs">
+        <button onclick="ThorApp.openNewProductModal()" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 hidden lg:inline-flex items-center gap-1.5 shadow-xs">
           <span>+</span>
-          <span class="hidden sm:inline">Producto</span>
+          <span>Producto</span>
         </button>
 
-        <!-- Chip de Usuario y Cerrar Sesión en Desktop -->
-        <div class="hidden lg:flex items-center gap-2 pl-2 border-l border-slate-200 ml-1">
-          <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span class="font-bold text-slate-800">Pamela</span>
-          </div>
-          <button onclick="ThorApp.logout()" class="btn-tactile px-2.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-semibold transition" title="Cerrar sesión en el servidor">
-            <span>🚪</span>
-            <span class="hidden xl:inline">Salir</span>
-          </button>
+        <div class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 shadow-xs">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span id="topbarUserName">Pamela</span>
         </div>
 
-        <!-- Botón Móvil Cerrar Sesión -->
+        <button onclick="ThorApp.logout()" class="btn-tactile hidden sm:inline-flex px-2.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-semibold transition" title="Cerrar sesión en el servidor">
+          🚪 Salir
+        </button>
+
         <button onclick="ThorApp.logout()" class="btn-tactile md:hidden p-2 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs" title="Cerrar sesión en el servidor">
           🚪
         </button>
@@ -278,7 +271,7 @@
            ===================================================================== -->
       <section id="view-dashboard" class="tab-view space-y-6">
         <!-- Banner de Bienvenida -->
-        <div class="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-amber-500/10 via-white to-rose-50/60 border border-amber-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-amber-100/90 via-amber-50 to-orange-50/70 border border-amber-300 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <span class="text-xs uppercase tracking-widest text-[#926704] font-bold">Panel Principal</span>
             <h2 class="font-brand text-xl sm:text-2xl font-bold text-slate-900 mt-1">Thor Essence — Inventario & Ventas</h2>
@@ -298,7 +291,7 @@
           <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Acciones Rápidas</h3>
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <!-- Acción 1: Venta Rápida -->
-            <div onclick="ThorApp.openSaleModal()" class="action-card-quick flex flex-col justify-between">
+            <div onclick="ThorApp.openSaleModal()" class="action-card-quick action-card-sale flex flex-col justify-between">
               <div class="flex items-center justify-between mb-2">
                 <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-bold border border-emerald-200">💰</div>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Caja</span>
@@ -310,10 +303,10 @@
             </div>
 
             <!-- Acción 2: Llegó Tanque -->
-            <div onclick="ThorApp.openTankModal()" class="action-card-quick flex flex-col justify-between">
+            <div onclick="ThorApp.openTankModal()" class="action-card-quick action-card-tank flex flex-col justify-between">
               <div class="flex items-center justify-between mb-2">
-                <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-xl font-bold border border-amber-200">🚢</div>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">EE.UU.</span>
+                <div class="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center text-xl font-bold border border-sky-200">🚢</div>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">EE.UU.</span>
               </div>
               <div>
                 <h4 class="font-bold text-slate-900 text-sm sm:text-base">Ingresar Tanque</h4>
@@ -322,10 +315,10 @@
             </div>
 
             <!-- Acción 3: Nuevo Producto -->
-            <div onclick="ThorApp.openNewProductModal()" class="action-card-quick flex flex-col justify-between">
+            <div onclick="ThorApp.openNewProductModal()" class="action-card-quick action-card-prod flex flex-col justify-between">
               <div class="flex items-center justify-between mb-2">
-                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl font-bold border border-blue-200">📦</div>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">Catálogo</span>
+                <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-xl font-bold border border-amber-200">📦</div>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Catálogo</span>
               </div>
               <div>
                 <h4 class="font-bold text-slate-900 text-sm sm:text-base">Nuevo Producto</h4>
@@ -334,7 +327,7 @@
             </div>
 
             <!-- Acción 4: Ver Inventario -->
-            <div onclick="ThorApp.switchTab('inventario')" class="action-card-quick flex flex-col justify-between">
+            <div onclick="ThorApp.switchTab('inventario')" class="action-card-quick action-card-stock flex flex-col justify-between">
               <div class="flex items-center justify-between mb-2">
                 <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl font-bold border border-purple-200">🔍</div>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">Stock</span>
@@ -350,9 +343,9 @@
         <!-- Alertas Inteligentes de Stock -->
         <div id="dashboardAlerts"></div>
 
-        <!-- Tarjetas de Métricas (Bento Grid Blanco) -->
+        <!-- Tarjetas de Métricas (Bento Grid) -->
         <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-          <div class="bento-card p-4 sm:p-5 space-y-1">
+          <div class="bento-card bg-gradient-to-br from-white to-slate-50/80 p-4 sm:p-5 space-y-1">
             <div class="flex items-center justify-between text-slate-500">
               <span class="text-xs font-semibold">Productos Activos</span>
               <span class="text-base">📦</span>
@@ -361,7 +354,7 @@
             <p class="text-[11px] text-slate-500"><span id="kpiUnidadesStock" class="text-amber-700 font-semibold">0</span> unidades totales</p>
           </div>
 
-          <div class="bento-card p-4 sm:p-5 space-y-1">
+          <div class="bento-card bg-gradient-to-br from-white to-amber-50/60 p-4 sm:p-5 space-y-1 border-amber-200/90">
             <div class="flex items-center justify-between text-slate-500">
               <span class="text-xs font-semibold">Valor Inventario (Venta)</span>
               <span class="text-base">💎</span>
@@ -370,21 +363,21 @@
             <p class="text-[11px] text-slate-500">Costo: <span id="kpiCostoInventario" class="text-slate-700 font-medium">RD$ 0</span></p>
           </div>
 
-          <div class="bento-card p-4 sm:p-5 space-y-1">
+          <div class="bento-card bg-gradient-to-br from-white to-emerald-50/50 p-4 sm:p-5 space-y-1 border-emerald-200/90">
             <div class="flex items-center justify-between text-slate-500">
               <span class="text-xs font-semibold">Ventas del Mes</span>
               <span class="text-base">💰</span>
             </div>
-            <p id="kpiVentasMes" class="text-xl sm:text-2xl font-bold text-emerald-600">RD$ 0</p>
+            <p id="kpiVentasMes" class="text-xl sm:text-2xl font-bold text-emerald-700">RD$ 0</p>
             <p class="text-[11px] text-slate-500">Ganancia: <span id="kpiGananciaMes" class="text-emerald-700 font-semibold">RD$ 0</span></p>
           </div>
 
-          <div class="bento-card p-4 sm:p-5 space-y-1">
+          <div class="bento-card bg-gradient-to-br from-white to-rose-50/50 p-4 sm:p-5 space-y-1 border-rose-200/90">
             <div class="flex items-center justify-between text-slate-500">
               <span class="text-xs font-semibold">Por Agotarse</span>
               <span class="text-base">⚠️</span>
             </div>
-            <p id="kpiBajoStock" class="text-xl sm:text-2xl font-bold text-rose-600">0</p>
+            <p id="kpiStockBajo" class="text-xl sm:text-2xl font-bold text-rose-600">0</p>
             <p class="text-[11px] text-slate-500">Artículos con stock crítico</p>
           </div>
         </div>
@@ -450,7 +443,7 @@
         </div>
 
         <!-- Buscador y Filtros -->
-        <div class="bento-card p-4 space-y-3">
+        <div class="bento-card p-4 space-y-3 bg-white/95">
           <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div class="relative flex-1">
               <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">🔍</span>
@@ -458,17 +451,27 @@
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
-              <select onchange="ThorApp.filterInventoryStock(this.value)" class="form-input text-xs sm:text-sm py-2 px-3">
-                <option value="all">Todos los stocks</option>
-                <option value="in">En Stock</option>
-                <option value="low">Stock Bajo (Crítico)</option>
-                <option value="out">Agotados (0 un.)</option>
+              <select id="inventoryStockSelect" onchange="ThorApp.filterInventoryStock(this.value)" class="form-input text-xs sm:text-sm py-2 px-3 bg-slate-50 font-semibold text-slate-700 border-slate-300">
+                <option value="all">📦 Todos los stocks</option>
+                <option value="in">🟢 En Stock</option>
+                <option value="low">⚠️ Stock Bajo</option>
+                <option value="out">🔴 Agotados (0 un.)</option>
               </select>
               <span id="inventoryCountBadge" class="badge-gold whitespace-nowrap font-bold">0 productos</span>
             </div>
           </div>
 
-          <div id="categoryPillsContainer" class="flex items-center gap-2 overflow-x-auto pb-1 pt-1 scrollbar-thin"></div>
+          <!-- Filtro Rápido por Estado de Stock (Pills Táctiles con Conteo) -->
+          <div class="flex items-center gap-2 overflow-x-auto pb-0.5 pt-1 scrollbar-thin">
+            <span class="text-xs font-bold text-slate-600 whitespace-nowrap">Estado:</span>
+            <div id="stockFilterPillsContainer" class="flex items-center gap-1.5 shrink-0"></div>
+          </div>
+
+          <!-- Filtro por Categorías -->
+          <div class="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
+            <span class="text-xs font-bold text-slate-600 whitespace-nowrap">Categoría:</span>
+            <div id="categoryPillsContainer" class="flex items-center gap-1.5 shrink-0"></div>
+          </div>
         </div>
 
         <!-- Tarjetas Móviles -->
