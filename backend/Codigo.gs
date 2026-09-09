@@ -409,6 +409,9 @@ function doPost(e) {
         inicializarHojasSiNoExisten(true);
         return jsonResponse({ status: 'success', message: 'Estructura de hojas inicializada con éxito' });
 
+      case 'resetAllData':
+        return jsonResponse(purgarTodasLasHojas());
+
       default:
         return jsonResponse({ status: 'error', message: 'Acción POST no reconocida: ' + action }, 400);
     }
@@ -1231,15 +1234,7 @@ function inicializarHojasSiNoExisten(forzar) {
     estilarCabecera(invSheet, cabecerasInv[0].length, '#0B132B', '#D4AF37');
     invSheet.setFrozenRows(1);
 
-    if (invSheet.getLastRow() === 1) {
-      const ejemplos = [
-        ['PROD-001', 'Perfume Thor Gold Luxury 100ml', 'Perfumes', 'Fragancia premium importada', 14, 4, 15.00, 907.50, 1950, 'Tanque #1 Miami', 'En Stock', new Date(), new Date()],
-        ['PROD-002', 'Splash Vainilla & Rose 250ml', 'Splash', 'Aroma dulce y floral', 26, 6, 4.20, 254.10, 650, 'Tanque #1 Miami', 'En Stock', new Date(), new Date()],
-        ['PROD-003', 'Crema Hidratante Karité 200ml', 'Cremas', 'Nutrición profunda para la piel', 19, 5, 5.50, 332.75, 750, 'Tanque #1 Miami', 'En Stock', new Date(), new Date()],
-        ['PROD-004', 'Body Wash Coco & Miel 300ml', 'Body Wash', 'Gel de ducha relajante', 2, 4, 4.80, 290.40, 700, 'Tanque #1 Miami', 'Stock Bajo', new Date(), new Date()]
-      ];
-      invSheet.getRange(2, 1, ejemplos.length, ejemplos[0].length).setValues(ejemplos);
-    }
+    // Thor Essence: Las hojas inician completamente en blanco para Pamela (0 datos demo)
   }
 
   let venSheet = ss.getSheetByName(SHEETS.VENTAS);
@@ -1331,4 +1326,16 @@ function jsonResponse(data, statusCode) {
   return ContentService
     .createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function purgarTodasLasHojas() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetsToPurge = [SHEETS.INVENTARIO, SHEETS.VENTAS, SHEETS.RECEPCIONES, SHEETS.COBROS];
+  sheetsToPurge.forEach(name => {
+    const s = ss.getSheetByName(name);
+    if (s && s.getLastRow() > 1) {
+      s.deleteRows(2, s.getLastRow() - 1);
+    }
+  });
+  return { status: 'success', message: 'Todas las tablas de datos han sido limpiadas a 0 en Google Sheets.' };
 }
