@@ -147,6 +147,17 @@ const ThorApp = (function() {
   }
 
   function cargarDatosDesdeCache() {
+    // Purgar cachés antiguas que contenían productos demo como PROD-001
+    const oldKeys = ['thor_cached_system_data', 'thor_cached_system_data_v2', 'thor_cached_system_data_v3', 'thor_cached_system_data_v4', 'thor_cached_system_data_v5'];
+    oldKeys.forEach(k => {
+      try {
+        const val = localStorage.getItem(k);
+        if (val && (val.includes('PROD-001') || val.includes('Vainilla & Rose'))) {
+          localStorage.removeItem(k);
+        }
+      } catch (e) {}
+    });
+
     const cached = ThorAPI.getCachedData();
     state.inventory = cached.inventario || [];
     state.sales = cached.ventas || [];
@@ -959,8 +970,9 @@ const ThorApp = (function() {
               <div class="font-bold text-sm text-slate-800">RD$ ${Number(v.total_dop || 0).toLocaleString()}</div>
               <div class="text-[11px] text-slate-500">${v.metodo_pago || 'Efectivo'}</div>
             </td>
-            <td class="py-3 px-3 text-right font-semibold text-sm ${esCancelada ? 'text-slate-400' : 'text-emerald-600'}">
-              RD$ ${Number(v.ganancia_dop || 0).toLocaleString()}
+            <td class="py-3 px-3 text-right font-semibold text-sm ${esCancelada ? 'text-slate-400' : (Number(v.ganancia_dop || 0) < 0 ? 'text-rose-400 font-bold' : 'text-emerald-400')}">
+              ${Number(v.ganancia_dop || 0) < 0 ? `-RD$ ${Math.abs(Math.round(Number(v.ganancia_dop))).toLocaleString()}` : `RD$ ${Number(v.ganancia_dop || 0).toLocaleString()}`}
+              ${Number(v.ganancia_dop || 0) < 0 ? '<div class="text-[9px] text-rose-400 uppercase font-bold tracking-wider">Pérdida/Excepción</div>' : ''}
             </td>
             <td class="py-3 px-3 text-center">
               <span class="${esCancelada ? 'badge-danger' : 'badge-success'}">${v.estado || 'Completada'}</span>
@@ -1445,6 +1457,8 @@ const ThorApp = (function() {
     const profitElem = document.getElementById('saleNetProfitDop');
     const receivedInput = document.getElementById('saleReceivedInput');
     const changeElem = document.getElementById('saleChangeDop');
+    const belowCostAlert = document.getElementById('saleBelowCostAlert');
+    const belowCostText = document.getElementById('saleBelowCostText');
 
     const qty = parseInt(qtyInput ? qtyInput.value : 0) || 0;
     const price = parseFloat(priceInput ? priceInput.value : 0) || 0;
@@ -1454,11 +1468,35 @@ const ThorApp = (function() {
       totalElem.textContent = `RD$ ${total.toLocaleString()}`;
     }
 
-    if (profitElem && prod) {
+    if (prod) {
       const costoUnitario = parseFloat(prod.costo_dop) || 0;
       const ganancia = total - (costoUnitario * qty);
-      profitElem.textContent = `${ganancia >= 0 ? '+' : ''}RD$ ${Math.round(ganancia).toLocaleString()}`;
-      profitElem.className = `font-bold font-mono ${ganancia >= 0 ? 'text-emerald-600' : 'text-rose-600'}`;
+
+      if (profitElem) {
+        if (ganancia >= 0) {
+          profitElem.textContent = `+RD$ ${Math.round(ganancia).toLocaleString()}`;
+          profitElem.className = 'font-bold font-mono text-emerald-400';
+        } else {
+          profitElem.textContent = `-RD$ ${Math.abs(Math.round(ganancia)).toLocaleString()} (Pérdida)`;
+          profitElem.className = 'font-bold font-mono text-rose-400';
+        }
+      }
+
+      // Alerta informativa si vende por debajo del costo (Excepción)
+      if (belowCostAlert) {
+        if (price > 0 && price < costoUnitario && qty > 0) {
+          const perdidaTotal = Math.round((costoUnitario - price) * qty);
+          const perdidaUnit = (costoUnitario - price).toFixed(2);
+          if (belowCostText) {
+            belowCostText.textContent = `Estás aplicando un precio especial por debajo del costo (Costo: RD$ ${costoUnitario.toLocaleString()} vs Venta: RD$ ${price.toLocaleString()}). Pérdida calculada: -RD$ ${perdidaTotal.toLocaleString()} (-RD$ ${perdidaUnit}/ud). La venta se registrará normalmente deduciendo la pérdida de la ganancia mensual.`;
+          }
+          belowCostAlert.classList.remove('hidden');
+        } else {
+          belowCostAlert.classList.add('hidden');
+        }
+      }
+    } else {
+      if (belowCostAlert) belowCostAlert.classList.add('hidden');
     }
 
     if (receivedInput && changeElem) {
@@ -1466,10 +1504,10 @@ const ThorApp = (function() {
       if (recibido > 0) {
         const cambio = recibido - total;
         changeElem.textContent = `RD$ ${cambio >= 0 ? cambio.toFixed(2) : '0.00'}`;
-        changeElem.className = `text-xs sm:text-sm font-bold font-mono ${cambio >= 0 ? 'text-amber-700' : 'text-rose-600'}`;
+        changeElem.className = `text-xs sm:text-sm font-bold font-mono ${cambio >= 0 ? 'text-amber-400' : 'text-rose-400'}`;
       } else {
         changeElem.textContent = 'RD$ 0.00';
-        changeElem.className = 'text-xs sm:text-sm font-bold text-amber-700 font-mono';
+        changeElem.className = 'text-xs sm:text-sm font-bold text-amber-400 font-mono';
       }
     }
   }
@@ -2572,9 +2610,39 @@ const ThorApp = (function() {
     return resultado;
   }
 
+  function openFAQModal() {
+    const modal = document.getElementById('modalFAQ');
+    if (modal) modal.classList.remove('hidden');
+  }
+
+  function closeFAQModal() {
+    const modal = document.getElementById('modalFAQ');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function resetSystemData(confirmPrompt = true) {
+    if (confirmPrompt) {
+      const ok = confirm('¿Estás segura de que deseas limpiar el sistema por completo? Se eliminarán todos los productos, ventas y cobros de prueba para que comiences desde 0.');
+      if (!ok) return;
+    }
+
+    ThorAPI.resetSystemData();
+    state.inventory = [];
+    state.sales = [];
+    state.receptions = [];
+    state.cobros = [];
+    state.metrics = {};
+    renderAll();
+    closeAllModals();
+    Sonner.success('Sistema reiniciado con éxito. Todos los datos están limpios en 0.');
+  }
+
   return {
     init,
     toggleNotificationDrawer,
+    openFAQModal,
+    closeFAQModal,
+    resetSystemData,
     switchTab,
     openNewProductModal,
     openEditProductModal,

@@ -947,15 +947,24 @@
           </div>
         </div>
 
-        <!-- Total y Ganancia Calculada en Vivo -->
-        <div class="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-white to-amber-50 border border-emerald-200 space-y-2 shadow-xs">
+        <!-- Total y Ganancia Calculada en Vivo (Dark Luxury) -->
+        <div class="p-4 rounded-2xl bg-[#0D131F] border border-white/10 space-y-2 shadow-sm">
           <div class="flex items-center justify-between">
             <span class="text-xs font-bold text-slate-300">TOTAL DE LA VENTA:</span>
-            <span id="saleTotalDop" class="font-bold text-xl sm:text-2xl text-emerald-400 font-mono">RD$ 0.00</span>
+            <span id="saleTotalDop" class="font-bold text-xl sm:text-2xl text-amber-400 font-mono">RD$ 0.00</span>
           </div>
-          <div class="flex items-center justify-between text-xs pt-1 border-t border-emerald-100">
-            <span class="text-slate-400">Ganancia Neta Proyectada:</span>
-            <span id="saleNetProfitDop" class="font-bold text-emerald-600 font-mono">+RD$ 0.00</span>
+          <div class="flex items-center justify-between text-xs pt-1 border-t border-white/10">
+            <span class="text-slate-400">Ganancia / Margen Proyectado:</span>
+            <span id="saleNetProfitDop" class="font-bold text-emerald-400 font-mono">+RD$ 0.00</span>
+          </div>
+        </div>
+
+        <!-- Alerta Dinámica de Venta por Debajo del Costo (Excepción) -->
+        <div id="saleBelowCostAlert" class="hidden p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2.5">
+          <svg class="w-5 h-5 text-rose-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          <div>
+            <span class="font-bold text-rose-200 block">Excepción: Precio menor al costo de adquisición</span>
+            <span id="saleBelowCostText">Esta venta generará una pérdida proyectada de -RD$ 0. Se registrará el ingreso real recibido y se ajustará en el reporte.</span>
           </div>
         </div>
 
@@ -976,8 +985,8 @@
         </div>
 
         <!-- Sub-formulario para Venta a Crédito / Fiado -->
-        <div id="saleCreditFields" class="hidden p-3.5 rounded-2xl bg-amber-50/70 border border-amber-500/30 space-y-3">
-          <div class="flex items-center gap-2 text-xs font-bold text-amber-900 border-b border-amber-200 pb-2">
+        <div id="saleCreditFields" class="hidden p-3.5 rounded-2xl bg-[#0D131F] border border-amber-500/30 space-y-3">
+          <div class="flex items-center gap-2 text-xs font-bold text-amber-400 border-b border-white/10 pb-2">
             <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
             <span>Plan de Cuotas & Seguimiento ("Fiado")</span>
           </div>
@@ -1245,6 +1254,122 @@
           Probar Conexión
         </button>
         <button type="button" onclick="ThorApp.closeAllModals()" class="btn-tactile btn-gold text-xs py-1.5 px-4 shadow-sm">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       BOTÓN FLOTANTE DE PREGUNTAS FRECUENTES / AYUDA (MINIMALISTA)
+       ========================================================================= -->
+  <button id="btnFloatingFAQ" onclick="ThorApp.openFAQModal()" class="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-40 w-12 h-12 rounded-full bg-[#111827] hover:bg-[#1A2234] text-amber-400 border border-amber-500/40 shadow-2xl flex items-center justify-center transition active:scale-95 group" title="Preguntas Frecuentes & Manual">
+    <svg class="w-6 h-6 group-hover:scale-110 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+  </button>
+
+  <!-- =========================================================================
+       MODAL 7: PREGUNTAS FRECUENTES (FAQ) & MANUAL DE USO
+       ========================================================================= -->
+  <div id="modalFAQ" class="modal-container fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="modal-backdrop fixed inset-0 bg-black/80 backdrop-blur-md" onclick="ThorApp.closeFAQModal()"></div>
+    <div class="relative w-full max-w-2xl bg-[#111827] border border-amber-500/40 rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto space-y-5 text-slate-100 z-10">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div>
+            <h3 class="font-brand font-bold text-lg text-slate-100 leading-tight">Preguntas Frecuentes & Ayuda</h3>
+            <p class="text-xs text-amber-400/90 font-medium">Thor Essence — Guía rápida de uso para Pamela</p>
+          </div>
+        </div>
+        <button type="button" onclick="ThorApp.closeFAQModal()" class="close-modal-btn btn-tactile text-slate-400 hover:text-white p-1 rounded-lg">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Banner de Descarga del Manual PDF -->
+      <div class="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-[#1A2234] to-[#1A2234] border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
+        <div>
+          <h4 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+            <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <span>Manual Oficial de Usuario (PDF)</span>
+          </h4>
+          <p class="text-xs text-slate-300 mt-0.5">Descarga el manual completo de 2 páginas con instrucciones paso a paso para guardar en tu celular.</p>
+        </div>
+        <a href="assets/Manual_de_Usuario_Thor_Essence.pdf" download class="btn-tactile btn-gold py-2 px-4 text-xs font-bold text-slate-950 rounded-xl flex items-center gap-2 shrink-0 shadow-md">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          <span>Descargar PDF</span>
+        </a>
+      </div>
+
+      <!-- Lista de Preguntas y Respuestas -->
+      <div class="space-y-3 text-xs">
+        <!-- FAQ 1: Ventas a crédito / Fiado -->
+        <div class="p-3.5 rounded-xl bg-[#0D131F] border border-white/10 space-y-1.5">
+          <h5 class="font-bold text-slate-100 text-sm flex items-center gap-2 text-amber-400">
+            <span>💳</span> ¿Cómo registro una venta fiada (a crédito)?
+          </h5>
+          <p class="text-slate-300 leading-relaxed">
+            Al presionar <strong>"Venta Rápida"</strong>, marca el botón <strong>'A Crédito ("Fiado")'</strong>. Elige si las cuotas son <strong>Quincenales (15 y 30)</strong> o <strong>Mensuales</strong>, el número de cuotas (2, 3, 4 o 6) y el teléfono de WhatsApp del cliente. Si el cliente te dio un dinero por adelantado, colócalo en <em>Abono Inicial</em>. El inventario se descontará de inmediato para que nadie más venda ese artículo.
+          </p>
+        </div>
+
+        <!-- FAQ 2: Venta por debajo del costo -->
+        <div class="p-3.5 rounded-xl bg-[#0D131F] border border-white/10 space-y-1.5">
+          <h5 class="font-bold text-slate-100 text-sm flex items-center gap-2 text-rose-400">
+            <span>🏷️</span> ¿Qué pasa si vendo un producto por debajo del costo?
+          </h5>
+          <p class="text-slate-300 leading-relaxed">
+            El sistema nunca te bloqueará si decides hacer una excepción a un cliente. Al momento de la venta, solo cambia el <strong>Precio Unitario (RD$)</strong> al valor que desees. Verás un aviso en rojo indicando la pérdida proyectada (ejemplo: <em>-RD$ 100</em>). En caja entrará el dinero real pagado por el cliente, y en el reporte se registrará la ganancia negativa ajustando la ganancia mensual con exactitud.
+          </p>
+        </div>
+
+        <!-- FAQ 3: WhatsApp 1 Clic -->
+        <div class="p-3.5 rounded-xl bg-[#0D131F] border border-white/10 space-y-1.5">
+          <h5 class="font-bold text-slate-100 text-sm flex items-center gap-2 text-emerald-400">
+            <span>📲</span> ¿Cómo cobro y envío recordatorios por WhatsApp?
+          </h5>
+          <p class="text-slate-300 leading-relaxed">
+            En la sección <strong>"Cobros & Fiados"</strong>, cada cliente tiene un botón con el icono de WhatsApp. Al tocarlo se abrirá WhatsApp con el mensaje ya redactado con el nombre del cliente, el artículo, la fecha acordada y el saldo restante. Solo debes darle a <em>Enviar</em>. Cuando el cliente te pague, presiona <strong>"Abonar"</strong> para registrar el dinero.
+          </p>
+        </div>
+
+        <!-- FAQ 4: Productos Locales vs Tanques -->
+        <div class="p-3.5 rounded-xl bg-[#0D131F] border border-white/10 space-y-1.5">
+          <h5 class="font-bold text-slate-100 text-sm flex items-center gap-2 text-sky-400">
+            <span>🛍️</span> ¿Cómo agrego perfumes locales sin tanque?
+          </h5>
+          <p class="text-slate-300 leading-relaxed">
+            Presiona el botón <strong>"+ Prod. Local"</strong> en la barra superior o en el inicio. Podrás ingresar directamente perfumes o cosméticos comprados en el país, colocando su costo en pesos (o dólares) y su precio de venta, sin necesidad de crear un tanque marítimo.
+          </p>
+        </div>
+
+        <!-- FAQ 5: Celular PWA -->
+        <div class="p-3.5 rounded-xl bg-[#0D131F] border border-white/10 space-y-1.5">
+          <h5 class="font-bold text-slate-100 text-sm flex items-center gap-2 text-amber-300">
+            <span>📱</span> ¿Cómo guardo el sistema en la pantalla de mi celular?
+          </h5>
+          <p class="text-slate-300 leading-relaxed">
+            En iPhone (Safari): Toca el botón de <em>Compartir</em> abajo y presiona <strong>'Agregar a pantalla de inicio'</strong>.<br/>
+            En Android (Chrome): Toca los tres puntos arriba a la derecha y selecciona <strong>'Instalar aplicación'</strong> o <strong>'Agregar a pantalla principal'</strong>.
+          </p>
+        </div>
+      </div>
+
+      <!-- Zona de Limpieza / Reinicio a 0 -->
+      <div class="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-between gap-3 pt-3">
+        <div>
+          <span class="font-bold text-red-300 text-xs block">Reiniciar Datos a Cero</span>
+          <span class="text-[11px] text-slate-400">Limpia todos los artículos y ventas para empezar completamente desde cero.</span>
+        </div>
+        <button type="button" onclick="ThorApp.resetSystemData()" class="btn-tactile px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-xs font-bold shrink-0">
+          Limpiar Todo a 0
+        </button>
+      </div>
+
+      <div class="flex items-center justify-end pt-2 border-t border-white/10">
+        <button type="button" onclick="ThorApp.closeFAQModal()" class="btn-tactile px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold">
           Cerrar
         </button>
       </div>

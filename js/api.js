@@ -59,6 +59,8 @@ const Sonner = (function() {
     }
   }
 
+
+
   return {
     success: (msg, dur) => show(msg, 'success', dur),
     error: (msg, dur) => show(msg, 'error', dur),
@@ -73,7 +75,7 @@ const ThorAPI = (function() {
     SESSION_TOKEN: 'thor_session_token',
     CURRENT_USER: 'thor_current_user',
     USD_RATE: 'thor_usd_dop_rate',
-    CACHE_DATA: 'thor_cached_system_data'
+    CACHE_DATA: 'thor_cached_system_data_v5'
   };
 
   const DEFAULT_RATE = (typeof THOR_CONFIG !== 'undefined' && THOR_CONFIG.DEFAULT_USD_RATE) ? THOR_CONFIG.DEFAULT_USD_RATE : 60.50;
@@ -88,181 +90,31 @@ const ThorAPI = (function() {
   ];
 
   const INITIAL_DEMO_DATA = {
-    inventario: [
-      {
-        id: 'PROD-001',
-        nombre: 'Perfume Thor Gold Luxury 100ml',
-        categoria: 'Perfumes',
-        descripcion: 'Fragancia premium importada de larga duración',
-        cantidad: 14,
-        stock_minimo: 4,
-        costo_usd: 15.00,
-        costo_dop: 907.50,
-        precio_venta_dop: 1950,
-        ubicacion: 'Tanque #1 Miami',
-        estado: 'En Stock',
-        fecha_ingreso: '2026-09-01 10:00:00',
-        fecha_actualizacion: '2026-09-01 10:00:00'
-      },
-      {
-        id: 'PROD-002',
-        nombre: 'Splash Vainilla & Rose 250ml',
-        categoria: 'Splash',
-        descripcion: 'Aroma fresco floral y dulce para uso diario',
-        cantidad: 26,
-        stock_minimo: 6,
-        costo_usd: 4.20,
-        costo_dop: 254.10,
-        precio_venta_dop: 650,
-        ubicacion: 'Tanque #1 Miami',
-        estado: 'En Stock',
-        fecha_ingreso: '2026-09-01 10:00:00',
-        fecha_actualizacion: '2026-09-01 10:00:00'
-      },
-      {
-        id: 'PROD-003',
-        nombre: 'Crema Hidratante Karité & Almendras 200ml',
-        categoria: 'Cremas',
-        descripcion: 'Nutrición intensa para manos y cuerpo',
-        cantidad: 19,
-        stock_minimo: 5,
-        costo_usd: 5.50,
-        costo_dop: 332.75,
-        precio_venta_dop: 750,
-        ubicacion: 'Tanque #1 Miami',
-        estado: 'En Stock',
-        fecha_ingreso: '2026-09-01 10:00:00',
-        fecha_actualizacion: '2026-09-01 10:00:00'
-      },
-      {
-        id: 'PROD-004',
-        nombre: 'Body Wash Coco & Miel 300ml',
-        categoria: 'Body Wash',
-        descripcion: 'Gel de baño revitalizante suave',
-        cantidad: 2,
-        stock_minimo: 4,
-        costo_usd: 4.80,
-        costo_dop: 290.40,
-        precio_venta_dop: 700,
-        ubicacion: 'Tanque #1 Miami',
-        estado: 'Stock Bajo',
-        fecha_ingreso: '2026-09-01 10:00:00',
-        fecha_actualizacion: '2026-09-01 10:00:00'
-      }
-    ],
-    ventas: [
-      {
-        id_venta: 'VTA-001',
-        fecha_venta: '2026-09-08 14:30:00',
-        id_articulo: 'PROD-001',
-        nombre_articulo: 'Perfume Thor Gold Luxury 100ml',
-        categoria: 'Perfumes',
-        cantidad: 2,
-        precio_unitario_dop: 1950,
-        total_dop: 3900,
-        costo_unitario_dop: 907.50,
-        ganancia_dop: 2085,
-        cliente: 'Laura Rodríguez',
-        metodo_pago: 'Transferencia',
-        notas: 'Cliente frecuente',
-        estado: 'Completada'
-      },
-      {
-        id_venta: 'VTA-002',
-        fecha_venta: '2026-09-05 16:00:00',
-        id_articulo: 'PROD-001',
-        nombre_articulo: 'Perfume Thor Gold Luxury 100ml',
-        categoria: 'Perfumes',
-        cantidad: 1,
-        precio_unitario_dop: 1950,
-        total_dop: 1950,
-        costo_unitario_dop: 907.50,
-        ganancia_dop: 1042.50,
-        cliente: 'Jesús De La Rosa',
-        metodo_pago: 'Crédito / Fiado',
-        notas: '2 cuotas quincenales (15 y 30)',
-        estado: 'Pendiente de Cobro'
-      }
-    ],
-    recepciones: [
-      {
-        id_recepcion: 'TANQ-001',
-        fecha: '2026-09-01',
-        nombre_tanque: 'Tanque #1 Miami - Importación Directa',
-        origen: 'Miami, FL - EE.UU.',
-        total_unidades: 61,
-        flete_usd: 65,
-        tasa_cambio: 60.50,
-        notas: 'Llegó en excelente estado',
-        articulos: []
-      }
-    ],
-    cobros: [
-      {
-        id_cobro: 'COB-001',
-        id_venta: 'VTA-002',
-        fecha_venta: '2026-09-05 16:00:00',
-        cliente: 'Jesús De La Rosa',
-        telefono: '809-555-0123',
-        articulo: 'Perfume Thor Gold Luxury 100ml',
-        monto_total_dop: 1950,
-        abono_inicial_dop: 450,
-        total_cobrado_dop: 450,
-        saldo_pendiente_dop: 1500,
-        num_cuotas: 2,
-        frecuencia: 'quincenal',
-        estado: 'Parcial',
-        proximo_vencimiento: '2026-09-15',
-        historial_abonos: [
-          {
-            id_abono: 'ABN-INI-001',
-            fecha: '2026-09-05 16:00:00',
-            monto: 450,
-            metodo_pago: 'Efectivo',
-            nota: 'Abono inicial en tienda'
-          }
-        ],
-        plan_cuotas: [
-          {
-            numero: 1,
-            monto: 750,
-            monto_abonado: 0,
-            fecha_vencimiento: '2026-09-15',
-            estado: 'Pendiente',
-            fecha_pago: null
-          },
-          {
-            numero: 2,
-            monto: 750,
-            monto_abonado: 0,
-            fecha_vencimiento: '2026-09-30',
-            estado: 'Pendiente',
-            fecha_pago: null
-          }
-        ]
-      }
-    ],
+    inventario: [],
+    ventas: [],
+    recepciones: [],
+    cobros: [],
     configuracion: {
       NOMBRE_NEGOCIO: 'Thor Essence',
-      SLOGAN: 'Belleza, aroma y estilo en un solo lugar',
+      SLOGAN: 'Belleza, aroma y estilo',
       MONEDA_PRINCIPAL: 'DOP',
-      TASA_CAMBIO_USD_DOP: 60.50,
+      TASA_CAMBIO_USD_DOP: DEFAULT_RATE,
       CATEGORIAS: 'Perfumes, Splash, Cremas, Body Wash, Accesorios, Maquillaje, Variedades'
     },
     metricas: {
-      total_productos: 4,
-      total_unidades_stock: 61,
-      valor_inventario_costo_dop: 27960,
-      valor_inventario_venta_dop: 63950,
-      productos_stock_bajo: 1,
+      total_productos: 0,
+      total_unidades_stock: 0,
+      valor_inventario_costo_dop: 0,
+      valor_inventario_venta_dop: 0,
+      productos_stock_bajo: 0,
       productos_agotados: 0,
       ventas_hoy_dop: 0,
       ganancia_hoy_dop: 0,
-      ventas_mes_dop: 5850,
-      ganancia_mes_dop: 3127.50,
-      total_por_cobrar_dop: 1500,
-      cuotas_pendientes_hoy: 1,
-      clientes_con_deuda: 1
+      ventas_mes_dop: 0,
+      ganancia_mes_dop: 0,
+      total_por_cobrar_dop: 0,
+      cuotas_pendientes_hoy: 0,
+      clientes_con_deuda: 0
     }
   };
 
@@ -314,7 +166,9 @@ const ThorAPI = (function() {
       gasUrl = localStorage.getItem(STORAGE_KEYS.GAS_URL) || '';
     }
 
-    return {
+  
+
+  return {
       gasUrl: gasUrl.trim(),
       sessionToken: getSessionToken(),
       usdRate: parseFloat(localStorage.getItem(STORAGE_KEYS.USD_RATE)) || DEFAULT_RATE,
@@ -345,13 +199,15 @@ const ThorAPI = (function() {
         if (data && data.rates && data.rates.DOP) {
           const liveRate = parseFloat(data.rates.DOP);
           setUsdRate(liveRate);
-          return { success: true, rate: liveRate, source: 'Mercado en Vivo (open.er-api)' };
+    return { success: true, rate: liveRate, source: 'Mercado en Vivo (open.er-api)' };
         }
       }
     } catch (e) {
       console.warn('No se pudo obtener la tasa en vivo:', e);
     }
-    return { success: false, rate: getUsdRate(), source: 'Local' };
+  
+
+  return { success: false, rate: getUsdRate(), source: 'Local' };
   }
 
   function getCachedData() {
@@ -383,9 +239,9 @@ const ThorAPI = (function() {
         const fakeToken = 'LOCAL_SES_' + Date.now();
         const user = { username: 'Pameladlsantos', nombre: 'Pamela De Los Santos', rol: 'Administradora' };
         setSession(fakeToken, user, remember);
-        return { success: true, user: user, token: fakeToken };
+  return { success: true, user: user, token: fakeToken };
       }
-      return { success: false, message: 'Usuario o contraseña incorrectos.' };
+return { success: false, message: 'Usuario o contraseña incorrectos.' };
     }
 
     try {
@@ -404,9 +260,9 @@ const ThorAPI = (function() {
       const res = await response.json();
       if (res && res.status === 'success' && res.token) {
         setSession(res.token, res.user, remember);
-        return { success: true, user: res.user, token: res.token };
+  return { success: true, user: res.user, token: res.token };
       } else {
-        return { success: false, message: res.message || 'Credenciales inválidas.' };
+  return { success: false, message: res.message || 'Credenciales inválidas.' };
       }
     } catch (e) {
       console.error('Error conectando con autenticación:', e);
@@ -415,9 +271,9 @@ const ThorAPI = (function() {
         const offlineToken = 'OFFLINE_SES_' + Date.now();
         const user = { username: 'Pameladlsantos', nombre: 'Pamela De Los Santos', rol: 'Administradora' };
         setSession(offlineToken, user, remember);
-        return { success: true, user: user, isOffline: true };
+  return { success: true, user: user, isOffline: true };
       }
-      return { success: false, message: 'No se pudo conectar con el servidor de autenticación.' };
+return { success: false, message: 'No se pudo conectar con el servidor de autenticación.' };
     }
   }
 
@@ -441,13 +297,15 @@ const ThorAPI = (function() {
     }
 
     clearSession();
-    return { success: true };
+  
+
+  return { success: true };
   }
 
   async function apiGet(action, extraParams = {}) {
     const cfg = getConfig();
     if (!cfg.isConfigured) {
-      return { status: 'success', data: getCachedData() };
+return { status: 'success', data: getCachedData() };
     }
 
     const url = new URL(cfg.gasUrl);
@@ -472,7 +330,7 @@ const ThorAPI = (function() {
       return json;
     } catch (e) {
       console.warn('apiGet red caída, usando caché local:', e);
-      return { status: 'success', data: getCachedData(), isCachedFallback: true };
+return { status: 'success', data: getCachedData(), isCachedFallback: true };
     }
   }
 
@@ -590,14 +448,14 @@ const ThorAPI = (function() {
       }
       recalcularMetricasLocales(current);
       setCachedData(current);
-      return { status: 'success', message: 'Producto guardado en modo local', id: id };
+return { status: 'success', message: 'Producto guardado en modo local', id: id };
     }
 
     if (action === 'deleteProduct') {
       current.inventario = current.inventario.filter(x => x.id !== data);
       recalcularMetricasLocales(current);
       setCachedData(current);
-      return { status: 'success', message: 'Producto eliminado' };
+return { status: 'success', message: 'Producto eliminado' };
     }
 
     if (action === 'adjustStock') {
@@ -607,9 +465,9 @@ const ThorAPI = (function() {
         item.estado = item.cantidad > 0 ? 'En Stock' : 'Agotado';
         recalcularMetricasLocales(current);
         setCachedData(current);
-        return { status: 'success', message: 'Stock actualizado', nuevoStock: item.cantidad };
+  return { status: 'success', message: 'Stock actualizado', nuevoStock: item.cantidad };
       }
-      return { status: 'error', message: 'Producto no encontrado' };
+return { status: 'error', message: 'Producto no encontrado' };
     }
 
     if (action === 'registerSale') {
@@ -703,7 +561,7 @@ const ThorAPI = (function() {
       recalcularMetricasLocales(current);
       setCachedData(current);
 
-      return {
+return {
         status: 'success',
         message: esCredito ? 'Venta a crédito ("fiado") registrada con éxito.' : 'Venta registrada con éxito',
         id_venta: nuevaVenta.id_venta,
@@ -772,7 +630,7 @@ const ThorAPI = (function() {
       recalcularMetricasLocales(current);
       setCachedData(current);
 
-      return {
+return {
         status: 'success',
         message: cobro.saldo_pendiente_dop <= 0 
           ? '¡Cuenta saldada en su totalidad! RD$ 0.00 restante.' 
@@ -796,9 +654,9 @@ const ThorAPI = (function() {
         }
         recalcularMetricasLocales(current);
         setCachedData(current);
-        return { status: 'success', message: 'Venta cancelada y stock devuelto' };
+  return { status: 'success', message: 'Venta cancelada y stock devuelto' };
       }
-      return { status: 'error', message: 'Venta no encontrada o ya cancelada' };
+return { status: 'error', message: 'Venta no encontrada o ya cancelada' };
     }
 
     if (action === 'registerReception') {
@@ -860,14 +718,16 @@ const ThorAPI = (function() {
       recalcularMetricasLocales(current);
       setCachedData(current);
 
-      return {
+return {
         status: 'success',
         message: 'Tanque recibido registrado con éxito: ' + totalUnidades + ' unidades ingresadas.',
         total_unidades: totalUnidades
       };
     }
 
-    return { status: 'success', message: 'Acción ejecutada en modo local' };
+  
+
+  return { status: 'success', message: 'Acción ejecutada en modo local' };
   }
 
   function recalcularMetricasLocales(data) {
@@ -944,6 +804,23 @@ const ThorAPI = (function() {
     }
   }
 
+
+
+  function resetSystemData() {
+    try {
+      localStorage.removeItem('thor_cached_system_data');
+      localStorage.removeItem('thor_cached_system_data_v2');
+      localStorage.removeItem('thor_cached_system_data_v3');
+      localStorage.removeItem('thor_cached_system_data_v4');
+      localStorage.removeItem('thor_cached_system_data_v5');
+      setCachedData(INITIAL_DEMO_DATA);
+      return { success: true };
+    } catch (e) {
+      console.error('Error al resetear datos:', e);
+      return { success: false, error: e.message };
+    }
+  }
+
   return {
     getConfig,
     saveCredentials,
@@ -951,6 +828,7 @@ const ThorAPI = (function() {
     setUsdRate,
     fetchLiveExchangeRate,
     getCachedData,
+    resetSystemData,
     setCachedData,
     testConnection,
     // Autenticación & Sesiones en Servidor (RLS)
