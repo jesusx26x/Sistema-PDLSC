@@ -6,9 +6,9 @@
   <title>Thor Essence — Sistema de Inventario & Ventas</title>
   
   <!-- Metadatos PWA y Móvil -->
-  <meta name="theme-color" content="#FFFFFF">
+  <meta name="theme-color" content="#0B0F17">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Thor Essence">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/jpeg" href="assets/logo.jpg">
@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 
-<body class="bg-[#EEF2F6] text-slate-900 min-h-screen flex flex-col md:flex-row pb-20 md:pb-0 selection:bg-amber-100 selection:text-amber-900">
+<body class="bg-[#0B0F17] text-slate-100 min-h-screen flex flex-col md:flex-row pb-20 md:pb-0 selection:bg-amber-500/20 selection:text-amber-300">
 
   <!-- Contenedor de Toasts estilo Sonner -->
   <div id="sonner-container"></div>
@@ -51,24 +51,24 @@
   <!-- =========================================================================
        PORTAL DE ACCESO / LOGIN (WHITE LUXURY GLASSMORPHISM & RLS)
        ========================================================================= -->
-  <div id="view-login" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#EEF2F6]/95 backdrop-blur-xl overflow-hidden">
+  <div id="view-login" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0F17]/95 backdrop-blur-xl overflow-hidden">
     <!-- Luces ambientales de fondo (Warm Gold & Rose Glow) -->
     <div class="ambient-glow-gold -top-20 -left-20"></div>
     <div class="ambient-glow-navy -bottom-32 -right-32"></div>
     <div class="ambient-glow-gold bottom-10 left-1/3 opacity-40"></div>
 
     <!-- Tarjeta de Login Glassmorphism Blanco -->
-    <div class="glass-card-luxury relative w-full max-w-md p-6 sm:p-8 space-y-6 shadow-2xl border border-amber-300/80 z-10 text-slate-900">
+    <div class="glass-card-luxury relative w-full max-w-md p-6 sm:p-8 space-y-6 shadow-2xl border border-amber-500/40 z-10 text-slate-100 bg-[#111827]/90">
       <!-- Encabezado con Logo Medallón -->
       <div class="text-center space-y-3">
         <div class="brand-logo-frame w-20 h-20 mx-auto shadow-xl">
           <img src="assets/logo.jpg" alt="Thor Essence Logo" class="w-full h-full object-cover">
         </div>
         <div>
-          <h1 class="font-brand text-2xl font-bold text-slate-900 tracking-wider">THOR ESSENCE</h1>
-          <p class="font-brand text-xs text-[#926704] italic font-medium -mt-0.5">Belleza, aroma y estilo</p>
-          <div class="inline-flex items-center gap-1.5 mt-2 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] font-bold text-emerald-700">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <h1 class="font-brand text-2xl font-bold text-slate-100 tracking-wider">THOR ESSENCE</h1>
+          <p class="font-brand text-xs text-amber-400 italic font-medium -mt-0.5">Belleza, aroma y estilo</p>
+          <div class="inline-flex items-center gap-1.5 mt-2 px-2.5 py-0.5 rounded-full bg-emerald-400/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-400">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
             <span>Seguridad RLS Activa</span>
           </div>
         </div>
@@ -77,37 +77,37 @@
       <!-- Formulario de Autenticación -->
       <form id="formLogin" onsubmit="ThorApp.handleLogin(event)" class="space-y-4">
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Usuario del Sistema</label>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Usuario del Sistema</label>
           <div class="relative">
-            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">👤</span>
-            <input type="text" id="loginUsername" placeholder="Ingresa tu usuario..." required autocomplete="username" class="form-input pl-10 text-sm">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg></span>
+            <input type="text" id="loginUsername" placeholder="Ingresa tu usuario..." required autocomplete="username" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 pl-10 text-sm bg-[#0D131F] border-white/15 text-slate-100 placeholder-slate-500 focus:border-amber-400">
           </div>
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Contraseña</label>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Contraseña</label>
           <div class="relative">
-            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">🔒</span>
-            <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password" class="form-input pl-10 pr-10 text-sm">
-            <button type="button" onclick="ThorApp.togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none">
-              <span id="togglePasswordIcon">👁️</span>
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg></span>
+            <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 pl-10 pr-10 text-sm bg-[#0D131F] border-white/15 text-slate-100 placeholder-slate-500 focus:border-amber-400">
+            <button type="button" onclick="ThorApp.togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-400 focus:outline-none">
+              <span id="togglePasswordIcon"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></span>
             </button>
           </div>
         </div>
 
-        <div class="flex items-center justify-between text-xs text-slate-600 pt-1">
+        <div class="flex items-center justify-between text-xs text-slate-400 pt-1">
           <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" id="loginRemember" checked class="rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+            <input type="checkbox" id="loginRemember" checked class="rounded border-white/15 text-amber-600 focus:ring-amber-500">
             <span>Recordar en este equipo</span>
           </label>
         </div>
 
-        <button type="submit" id="btnLoginSubmit" class="btn-tactile btn-gold w-full py-3 text-sm font-bold shadow-lg flex items-center justify-center gap-2">
-          <span id="loginBtnIcon">✨</span>
+        <button type="submit" id="btnLoginSubmit" class="btn-tactile btn-gold w-full py-3 text-sm font-bold shadow-lg flex items-center justify-center gap-2 text-slate-950">
+          <span id="loginBtnIcon"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg></span>
           <span id="loginBtnText">Iniciar Sesión en Servidor</span>
         </button>
 
-        <p class="text-[11px] text-center text-slate-500 pt-2 border-t border-slate-200">
+        <p class="text-[11px] text-center text-slate-400 pt-2 border-t border-white/10">
           Protección RLS: El servidor destruye la sesión activa al cerrar sesión.
         </p>
       </form>
@@ -117,93 +117,93 @@
   <!-- =========================================================================
        SIDEBAR DESKTOP / TABLET (WHITE LUXURY LAYERED)
        ========================================================================= -->
-  <aside class="hidden md:flex md:w-64 lg:w-72 bg-[#F1F5F9] border-r border-slate-300/80 flex-col justify-between shrink-0 h-screen sticky top-0 z-30 shadow-xs">
+  <aside class="hidden md:flex md:w-64 lg:w-72 bg-[#111827] border-r border-white/10 flex-col justify-between shrink-0 h-screen sticky top-0 z-30 shadow-2xl">
     <div class="p-5">
       <!-- Logo Oficial de Thor Essence -->
-      <div class="flex items-center gap-3.5 pb-6 border-b border-slate-300/80">
+      <div class="flex items-center gap-3.5 pb-6 border-b border-white/10">
         <div class="brand-logo-frame w-14 h-14 shrink-0 shadow-md">
           <img src="assets/logo.jpg" alt="Thor Essence Logo" class="w-full h-full object-cover">
         </div>
         <div>
-          <h1 class="font-brand font-bold text-lg text-slate-900 tracking-wide leading-tight">THOR</h1>
-          <p class="font-brand text-xs text-[#926704] italic font-semibold -mt-0.5">Essence</p>
-          <span class="text-[9px] uppercase tracking-wider text-slate-500 block mt-1 font-semibold">Inventario & Ventas</span>
+          <h1 class="font-brand font-bold text-lg text-slate-100 tracking-wide leading-tight">THOR</h1>
+          <p class="font-brand text-xs text-amber-400 italic font-semibold -mt-0.5">Essence</p>
+          <span class="text-[9px] uppercase tracking-wider text-slate-400 block mt-1 font-semibold">Inventario & Ventas</span>
         </div>
       </div>
 
       <!-- Menú de Navegación enfocado 100% en Pamela -->
       <nav class="mt-6 space-y-1.5">
-        <a href="#" data-tab="dashboard" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition bg-amber-50 text-amber-900 border-l-4 border-amber-600 shadow-xs">
-          <span class="text-lg">📊</span>
+        <a href="#" data-tab="dashboard" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition bg-amber-500/15 text-amber-400 border-l-4 border-amber-500 shadow-sm">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
           <span>Inicio</span>
         </a>
-        <a href="#" data-tab="inventario" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-700 hover:text-amber-900 hover:bg-white/80">
-          <span class="text-lg">📦</span>
+        <a href="#" data-tab="inventario" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-300 hover:text-amber-300 hover:bg-[#111827]/5">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
           <span>Inventario</span>
         </a>
-        <a href="#" data-tab="ventas" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-700 hover:text-amber-900 hover:bg-white/80">
-          <span class="text-lg">💰</span>
+        <a href="#" data-tab="ventas" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-300 hover:text-amber-300 hover:bg-[#111827]/5">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           <span>Ventas</span>
         </a>
-        <a href="#" data-tab="cobros" class="sidebar-link flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-700 hover:text-amber-900 hover:bg-white/80">
+        <a href="#" data-tab="cobros" class="sidebar-link flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-300 hover:text-amber-300 hover:bg-[#111827]/5">
           <div class="flex items-center gap-3">
-            <span class="text-lg">💳</span>
+            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
             <span>Cobros & Fiados</span>
           </div>
-          <span id="sidebarCobrosBadge" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">0</span>
+          <span id="sidebarCobrosBadge" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">0</span>
         </a>
-        <a href="#" data-tab="tanques" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-700 hover:text-amber-900 hover:bg-white/80">
-          <span class="text-lg">🚢</span>
-          <span>Tanques de EE.UU.</span>
+        <a href="#" data-tab="tanques" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-300 hover:text-amber-300 hover:bg-[#111827]/5">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          <span>Tanques EE.UU.</span>
         </a>
-        <a href="#" data-tab="reportes" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-700 hover:text-amber-900 hover:bg-white/80">
-          <span class="text-lg">📈</span>
+        <a href="#" data-tab="reportes" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-300 hover:text-amber-300 hover:bg-[#111827]/5">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
           <span>Reportes</span>
         </a>
       </nav>
     </div>
 
     <!-- Pie del Sidebar: Tasa en vivo y Conexión Nube -->
-    <div class="p-4 border-t border-slate-300/80 bg-slate-200/40 space-y-3">
-      <div class="p-2.5 rounded-xl bg-white border border-amber-200/80 flex items-center justify-between shadow-xs">
+    <div class="p-4 border-t border-white/10 bg-[#0B0F17]/50 space-y-3">
+      <div class="p-2.5 rounded-xl bg-[#0D131F] border border-white/10 flex items-center justify-between shadow-xs">
         <div>
-          <span class="text-[10px] text-slate-500 block font-medium">Tasa USD ➔ DOP</span>
-          <span id="sidebarUsdRate" class="text-xs font-bold text-slate-900">1 USD = RD$ 60.50</span>
+          <span class="text-[10px] text-slate-400 block font-medium">Tasa USD a DOP</span>
+          <span id="sidebarUsdRate" class="text-xs font-bold text-slate-100 font-mono">1 USD = RD$ 60.50</span>
         </div>
-        <button onclick="ThorApp.actualizarTasaCambio()" class="btn-tactile p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs transition" title="Consultar tasa hoy">
-          🔄
+        <button onclick="ThorApp.actualizarTasaCambio()" class="btn-tactile p-1.5 rounded-lg bg-[#111827]/5 hover:bg-[#111827]/10 text-amber-400 text-xs transition" title="Consultar tasa hoy">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
         </button>
       </div>
 
-      <div class="flex items-center justify-between px-1 text-[11px] text-slate-500">
+      <div class="flex items-center justify-between px-1 text-[11px] text-slate-400">
         <div class="flex items-center gap-2">
           <span id="syncIndicator" class="pulse-dot-green"></span>
           <span id="syncText" class="truncate font-medium">Nube Activa</span>
         </div>
-        <button onclick="document.getElementById('modalDevSettings').classList.remove('hidden')" class="text-[10px] text-slate-400 hover:text-amber-700 transition" title="Ajustes técnicos de conexión">
-          ⚙️
+        <button onclick="document.getElementById('modalDevSettings').classList.remove('hidden')" class="text-[10px] text-slate-400 hover:text-amber-700 transition" title="Ajustes de conexión">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
         </button>
       </div>
 
       <!-- Tarjeta de Usuario Autenticado & Signout en Servidor (Sidebar) -->
-      <div class="pt-2 border-t border-slate-300/80">
-        <div class="p-2.5 rounded-2xl bg-white border border-slate-200/80 flex items-center justify-between shadow-xs">
+      <div class="pt-2 border-t border-white/10">
+        <div class="p-2.5 rounded-2xl bg-[#111827] border border-white/10/80 flex items-center justify-between shadow-xs">
           <div class="flex items-center gap-2.5 min-w-0">
             <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-600 to-amber-400 p-0.5 shrink-0 shadow-sm">
-              <div class="w-full h-full rounded-full bg-white flex items-center justify-center font-brand font-bold text-xs text-amber-700">
+              <div class="w-full h-full rounded-full bg-[#111827] flex items-center justify-center font-brand font-bold text-xs text-amber-400">
                 P
               </div>
             </div>
             <div class="min-w-0">
-              <span id="sidebarUserName" class="text-xs font-bold text-slate-900 block truncate">Pamela</span>
-              <span class="text-[9px] text-emerald-600 block font-medium flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span id="sidebarUserName" class="text-xs font-bold text-slate-100 font-mono block truncate">Pamela</span>
+              <span class="text-[9px] text-emerald-400 block font-medium flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                 Admin (RLS)
               </span>
             </div>
           </div>
-          <button onclick="ThorApp.logout()" class="btn-tactile p-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs" title="Cerrar sesión en el servidor">
-            🚪 Salir
+          <button onclick="ThorApp.logout()" class="btn-tactile p-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs flex items-center gap-1" title="Cerrar sesión en el servidor">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg><span>Salir</span>
           </button>
         </div>
       </div>
@@ -216,56 +216,90 @@
   <div class="flex-1 flex flex-col min-w-0">
 
     <!-- Topbar Superior (Móvil y Desktop) -->
-    <header class="sticky top-0 z-20 bg-[#F1F5F9]/95 backdrop-blur-md border-b border-slate-300/80 px-4 py-3 flex items-center justify-between gap-3 shadow-xs">
+        <header class="sticky top-0 z-30 bg-[#111827]/90 backdrop-blur-xl border-b border-white/10 px-4 py-3 flex items-center justify-between gap-3 shadow-md">
       <!-- Identidad Móvil -->
       <div class="flex items-center gap-3 md:hidden">
         <div class="brand-logo-frame w-10 h-10 shrink-0 shadow-sm">
           <img src="assets/logo.jpg" alt="Thor Essence" class="w-full h-full object-cover">
         </div>
         <div>
-          <h2 class="font-brand font-bold text-sm text-slate-900 leading-tight">THOR ESSENCE</h2>
-          <span class="text-[10px] text-slate-500 block">Perfumes, Splash & Estilo</span>
+          <h2 class="font-brand font-bold text-sm text-slate-100 leading-tight">THOR ESSENCE</h2>
+          <span class="text-[10px] text-amber-400/90 block">Perfumes, Splash & Estilo</span>
         </div>
       </div>
 
       <!-- Tasa en vivo en Desktop -->
       <div class="hidden md:flex items-center gap-3">
-        <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-300/80 text-xs shadow-xs">
-          <span class="text-amber-700 font-bold">💵 Tasa Hoy:</span>
-          <span id="headerUsdRate" class="font-mono text-slate-800 font-semibold">1 USD = RD$ 60.50</span>
-          <button onclick="ThorApp.actualizarTasaCambio()" class="btn-tactile text-amber-600 hover:text-amber-800 transition ml-1" title="Actualizar en vivo">🔄</button>
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0D131F] border border-white/10 text-xs shadow-sm">
+          <span class="text-amber-400 font-bold">USD:</span>
+          <span id="headerUsdRate" class="font-mono text-slate-200 font-semibold">1 USD = RD$ 60.50</span>
+          <button onclick="ThorApp.actualizarTasaCambio()" class="btn-tactile text-amber-400 hover:text-amber-300 transition ml-1" title="Actualizar en vivo">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </button>
         </div>
-        <button onclick="ThorApp.sincronizarConNube()" class="btn-tactile px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-300/80 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition shadow-xs">
-          ☁️ Sincronizar
+        <button onclick="ThorApp.sincronizarConNube()" class="btn-tactile px-3 py-1.5 rounded-xl bg-[#0D131F] hover:bg-white/5 border border-white/10 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition shadow-sm">
+          <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
+          <span>Sincronizar</span>
         </button>
       </div>
 
-      <!-- Botones de Acción Rápida & Usuario (Emil Kowalski Tactile Style) -->
+      <!-- Botones de Acción Rápida, Buzón de Alertas y Usuario -->
       <div class="flex items-center gap-2">
-        <button onclick="ThorApp.openSaleModal()" class="btn-tactile btn-gold text-xs py-2 px-3 sm:px-4 shadow-sm flex items-center gap-1.5">
-          <span>💰</span>
+        <button onclick="ThorApp.openSaleModal()" class="btn-tactile btn-gold text-xs py-2 px-3 sm:px-4 shadow-sm flex items-center gap-1.5 text-slate-950 font-bold">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
           <span class="hidden sm:inline">Nueva</span> <span>Venta</span>
         </button>
-        <button onclick="ThorApp.openNewProductModal('Compra Local')" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 hidden sm:inline-flex items-center gap-1.5 shadow-xs" title="Agregar perfume o producto local sin tanque">
-          <span>🛍️</span>
-          <span>+ Producto Local</span>
+        <button onclick="ThorApp.openNewProductModal('Compra Local')" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 hidden sm:inline-flex items-center gap-1.5 shadow-sm text-amber-300" title="Agregar perfume o producto local sin tanque">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+          <span>+ Prod. Local</span>
         </button>
-        <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 hidden md:inline-flex items-center gap-1.5 shadow-xs">
-          <span>🚢</span>
+        <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 hidden md:inline-flex items-center gap-1.5 shadow-sm text-sky-300">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
           <span>+ Tanque</span>
         </button>
 
-        <div class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 shadow-xs">
-          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <!-- =====================================================================
+             BUZÓN FLOTANTE MINIMALISTA DE ALERTAS (NOTIFICATION TOOL)
+             ===================================================================== -->
+        <div class="relative">
+          <button id="btnNotifications" onclick="ThorApp.toggleNotificationDrawer()" class="btn-tactile p-2 rounded-xl bg-[#0D131F] hover:bg-white/10 text-slate-300 hover:text-amber-400 border border-white/10 relative transition" title="Buzón de Alertas y Notificaciones">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+            </svg>
+            <span id="notificationBadge" class="hidden absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-extrabold flex items-center justify-center animate-pulse shadow-sm">0</span>
+          </button>
+
+          <!-- Popover Flyout Minimalista -->
+          <div id="notificationFlyout" class="hidden notification-flyout">
+            <div class="p-3.5 border-b border-white/10 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                <h4 class="font-brand font-bold text-sm text-slate-100">Buzón de Alertas</h4>
+                <span id="flyoutAlertCount" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">0</span>
+              </div>
+              <button onclick="ThorApp.toggleNotificationDrawer(false)" class="text-slate-400 hover:text-white p-1 rounded-lg">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            
+            <div id="notificationFlyoutList" class="p-3 space-y-2.5 max-h-96 overflow-y-auto custom-scrollbar">
+              <!-- Rellenado dinámico por app.js -->
+            </div>
+          </div>
+        </div>
+
+        <div class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0D131F] border border-white/10 text-xs font-semibold text-slate-200 shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
           <span id="topbarUserName">Pamela</span>
         </div>
 
-        <button onclick="ThorApp.logout()" class="btn-tactile hidden sm:inline-flex px-2.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-semibold transition" title="Cerrar sesión en el servidor">
-          🚪 Salir
+        <button onclick="ThorApp.logout()" class="btn-tactile hidden sm:inline-flex px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-semibold transition" title="Cerrar sesión en el servidor">
+          <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+          <span>Salir</span>
         </button>
 
-        <button onclick="ThorApp.logout()" class="btn-tactile md:hidden p-2 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs" title="Cerrar sesión en el servidor">
-          🚪
+        <button onclick="ThorApp.logout()" class="btn-tactile md:hidden p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs" title="Cerrar sesión en el servidor">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
         </button>
       </div>
     </header>
@@ -277,137 +311,128 @@
            TAB 1: INICIO (DASHBOARD WHITE LUXURY)
            ===================================================================== -->
       <section id="view-dashboard" class="tab-view space-y-6">
-        <!-- Banner de Bienvenida -->
-        <div class="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-amber-100/90 via-amber-50 to-orange-50/70 border border-amber-300 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <!-- Banner de Bienvenida Sofisticado -->
+        <div class="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-amber-950/40 via-[#111827] to-[#111827] border border-amber-500/30 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <span class="text-xs uppercase tracking-widest text-[#926704] font-bold">Panel Principal</span>
-            <h2 class="font-brand text-xl sm:text-2xl font-bold text-slate-900 mt-1">Thor Essence — Inventario & Ventas</h2>
-            <p class="text-xs sm:text-sm text-slate-600 mt-1">Control de fragancias, compras locales, tanques de EE.UU., cobros y fiados.</p>
+            <span class="text-xs uppercase tracking-widest text-amber-400 font-bold">Panel Principal</span>
+            <h2 class="font-brand text-xl sm:text-2xl font-bold text-slate-100 mt-1">Thor Essence — Inventario & Ventas</h2>
+            <p class="text-xs sm:text-sm text-slate-400 mt-1">Fragancias, compras locales, tanques de EE.UU., cobros y fiados.</p>
           </div>
           <div class="flex items-center gap-2 shrink-0">
-            <button onclick="ThorApp.openNewProductModal('Compra Local')" class="btn-tactile btn-outline-gold text-xs py-2.5 px-3.5 shadow-xs">
-              🛍️ + Producto Local
+            <button onclick="ThorApp.openNewProductModal('Compra Local')" class="btn-tactile btn-outline-gold text-xs py-2.5 px-3.5 shadow-sm text-amber-300">
+              <svg class="w-4 h-4 inline mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+              <span>+ Prod. Local</span>
             </button>
-            <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-gold text-xs py-2.5 px-4 shadow-md">
-              🚢 Ingresar Tanque
+            <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-gold text-xs py-2.5 px-4 shadow-md text-slate-950 font-bold">
+              <svg class="w-4 h-4 inline mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+              <span>Ingresar Tanque</span>
             </button>
           </div>
         </div>
 
-        <!-- Resumen de Cuentas por Cobrar (Fiado) en Dashboard -->
-        <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-50 via-white to-orange-50 border border-amber-300/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div class="flex items-center gap-3.5">
-            <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-2xl shrink-0 border border-amber-300">💳</div>
-            <div>
-              <div class="flex items-center gap-2">
-                <h4 class="font-brand font-bold text-slate-900 text-base">Cuentas por Cobrar ("Fiado")</h4>
-                <span id="kpiCobrosBadge" class="badge-gold text-[10px] font-bold">0 deudas activas</span>
-              </div>
-              <p class="text-xs text-slate-600 mt-0.5">Total pendiente: <strong id="kpiTotalPorCobrar" class="text-amber-800 font-mono text-sm">RD$ 0</strong> • <span id="kpiCuotasVencenPronto" class="text-rose-600 font-medium">0 cuotas vencen pronto</span></p>
-            </div>
-          </div>
-          <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <button onclick="ThorApp.switchTab('cobros')" class="btn-tactile btn-gold text-xs py-2 px-4 shadow-sm w-full sm:w-auto">
-              Gestionar Cobros ➔
-            </button>
-          </div>
-        </div>
+        <!-- Hidden container for backwards compatibility with JS -->
+        <div id="dashboardAlerts" class="hidden"></div>
+        <span id="kpiCobrosBadge" class="hidden"></span>
+        <span id="kpiTotalPorCobrar" class="hidden"></span>
+        <span id="kpiCuotasVencenPronto" class="hidden"></span>
 
         <!-- =====================================================================
-             ACCIONES RÁPIDAS (ULTRA INTUITIVO PARA CUALQUIER USUARIO)
+             ACCIONES RÁPIDAS COMPACTAS (MINIMALIST STRIP)
              ===================================================================== -->
-        <div>
-          <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Acciones Rápidas</h3>
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <!-- Acción 1: Venta Rápida -->
-            <div onclick="ThorApp.openSaleModal()" class="action-card-quick action-card-sale flex flex-col justify-between">
-              <div class="flex items-center justify-between mb-2">
-                <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-bold border border-emerald-200">💰</div>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Caja</span>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+          <!-- Acción 1: Venta Rápida -->
+          <div onclick="ThorApp.openSaleModal()" class="action-compact-btn group">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               </div>
-              <div>
-                <h4 class="font-bold text-slate-900 text-sm sm:text-base">Venta Rápida</h4>
-                <p class="text-xs text-slate-500 mt-0.5">Al contado o a crédito ("fiado")</p>
+              <div class="text-left min-w-0">
+                <span class="block text-xs font-bold text-slate-100 group-hover:text-amber-400 transition truncate">Venta Rápida</span>
+                <span class="block text-[10px] text-slate-400 truncate">Contado o fiado</span>
               </div>
             </div>
+            <svg class="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          </div>
 
-            <!-- Acción 2: Nuevo Producto Local -->
-            <div onclick="ThorApp.openNewProductModal('Compra Local')" class="action-card-quick action-card-prod flex flex-col justify-between">
-              <div class="flex items-center justify-between mb-2">
-                <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-xl font-bold border border-amber-200">🛍️</div>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Directo</span>
+          <!-- Acción 2: Nuevo Producto Local -->
+          <div onclick="ThorApp.openNewProductModal('Compra Local')" class="action-compact-btn group">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
               </div>
-              <div>
-                <h4 class="font-bold text-slate-900 text-sm sm:text-base">+ Producto Local</h4>
-                <p class="text-xs text-slate-500 mt-0.5">Perfumes comprados sin tanque</p>
+              <div class="text-left min-w-0">
+                <span class="block text-xs font-bold text-slate-100 group-hover:text-amber-400 transition truncate">+ Prod. Local</span>
+                <span class="block text-[10px] text-slate-400 truncate">Perfumes directos</span>
               </div>
             </div>
+            <svg class="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          </div>
 
-            <!-- Acción 3: Cobros y Fiados -->
-            <div onclick="ThorApp.switchTab('cobros')" class="action-card-quick flex flex-col justify-between bg-gradient-to-br from-white to-orange-50/50 border border-orange-200">
-              <div class="flex items-center justify-between mb-2">
-                <div class="w-10 h-10 rounded-xl bg-orange-50 text-orange-700 flex items-center justify-center text-xl font-bold border border-orange-200">💳</div>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">Cuotas</span>
+          <!-- Acción 3: Cobros y Fiados -->
+          <div onclick="ThorApp.switchTab('cobros')" class="action-compact-btn group">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-8 h-8 rounded-lg bg-orange-500/15 text-orange-400 border border-orange-500/30 flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
               </div>
-              <div>
-                <h4 class="font-bold text-slate-900 text-sm sm:text-base">Cobros & Fiados</h4>
-                <p class="text-xs text-slate-500 mt-0.5">Cuotas 15 y 30 y WhatsApp</p>
+              <div class="text-left min-w-0">
+                <span class="block text-xs font-bold text-slate-100 group-hover:text-amber-400 transition truncate">Cobros & Fiados</span>
+                <span class="block text-[10px] text-slate-400 truncate">Cuotas & WhatsApp</span>
               </div>
             </div>
+            <svg class="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          </div>
 
-            <!-- Acción 4: Llegó Tanque -->
-            <div onclick="ThorApp.openTankModal()" class="action-card-quick action-card-tank flex flex-col justify-between">
-              <div class="flex items-center justify-between mb-2">
-                <div class="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center text-xl font-bold border border-sky-200">🚢</div>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">EE.UU.</span>
+          <!-- Acción 4: Llegó Tanque -->
+          <div onclick="ThorApp.openTankModal()" class="action-compact-btn group">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-8 h-8 rounded-lg bg-sky-500/15 text-sky-400 border border-sky-500/30 flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
               </div>
-              <div>
-                <h4 class="font-bold text-slate-900 text-sm sm:text-base">Ingresar Tanque</h4>
-                <p class="text-xs text-slate-500 mt-0.5">Lotes de fragancias importadas</p>
+              <div class="text-left min-w-0">
+                <span class="block text-xs font-bold text-slate-100 group-hover:text-amber-400 transition truncate">Ingresar Tanque</span>
+                <span class="block text-[10px] text-slate-400 truncate">Lotes EE.UU.</span>
               </div>
             </div>
+            <svg class="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
           </div>
         </div>
-
-        <!-- Alertas Inteligentes de Stock -->
-        <div id="dashboardAlerts"></div>
 
         <!-- Tarjetas de Métricas (Bento Grid) -->
         <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-          <div class="bento-card bg-gradient-to-br from-white to-slate-50/80 p-4 sm:p-5 space-y-1">
-            <div class="flex items-center justify-between text-slate-500">
+          <div class="bento-card bento-card p-4 sm:p-5 space-y-1">
+            <div class="flex items-center justify-between text-slate-400">
               <span class="text-xs font-semibold">Productos Activos</span>
-              <span class="text-base">📦</span>
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
             </div>
-            <p id="kpiTotalProductos" class="text-xl sm:text-2xl font-bold text-slate-900">0</p>
-            <p class="text-[11px] text-slate-500"><span id="kpiUnidadesStock" class="text-amber-700 font-semibold">0</span> unidades totales</p>
+            <p id="kpiTotalProductos" class="text-xl sm:text-2xl font-bold text-slate-100">0</p>
+            <p class="text-[11px] text-slate-400"><span id="kpiUnidadesStock" class="text-amber-700 font-semibold">0</span> unidades totales</p>
           </div>
 
-          <div class="bento-card bg-gradient-to-br from-white to-amber-50/60 p-4 sm:p-5 space-y-1 border-amber-200/90">
-            <div class="flex items-center justify-between text-slate-500">
+          <div class="bento-card bento-card p-4 sm:p-5 space-y-1 border-amber-500/20">
+            <div class="flex items-center justify-between text-slate-400">
               <span class="text-xs font-semibold">Valor Inventario (Venta)</span>
-              <span class="text-base">💎</span>
+              <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             </div>
-            <p id="kpiValorInventario" class="text-xl sm:text-2xl font-bold text-[#926704]">RD$ 0</p>
-            <p class="text-[11px] text-slate-500">Costo: <span id="kpiCostoInventario" class="text-slate-700 font-medium">RD$ 0</span></p>
+            <p id="kpiValorInventario" class="text-xl sm:text-2xl font-bold text-amber-400">RD$ 0</p>
+            <p class="text-[11px] text-slate-400">Costo: <span id="kpiCostoInventario" class="text-slate-300 font-medium">RD$ 0</span></p>
           </div>
 
-          <div class="bento-card bg-gradient-to-br from-white to-emerald-50/50 p-4 sm:p-5 space-y-1 border-emerald-200/90">
-            <div class="flex items-center justify-between text-slate-500">
+          <div class="bento-card bento-card p-4 sm:p-5 space-y-1 border-emerald-500/20">
+            <div class="flex items-center justify-between text-slate-400">
               <span class="text-xs font-semibold">Ventas del Mes</span>
-              <span class="text-base">💰</span>
+              <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
             </div>
-            <p id="kpiVentasMes" class="text-xl sm:text-2xl font-bold text-emerald-700">RD$ 0</p>
-            <p class="text-[11px] text-slate-500">Ganancia: <span id="kpiGananciaMes" class="text-emerald-700 font-semibold">RD$ 0</span></p>
+            <p id="kpiVentasMes" class="text-xl sm:text-2xl font-bold text-emerald-400">RD$ 0</p>
+            <p class="text-[11px] text-slate-400">Ganancia: <span id="kpiGananciaMes" class="text-emerald-400 font-semibold">RD$ 0</span></p>
           </div>
 
-          <div class="bento-card bg-gradient-to-br from-white to-rose-50/50 p-4 sm:p-5 space-y-1 border-rose-200/90">
-            <div class="flex items-center justify-between text-slate-500">
+          <div class="bento-card bento-card p-4 sm:p-5 space-y-1 border-rose-500/20">
+            <div class="flex items-center justify-between text-slate-400">
               <span class="text-xs font-semibold">Por Agotarse</span>
-              <span class="text-base">⚠️</span>
+              <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
             </div>
-            <p id="kpiStockBajo" class="text-xl sm:text-2xl font-bold text-rose-600">0</p>
-            <p class="text-[11px] text-slate-500">Artículos con stock crítico</p>
+            <p id="kpiStockBajo" class="text-xl sm:text-2xl font-bold text-rose-400">0</p>
+            <p class="text-[11px] text-slate-400">Artículos con stock crítico</p>
           </div>
         </div>
 
@@ -416,8 +441,8 @@
           <div class="lg:col-span-2 bento-card p-5 space-y-4">
             <div class="flex items-center justify-between">
               <div>
-                <h3 class="font-bold text-sm sm:text-base text-slate-900">Tendencia de Ventas (Últimos 7 días)</h3>
-                <p class="text-xs text-slate-500">Ingresos diarios en pesos dominicanos</p>
+                <h3 class="font-bold text-sm sm:text-base text-slate-100">Tendencia de Ventas (Últimos 7 días)</h3>
+                <p class="text-xs text-slate-400">Ingresos diarios en pesos dominicanos</p>
               </div>
               <span class="text-xs font-mono text-amber-700 font-semibold">RD$</span>
             </div>
@@ -428,8 +453,8 @@
 
           <div class="bento-card p-5 space-y-4">
             <div>
-              <h3 class="font-bold text-sm sm:text-base text-slate-900">Distribución por Categorías</h3>
-              <p class="text-xs text-slate-500">Existencias actuales en tienda</p>
+              <h3 class="font-bold text-sm sm:text-base text-slate-100">Distribución por Categorías</h3>
+              <p class="text-xs text-slate-400">Existencias actuales en tienda</p>
             </div>
             <div class="h-60 w-full flex items-center justify-center">
               <canvas id="chartCategories"></canvas>
@@ -439,13 +464,13 @@
 
         <!-- Últimos Movimientos -->
         <div class="bento-card p-5 space-y-4">
-          <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div class="flex items-center justify-between border-b border-white/10 pb-3">
             <div>
-              <h3 class="font-bold text-sm sm:text-base text-slate-900">Últimas Ventas Registradas</h3>
-              <p class="text-xs text-slate-500">Actividad comercial reciente en tienda</p>
+              <h3 class="font-bold text-sm sm:text-base text-slate-100">Últimas Ventas Registradas</h3>
+              <p class="text-xs text-slate-400">Actividad comercial reciente en tienda</p>
             </div>
             <button onclick="ThorApp.switchTab('ventas')" class="btn-tactile text-xs text-amber-700 hover:text-amber-800 font-semibold flex items-center gap-1">
-              Ver todas ➔
+              Ver todas
             </button>
           </div>
           <div id="recentActivityList" class="divide-y divide-slate-100"></div>
@@ -458,13 +483,13 @@
       <section id="view-inventario" class="tab-view hidden space-y-5">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 class="font-brand text-2xl font-bold text-slate-900">Inventario de Productos</h2>
-            <p class="text-xs text-slate-500 mt-0.5">Control de existencias, procedencia, costos en USD y precios de venta en RD$.</p>
+            <h2 class="font-brand text-2xl font-bold text-slate-100">Inventario de Productos</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Control de existencias, procedencia, costos en USD y precios de venta en RD$.</p>
           </div>
           <div class="flex items-center gap-2">
             <span id="inventoryCountBadge" class="badge-gold font-bold">0 productos</span>
             <button onclick="ThorApp.openNewProductModal('Compra Local')" class="btn-tactile btn-outline-gold text-xs py-2 px-3 shadow-xs">
-              🛍️ + Local
+              <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg> + Local
             </button>
             <button onclick="ThorApp.openNewProductModal()" class="btn-tactile btn-gold text-xs py-2 px-4 flex items-center gap-1.5 shadow-sm">
               <span>+</span>
@@ -474,10 +499,10 @@
         </div>
 
         <!-- Filtros Rápidos de Stock -->
-        <div class="p-3 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2.5">
+        <div class="p-3 rounded-2xl bg-[#111827] border border-white/10 shadow-xs space-y-2.5">
           <div class="flex items-center justify-between flex-wrap gap-2">
-            <span class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              <span>🎯</span>
+            <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+              
               <span>Filtrar por Estado:</span>
             </span>
             <div id="stockFilterPillsContainer" class="flex items-center gap-1.5 flex-wrap"></div>
@@ -487,17 +512,17 @@
         <!-- Barra de Búsqueda y Filtros de Categoría -->
         <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
           <div class="relative flex-1 max-w-md">
-            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">🔍</span>
-            <input type="text" id="inventorySearchInput" oninput="ThorApp.handleSearch(this.value)" placeholder="Buscar producto, categoría, ubicación o procedencia..." class="form-input pl-10 text-xs sm:text-sm">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg></span>
+            <input type="text" id="inventorySearchInput" oninput="ThorApp.handleSearch(this.value)" placeholder="Buscar producto, categoría, ubicación o procedencia..." class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 pl-10 text-xs sm:text-sm">
           </div>
 
           <div class="flex items-center gap-2">
             <div class="sm:hidden w-full">
-              <select id="inventoryStockSelect" onchange="ThorApp.filterInventoryStock(this.value)" class="form-input text-xs font-semibold">
-                <option value="all">✨ Todos los Estados</option>
-                <option value="low">⚠️ Stock Bajo</option>
-                <option value="in">🟢 En Stock</option>
-                <option value="out">🔴 Agotados</option>
+              <select id="inventoryStockSelect" onchange="ThorApp.filterInventoryStock(this.value)" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs font-semibold">
+                <option value="all">Todos los Estados</option>
+                <option value="low">Stock Bajo</option>
+                <option value="in">En Stock</option>
+                <option value="out">Agotados</option>
               </select>
             </div>
             <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0" id="categoryPillsContainer"></div>
@@ -512,7 +537,7 @@
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
               <thead>
-                <tr class="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-700 font-bold">
+                <tr class="border-b border-white/10 bg-[#1A2234] text-[11px] uppercase tracking-wider text-slate-300 font-bold">
                   <th class="py-3 px-4">Producto & Procedencia</th>
                   <th class="py-3 px-3">Categoría</th>
                   <th class="py-3 px-3 text-center">Stock</th>
@@ -534,13 +559,13 @@
       <section id="view-ventas" class="tab-view hidden space-y-5">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 class="font-brand text-2xl font-bold text-slate-900">Registro de Ventas</h2>
-            <p class="text-xs text-slate-500 mt-0.5">Historial comercial y ventas al contado o a crédito.</p>
+            <h2 class="font-brand text-2xl font-bold text-slate-100">Registro de Ventas</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Historial comercial y ventas al contado o a crédito.</p>
           </div>
           <div class="flex items-center gap-2">
             <span id="salesCountBadge" class="badge-gold font-bold">0 ventas</span>
             <button onclick="ThorApp.openSaleModal()" class="btn-tactile btn-gold text-xs py-2 px-4 flex items-center gap-1.5 shadow-sm">
-              <span>💰</span>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
               <span>Registrar Venta</span>
             </button>
           </div>
@@ -552,7 +577,7 @@
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
               <thead>
-                <tr class="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-700 font-bold">
+                <tr class="border-b border-white/10 bg-[#1A2234] text-[11px] uppercase tracking-wider text-slate-300 font-bold">
                   <th class="py-3 px-4">ID / Fecha</th>
                   <th class="py-3 px-3">Artículo / Cliente</th>
                   <th class="py-3 px-3 text-center">Cant.</th>
@@ -575,15 +600,15 @@
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div class="flex items-center gap-2">
-              <span class="text-xl">💳</span>
-              <h2 class="font-brand text-2xl font-bold text-slate-900">Cobros & Fiados</h2>
+              <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+              <h2 class="font-brand text-2xl font-bold text-slate-100">Cobros & Fiados</h2>
               <span id="cobrosCountBadge" class="badge-gold font-bold">0 cuentas</span>
             </div>
-            <p class="text-xs text-slate-500 mt-0.5">Control de ventas a crédito, cuotas quincenales (15 y 30) o mensuales, abonos y WhatsApp.</p>
+            <p class="text-xs text-slate-400 mt-0.5">Control de ventas a crédito, cuotas quincenales (15 y 30) o mensuales, abonos y WhatsApp.</p>
           </div>
           <div class="flex items-center gap-2">
             <button onclick="ThorApp.openSaleModalCredit()" class="btn-tactile btn-gold text-xs py-2 px-4 flex items-center gap-1.5 shadow-sm">
-              <span>💳</span>
+              <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
               <span>+ Venta a Crédito</span>
             </button>
           </div>
@@ -591,36 +616,36 @@
 
         <!-- KPI Bento Cards de Cobros -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-          <div class="bento-card bg-gradient-to-br from-white to-amber-50/70 p-4 sm:p-5 space-y-1 border-amber-300">
-            <span class="text-xs text-slate-600 block font-semibold">Total por Cobrar</span>
+          <div class="bento-card bg-gradient-to-br from-white to-amber-50/70 p-4 sm:p-5 space-y-1 border-amber-500/30">
+            <span class="text-xs text-slate-400 block font-semibold">Total por Cobrar</span>
             <p id="kpiCobrosTotalPendiente" class="text-xl sm:text-2xl font-bold text-amber-900 font-mono">RD$ 0</p>
             <span class="text-[10px] text-amber-700 font-medium">Saldo pendiente global</span>
           </div>
 
           <div class="bento-card bg-gradient-to-br from-white to-rose-50/70 p-4 sm:p-5 space-y-1 border-rose-300">
-            <span class="text-xs text-slate-600 block font-semibold">Vencen Esta Quincena</span>
+            <span class="text-xs text-slate-400 block font-semibold">Vencen Esta Quincena</span>
             <p id="kpiCobrosVencenHoy" class="text-xl sm:text-2xl font-bold text-rose-700">0 cuotas</p>
-            <span class="text-[10px] text-rose-600 font-medium">Prioridad de cobro (15 / 30)</span>
+            <span class="text-[10px] text-rose-400 font-medium">Prioridad de cobro (15 / 30)</span>
           </div>
 
           <div class="bento-card bg-gradient-to-br from-white to-sky-50/70 p-4 sm:p-5 space-y-1 border-sky-300">
-            <span class="text-xs text-slate-600 block font-semibold">Clientes Deudores</span>
+            <span class="text-xs text-slate-400 block font-semibold">Clientes Deudores</span>
             <p id="kpiCobrosClientes" class="text-xl sm:text-2xl font-bold text-sky-800">0 personas</p>
             <span class="text-[10px] text-sky-700 font-medium">Con saldo activo</span>
           </div>
 
           <div class="bento-card bg-gradient-to-br from-white to-emerald-50/70 p-4 sm:p-5 space-y-1 border-emerald-300">
-            <span class="text-xs text-slate-600 block font-semibold">Total Cobrado (Abonos)</span>
-            <p id="kpiCobrosTotalRecuperado" class="text-xl sm:text-2xl font-bold text-emerald-700 font-mono">RD$ 0</p>
-            <span class="text-[10px] text-emerald-700 font-medium">Dinero ingresado</span>
+            <span class="text-xs text-slate-400 block font-semibold">Total Cobrado (Abonos)</span>
+            <p id="kpiCobrosTotalRecuperado" class="text-xl sm:text-2xl font-bold text-emerald-400 font-mono">RD$ 0</p>
+            <span class="text-[10px] text-emerald-400 font-medium">Dinero ingresado</span>
           </div>
         </div>
 
         <!-- Filtros y Búsqueda de Cobros -->
         <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
           <div class="relative flex-1 max-w-md">
-            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">🔍</span>
-            <input type="text" id="cobrosSearchInput" oninput="ThorApp.handleCobrosSearch(this.value)" placeholder="Buscar por cliente, teléfono o artículo..." class="form-input pl-10 text-xs sm:text-sm">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg></span>
+            <input type="text" id="cobrosSearchInput" oninput="ThorApp.handleCobrosSearch(this.value)" placeholder="Buscar por cliente, teléfono o artículo..." class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 pl-10 text-xs sm:text-sm">
           </div>
           <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0" id="cobrosFilterPillsContainer"></div>
         </div>
@@ -633,7 +658,7 @@
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
               <thead>
-                <tr class="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-700 font-bold">
+                <tr class="border-b border-white/10 bg-[#1A2234] text-[11px] uppercase tracking-wider text-slate-300 font-bold">
                   <th class="py-3 px-4">Cliente & Contacto</th>
                   <th class="py-3 px-3">Artículo Fiado</th>
                   <th class="py-3 px-3 text-right">Total Fiado</th>
@@ -657,11 +682,11 @@
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <span class="text-xs font-bold text-amber-700 uppercase tracking-wider">Importaciones de EE.UU.</span>
-            <h2 class="font-brand text-2xl font-bold text-slate-900">Tanques y Lotes Recibidos</h2>
-            <p class="text-xs text-slate-500 mt-0.5">Historial de tanques importados desde Miami y desglose de mercancía.</p>
+            <h2 class="font-brand text-2xl font-bold text-slate-100">Tanques y Lotes Recibidos</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Historial de tanques importados desde Miami y desglose de mercancía.</p>
           </div>
           <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-gold text-xs py-2 px-4 flex items-center gap-1.5 shadow-sm">
-            <span>🚢</span>
+            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
             <span>+ Ingresar Tanque</span>
           </button>
         </div>
@@ -675,12 +700,12 @@
       <section id="view-reportes" class="tab-view hidden space-y-5">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 class="font-brand text-2xl font-bold text-slate-900">Reportes Financieros</h2>
-            <p class="text-xs text-slate-500 mt-0.5">Resumen de margen neto, ingresos y rendimiento comercial.</p>
+            <h2 class="font-brand text-2xl font-bold text-slate-100">Reportes Financieros</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Resumen de margen neto, ingresos y rendimiento comercial.</p>
           </div>
           <div class="flex items-center gap-2">
             <button onclick="ThorApp.sincronizarConNube(true)" class="btn-tactile btn-outline-gold text-xs py-2 px-3.5 flex items-center gap-1.5">
-              <span>🔄</span>
+              <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
               <span>Actualizar Cifras</span>
             </button>
           </div>
@@ -688,35 +713,35 @@
 
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div class="bento-card p-4 sm:p-5 space-y-1">
-            <span class="text-xs text-slate-500 block font-medium">Ingresos Totales por Ventas</span>
-            <p id="repTotalIngresos" class="text-xl sm:text-2xl font-bold text-slate-900">RD$ 0</p>
+            <span class="text-xs text-slate-400 block font-medium">Ingresos Totales por Ventas</span>
+            <p id="repTotalIngresos" class="text-xl sm:text-2xl font-bold text-slate-100">RD$ 0</p>
             <span class="text-[10px] text-emerald-600 font-semibold">Ventas realizadas</span>
           </div>
 
           <div class="bento-card p-4 sm:p-5 space-y-1">
-            <span class="text-xs text-slate-500 block font-medium">Costo de Artículos Vendidos</span>
+            <span class="text-xs text-slate-400 block font-medium">Costo de Artículos Vendidos</span>
             <p id="repTotalCostos" class="text-xl sm:text-2xl font-bold text-amber-700">RD$ 0</p>
-            <span class="text-[10px] text-slate-500">Inversión en mercancía</span>
+            <span class="text-[10px] text-slate-400">Inversión en mercancía</span>
           </div>
 
           <div class="bento-card p-4 sm:p-5 space-y-1">
-            <span class="text-xs text-slate-500 block font-medium">Ganancia Neta</span>
+            <span class="text-xs text-slate-400 block font-medium">Ganancia Neta</span>
             <p id="repTotalGanancia" class="text-xl sm:text-2xl font-bold text-emerald-600">RD$ 0</p>
-            <span class="text-[10px] text-emerald-700 font-semibold">Beneficio en mano</span>
+            <span class="text-[10px] text-emerald-400 font-semibold">Beneficio en mano</span>
           </div>
 
           <div class="bento-card p-4 sm:p-5 space-y-1">
-            <span class="text-xs text-slate-500 block font-medium">Margen General de Beneficio</span>
+            <span class="text-xs text-slate-400 block font-medium">Margen General de Beneficio</span>
             <p id="repMargenGeneral" class="text-xl sm:text-2xl font-bold text-amber-700">0%</p>
-            <span class="text-[10px] text-slate-500">Rentabilidad media</span>
+            <span class="text-[10px] text-slate-400">Rentabilidad media</span>
           </div>
         </div>
 
         <div class="bento-card p-5 space-y-4">
-          <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div class="flex items-center justify-between border-b border-white/10 pb-3">
             <div>
-              <h3 class="font-bold text-sm sm:text-base text-slate-900">Top 5 Productos Más Vendidos</h3>
-              <p class="text-xs text-slate-500">Artículos con mayor rotación en Thor Essence</p>
+              <h3 class="font-bold text-sm sm:text-base text-slate-100">Top 5 Productos Más Vendidos</h3>
+              <p class="text-xs text-slate-400">Artículos con mayor rotación en Thor Essence</p>
             </div>
             <button onclick="ThorApp.exportInventoryToExcel()" class="btn-tactile btn-outline-gold text-xs py-1.5 px-3">
               Descargar Reporte Excel
@@ -732,25 +757,25 @@
   <!-- =========================================================================
        BARRA DE NAVEGACIÓN INFERIOR MÓVIL (ESTILO EMIL KOWALSKI)
        ========================================================================= -->
-  <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg">
-    <button data-tab="dashboard" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-amber-700 transition">
-      <span class="text-lg">📊</span>
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#111827]/95 backdrop-blur-xl border-t border-white/10 px-2 py-1.5 flex items-center justify-around shadow-2xl">
+    <button data-tab="dashboard" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-amber-400 transition">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
       <span class="text-[10px] font-semibold">Inicio</span>
     </button>
-    <button data-tab="inventario" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-slate-500 transition">
-      <span class="text-lg">📦</span>
+    <button data-tab="inventario" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-slate-400 transition">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
       <span class="text-[10px] font-semibold">Inventario</span>
     </button>
-    <button onclick="ThorApp.openSaleModal()" class="btn-tactile flex flex-col items-center -mt-5 bg-gradient-to-tr from-amber-600 to-amber-400 text-white w-12 h-12 rounded-full shadow-lg font-bold justify-center active:scale-95 transition">
-      <span class="text-xl">💰</span>
+    <button onclick="ThorApp.openSaleModal()" class="btn-tactile flex flex-col items-center -mt-5 bg-gradient-to-tr from-amber-500 to-amber-300 text-slate-950 w-12 h-12 rounded-full shadow-lg font-bold justify-center active:scale-95 transition border-2 border-[#111827]">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
     </button>
-    <button data-tab="cobros" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-slate-500 transition relative">
-      <span class="text-lg">💳</span>
+    <button data-tab="cobros" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-slate-400 transition relative">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
       <span class="text-[10px] font-semibold">Cobros</span>
-      <span id="mobileCobrosDot" class="hidden absolute top-1 right-2 w-2 h-2 rounded-full bg-rose-500"></span>
+      <span id="mobileCobrosDot" class="hidden absolute top-1 right-2 w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
     </button>
-    <button data-tab="tanques" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-slate-500 transition">
-      <span class="text-lg">🚢</span>
+    <button data-tab="tanques" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-slate-400 transition">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
       <span class="text-[10px] font-semibold">Tanques</span>
     </button>
   </nav>
@@ -760,36 +785,36 @@
        ========================================================================= -->
   <div id="modalProduct" class="modal-container fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
     <div class="modal-backdrop fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
-    <div class="vaul-drawer relative w-full max-w-lg bg-white border border-slate-200 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-900">
+    <div class="vaul-drawer relative w-full max-w-lg bg-[#111827] border border-white/10 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-100">
       <div class="vaul-handle sm:hidden"></div>
-      <div class="flex items-center justify-between border-b border-slate-200 pb-3">
-        <h3 id="modalProductTitle" class="font-brand font-bold text-lg text-slate-900">Nuevo Producto</h3>
-        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <h3 id="modalProductTitle" class="font-brand font-bold text-lg text-slate-100">Nuevo Producto</h3>
+        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-white p-1 rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
 
       <form id="formProduct" class="space-y-4">
         <input type="hidden" id="prodId">
 
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre del Producto *</label>
-          <input type="text" id="prodNombre" placeholder="Ej: Perfume Carolina Herrera 100ml / Thor Gold" class="form-input text-xs sm:text-sm" required>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Nombre del Producto *</label>
+          <input type="text" id="prodNombre" placeholder="Ej: Perfume Carolina Herrera 100ml / Thor Gold" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm" required>
         </div>
 
         <!-- Selector de Procedencia / Vía de Entrada -->
         <div class="p-3 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2">
           <label class="block text-xs font-bold text-amber-900">Vía de Entrada / Procedencia *</label>
-          <select id="prodOrigen" class="form-input text-xs sm:text-sm font-semibold bg-white">
-            <option value="Compra Local">🛍️ Compra Local / Distribuidor Directo (Perfumes & Variedades)</option>
-            <option value="Tanque EE.UU.">🚢 Tanque Importado (Miami - EE.UU.)</option>
-            <option value="Stock Tienda">🏬 Stock Tienda / Inventario Inicial</option>
+          <select id="prodOrigen" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-semibold bg-[#111827]">
+            <option value="Compra Local">Compra Local / Distribuidor Directo (Perfumes & Variedades)</option>
+            <option value="Tanque EE.UU.">Tanque Importado (Miami - EE.UU.)</option>
+            <option value="Stock Tienda">Stock Tienda / Inventario Inicial</option>
           </select>
-          <p class="text-[11px] text-slate-500">Permite registrar perfumes comprados localmente sin requerir la llegada de un tanque.</p>
+          <p class="text-[11px] text-slate-400">Permite registrar perfumes comprados localmente sin requerir la llegada de un tanque.</p>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Categoría</label>
-            <select id="prodCategoria" class="form-input text-xs sm:text-sm">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Categoría</label>
+            <select id="prodCategoria" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm">
               <option value="Perfumes">Perfumes</option>
               <option value="Splash">Splash</option>
               <option value="Cremas">Cremas</option>
@@ -800,19 +825,19 @@
             </select>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Ubicación en Tienda</label>
-            <input type="text" id="prodUbicacion" placeholder="Ej: Vitrina Principal / Estante B" class="form-input text-xs sm:text-sm">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Ubicación en Tienda</label>
+            <input type="text" id="prodUbicacion" placeholder="Ej: Vitrina Principal / Estante B" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm">
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Stock Disponible *</label>
-            <input type="number" id="prodCantidad" min="0" value="1" class="form-input text-xs sm:text-sm font-bold" required>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Stock Disponible *</label>
+            <input type="number" id="prodCantidad" min="0" value="1" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-bold" required>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Alerta Stock Mínimo</label>
-            <input type="number" id="prodStockMin" min="1" value="3" class="form-input text-xs sm:text-sm">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Alerta Stock Mínimo</label>
+            <input type="number" id="prodStockMin" min="1" value="3" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm">
           </div>
         </div>
 
@@ -822,38 +847,38 @@
             <span id="prodCurrencyLabel" class="text-xs font-bold text-amber-900">Costo en Dólares (USD)</span>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="prodCurrencyToggle" checked class="sr-only peer">
-              <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+              <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[#111827] after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
             </label>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
             <div id="prodUsdGroup">
-              <label class="block text-[11px] text-slate-600 mb-1">Costo Dólares (USD $)</label>
-              <input type="number" step="0.01" min="0" id="prodCostoUsd" placeholder="0.00" class="form-input text-xs sm:text-sm font-mono">
+              <label class="block text-[11px] text-slate-400 mb-1">Costo Dólares (USD $)</label>
+              <input type="number" step="0.01" min="0" id="prodCostoUsd" placeholder="0.00" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono">
             </div>
             <div id="prodDopGroup">
-              <label class="block text-[11px] text-slate-600 mb-1">Costo Dominicano (RD$)</label>
-              <input type="number" step="0.01" min="0" id="prodCostoDop" placeholder="0.00" class="form-input text-xs sm:text-sm font-mono font-semibold">
+              <label class="block text-[11px] text-slate-400 mb-1">Costo Dominicano (RD$)</label>
+              <input type="number" step="0.01" min="0" id="prodCostoDop" placeholder="0.00" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono font-semibold">
             </div>
           </div>
 
-          <p class="text-[11px] text-slate-500">Tasa de cambio actual: <span id="prodExchangeRateText" class="font-bold text-amber-800">RD$ 60.50</span> por 1 USD</p>
+          <p class="text-[11px] text-slate-400">Tasa de cambio actual: <span id="prodExchangeRateText" class="font-bold text-amber-800">RD$ 60.50</span> por 1 USD</p>
         </div>
 
         <div>
           <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs font-semibold text-slate-700">Precio de Venta al Público (RD$) *</label>
+            <label class="block text-xs font-semibold text-slate-300">Precio de Venta al Público (RD$) *</label>
             <span id="prodMarginPreview" class="text-xs font-bold text-emerald-600">Margen: 0%</span>
           </div>
-          <input type="number" step="0.01" min="0" id="prodPrecioVenta" placeholder="0.00" class="form-input text-sm font-bold text-emerald-700" required>
+          <input type="number" step="0.01" min="0" id="prodPrecioVenta" placeholder="0.00" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-sm font-bold text-emerald-400" required>
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Descripción u Observaciones</label>
-          <textarea id="prodDescripcion" rows="2" placeholder="Detalles de fragancia, notas olfativas o proveedor..." class="form-input text-xs sm:text-sm"></textarea>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Descripción u Observaciones</label>
+          <textarea id="prodDescripcion" rows="2" placeholder="Detalles de fragancia, notas olfativas o proveedor..." class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm"></textarea>
         </div>
 
-        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
           <button type="button" class="close-modal-btn btn-tactile btn-subtle text-xs py-2 px-3.5">Cancelar</button>
           <button type="submit" class="btn-tactile btn-gold text-xs py-2 px-5 shadow-sm">Guardar Producto</button>
         </div>
@@ -866,27 +891,27 @@
        ========================================================================= -->
   <div id="modalSale" class="modal-container fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
     <div class="modal-backdrop fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
-    <div class="vaul-drawer relative w-full max-w-lg bg-white border border-slate-200 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-900">
+    <div class="vaul-drawer relative w-full max-w-lg bg-[#111827] border border-white/10 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-100">
       <div class="vaul-handle sm:hidden"></div>
-      <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
         <div class="flex items-center gap-2">
-          <span class="text-xl">💰</span>
-          <h3 class="font-brand font-bold text-lg text-slate-900">Registrar Venta</h3>
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <h3 class="font-brand font-bold text-lg text-slate-100">Registrar Venta</h3>
         </div>
-        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-600 text-lg">✕</button>
+        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-white p-1 rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
 
       <form id="formSale" class="space-y-4">
         <!-- Selector de Condición de Venta: Contado vs Crédito -->
-        <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-          <label class="block text-xs font-bold text-slate-800">Tipo de Pago / Condición de Venta *</label>
+        <div class="p-3 rounded-2xl bg-[#1A2234] border border-white/10 space-y-2">
+          <label class="block text-xs font-bold text-slate-200">Tipo de Pago / Condición de Venta *</label>
           <div class="grid grid-cols-2 gap-2">
             <button type="button" id="saleModeContadoBtn" onclick="ThorApp.setSaleMode('contado')" class="btn-tactile py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition bg-amber-600 text-white border-amber-600 shadow-xs">
-              <span>🟢</span>
+              <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block mr-1"></span>
               <span>Al Contado (Directo)</span>
             </button>
-            <button type="button" id="saleModeCreditoBtn" onclick="ThorApp.setSaleMode('credito')" class="btn-tactile py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition bg-white text-slate-700 hover:bg-slate-100 border-slate-300">
-              <span>💳</span>
+            <button type="button" id="saleModeCreditoBtn" onclick="ThorApp.setSaleMode('credito')" class="btn-tactile py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition bg-[#111827] text-slate-300 hover:bg-slate-100 border-white/15">
+              <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
               <span>A Crédito ("Fiado")</span>
             </button>
           </div>
@@ -894,54 +919,54 @@
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Seleccionar Producto a Vender *</label>
-          <select id="saleProductSelect" class="form-input text-xs sm:text-sm font-semibold" required>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Seleccionar Producto a Vender *</label>
+          <select id="saleProductSelect" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-semibold" required>
             <option value="">Selecciona un producto...</option>
           </select>
         </div>
 
-        <div id="saleProductInfo" class="hidden p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+        <div id="saleProductInfo" class="hidden p-3 rounded-xl bg-[#1A2234] border border-white/10 text-xs space-y-1">
           <div class="flex items-center justify-between">
-            <span class="text-slate-500">Stock disponible:</span>
+            <span class="text-slate-400">Stock disponible:</span>
             <span id="saleAvailableStock" class="font-bold text-emerald-600 text-sm">0 unidades</span>
           </div>
           <div class="flex items-center justify-between">
-            <span class="text-slate-500">Costo unitario:</span>
-            <span id="saleUnitCost" class="font-medium text-slate-700">RD$ 0.00</span>
+            <span class="text-slate-400">Costo unitario:</span>
+            <span id="saleUnitCost" class="font-medium text-slate-300">RD$ 0.00</span>
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Cantidad a Vender *</label>
-            <input type="number" id="saleQtyInput" min="1" value="1" class="form-input text-sm font-bold text-center" required>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Cantidad a Vender *</label>
+            <input type="number" id="saleQtyInput" min="1" value="1" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-sm font-bold text-center" required>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Precio Unitario (RD$) *</label>
-            <input type="number" step="0.01" min="0" id="salePriceInput" class="form-input text-sm font-bold text-emerald-700 text-right" required>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Precio Unitario (RD$) *</label>
+            <input type="number" step="0.01" min="0" id="salePriceInput" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-sm font-bold text-emerald-400 text-right" required>
           </div>
         </div>
 
         <!-- Total y Ganancia Calculada en Vivo -->
         <div class="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-white to-amber-50 border border-emerald-200 space-y-2 shadow-xs">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-700">TOTAL DE LA VENTA:</span>
-            <span id="saleTotalDop" class="font-bold text-xl sm:text-2xl text-emerald-700 font-mono">RD$ 0.00</span>
+            <span class="text-xs font-bold text-slate-300">TOTAL DE LA VENTA:</span>
+            <span id="saleTotalDop" class="font-bold text-xl sm:text-2xl text-emerald-400 font-mono">RD$ 0.00</span>
           </div>
           <div class="flex items-center justify-between text-xs pt-1 border-t border-emerald-100">
-            <span class="text-slate-500">Ganancia Neta Proyectada:</span>
+            <span class="text-slate-400">Ganancia Neta Proyectada:</span>
             <span id="saleNetProfitDop" class="font-bold text-emerald-600 font-mono">+RD$ 0.00</span>
           </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre del Cliente *</label>
-            <input type="text" id="saleCustomerInput" placeholder="Ej: Jesús De La Rosa" class="form-input text-xs sm:text-sm" required>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Nombre del Cliente *</label>
+            <input type="text" id="saleCustomerInput" placeholder="Ej: Jesús De La Rosa" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm" required>
           </div>
           <div id="salePaymentMethodGroup">
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Método de Pago</label>
-            <select id="salePaymentMethod" class="form-input text-xs sm:text-sm">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Método de Pago</label>
+            <select id="salePaymentMethod" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm">
               <option value="Efectivo">Efectivo</option>
               <option value="Transferencia">Transferencia</option>
               <option value="Tarjeta">Tarjeta</option>
@@ -951,35 +976,35 @@
         </div>
 
         <!-- Sub-formulario para Venta a Crédito / Fiado -->
-        <div id="saleCreditFields" class="hidden p-3.5 rounded-2xl bg-amber-50/70 border border-amber-300 space-y-3">
+        <div id="saleCreditFields" class="hidden p-3.5 rounded-2xl bg-amber-50/70 border border-amber-500/30 space-y-3">
           <div class="flex items-center gap-2 text-xs font-bold text-amber-900 border-b border-amber-200 pb-2">
-            <span>📅</span>
+            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
             <span>Plan de Cuotas & Seguimiento ("Fiado")</span>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-semibold text-slate-700 mb-1">Teléfono / WhatsApp del Cliente</label>
-              <input type="tel" id="saleCreditPhone" placeholder="809-xxx-xxxx" class="form-input text-xs sm:text-sm font-mono">
-              <span class="text-[10px] text-slate-500">Para enviar recordatorios con 1 clic</span>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Teléfono / WhatsApp del Cliente</label>
+              <input type="tel" id="saleCreditPhone" placeholder="809-xxx-xxxx" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono">
+              <span class="text-[10px] text-slate-400">Para enviar recordatorios con 1 clic</span>
             </div>
             <div>
-              <label class="block text-xs font-semibold text-slate-700 mb-1">Abono Inicial (RD$ - Opcional)</label>
-              <input type="number" step="0.01" min="0" id="saleCreditAbonoInicial" oninput="ThorApp.recalcularCuotasVenta()" placeholder="0.00" class="form-input text-xs sm:text-sm font-mono">
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Abono Inicial (RD$ - Opcional)</label>
+              <input type="number" step="0.01" min="0" id="saleCreditAbonoInicial" oninput="ThorApp.recalcularCuotasVenta()" placeholder="0.00" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono">
             </div>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Cuota / Frecuencia *</label>
-              <select id="saleCreditFrecuencia" onchange="ThorApp.recalcularCuotasVenta()" class="form-input text-xs sm:text-sm font-medium">
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Tipo de Cuota / Frecuencia *</label>
+              <select id="saleCreditFrecuencia" onchange="ThorApp.recalcularCuotasVenta()" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-medium">
                 <option value="quincenal">Quincenal (15 y 30 de cada mes)</option>
                 <option value="mensual">Mensual (Cada 30 días)</option>
               </select>
             </div>
             <div>
-              <label class="block text-xs font-semibold text-slate-700 mb-1">Número de Cuotas *</label>
-              <select id="saleCreditNumCuotas" onchange="ThorApp.recalcularCuotasVenta()" class="form-input text-xs sm:text-sm font-bold">
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Número de Cuotas *</label>
+              <select id="saleCreditNumCuotas" onchange="ThorApp.recalcularCuotasVenta()" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-bold">
                 <option value="1">1 cuota</option>
                 <option value="2" selected>2 cuotas (15 y 30)</option>
                 <option value="3">3 cuotas</option>
@@ -990,22 +1015,22 @@
           </div>
 
           <!-- Desglose proyectado en vivo de las cuotas -->
-          <div id="saleCreditCuotasPreview" class="p-2.5 rounded-xl bg-white border border-amber-200 text-xs space-y-1.5"></div>
+          <div id="saleCreditCuotasPreview" class="p-2.5 rounded-xl bg-[#111827] border border-amber-200 text-xs space-y-1.5"></div>
         </div>
 
         <!-- Cambio en Efectivo (Solo al contado) -->
         <div id="saleChangeGroup">
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Monto Recibido del Cliente (Para calcular cambio)</label>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Monto Recibido del Cliente (Para calcular cambio)</label>
           <div class="grid grid-cols-2 gap-3">
-            <input type="number" step="0.01" min="0" id="saleReceivedInput" placeholder="RD$ Recibido" class="form-input text-xs sm:text-sm font-mono">
-            <div class="flex items-center justify-between px-3 rounded-xl bg-slate-50 border border-slate-200">
-              <span class="text-[11px] text-slate-500">Cambio:</span>
+            <input type="number" step="0.01" min="0" id="saleReceivedInput" placeholder="RD$ Recibido" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono">
+            <div class="flex items-center justify-between px-3 rounded-xl bg-[#1A2234] border border-white/10">
+              <span class="text-[11px] text-slate-400">Cambio:</span>
               <span id="saleChangeDop" class="text-xs sm:text-sm font-bold text-amber-700 font-mono">RD$ 0.00</span>
             </div>
           </div>
         </div>
 
-        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
           <button type="button" class="close-modal-btn btn-tactile btn-subtle text-xs py-2 px-3.5">Cancelar</button>
           <button type="submit" class="btn-tactile btn-gold text-xs py-2 px-5 shadow-sm">Confirmar Venta</button>
         </div>
@@ -1018,17 +1043,17 @@
        ========================================================================= -->
   <div id="modalAbono" class="modal-container fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
     <div class="modal-backdrop fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
-    <div class="vaul-drawer relative w-full max-w-lg bg-white border border-slate-200 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-900">
+    <div class="vaul-drawer relative w-full max-w-lg bg-[#111827] border border-white/10 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-100">
       <div class="vaul-handle sm:hidden"></div>
-      <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
         <div class="flex items-center gap-2">
-          <span class="text-xl">💵</span>
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           <div>
-            <h3 class="font-brand font-bold text-lg text-slate-900">Registrar Abono</h3>
-            <p id="modalAbonoSubtitle" class="text-xs text-slate-500">Cliente • Artículo</p>
+            <h3 class="font-brand font-bold text-lg text-slate-100">Registrar Abono</h3>
+            <p id="modalAbonoSubtitle" class="text-xs text-slate-400">Cliente • Artículo</p>
           </div>
         </div>
-        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-600 text-lg">✕</button>
+        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-white p-1 rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
 
       <form id="formAbono" onsubmit="ThorApp.handleRegisterAbono(event)" class="space-y-4">
@@ -1037,41 +1062,41 @@
         <!-- Resumen de Deuda -->
         <div class="grid grid-cols-3 gap-2 p-3 rounded-2xl bg-amber-50/80 border border-amber-200 text-center">
           <div>
-            <span class="text-[10px] text-slate-500 block">Total Fiado</span>
-            <span id="abonoTotalDop" class="font-bold text-xs sm:text-sm text-slate-800 font-mono">RD$ 0</span>
+            <span class="text-[10px] text-slate-400 block">Total Fiado</span>
+            <span id="abonoTotalDop" class="font-bold text-xs sm:text-sm text-slate-200 font-mono">RD$ 0</span>
           </div>
           <div>
-            <span class="text-[10px] text-slate-500 block">Abonado</span>
+            <span class="text-[10px] text-slate-400 block">Abonado</span>
             <span id="abonoCobradoDop" class="font-bold text-xs sm:text-sm text-emerald-600 font-mono">RD$ 0</span>
           </div>
           <div>
-            <span class="text-[10px] text-slate-500 block">Resta por Pagar</span>
+            <span class="text-[10px] text-slate-400 block">Resta por Pagar</span>
             <span id="abonoPendienteDop" class="font-bold text-xs sm:text-sm text-amber-700 font-mono">RD$ 0</span>
           </div>
         </div>
 
         <!-- Cronograma de Cuotas -->
         <div class="space-y-1.5">
-          <label class="block text-xs font-semibold text-slate-700">Estado de Cuotas Acordadas</label>
+          <label class="block text-xs font-semibold text-slate-300">Estado de Cuotas Acordadas</label>
           <div id="abonoCuotasList" class="space-y-1.5 max-h-40 overflow-y-auto pr-1"></div>
         </div>
 
         <!-- Monto del Abono -->
         <div>
           <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs font-semibold text-slate-700">Monto que entrega el Cliente (RD$) *</label>
+            <label class="block text-xs font-semibold text-slate-300">Monto que entrega el Cliente (RD$) *</label>
             <div class="flex items-center gap-1.5">
               <button type="button" onclick="ThorApp.sugerirMontoAbono('cuota')" class="text-[10px] px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-semibold hover:bg-amber-200">1 Cuota</button>
               <button type="button" onclick="ThorApp.sugerirMontoAbono('todo')" class="text-[10px] px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-semibold hover:bg-emerald-200">Saldar Todo</button>
             </div>
           </div>
-          <input type="number" step="0.01" min="1" id="abonoMontoInput" placeholder="0.00" class="form-input text-base font-bold text-emerald-700 font-mono" required>
+          <input type="number" step="0.01" min="1" id="abonoMontoInput" placeholder="0.00" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-base font-bold text-emerald-400 font-mono" required>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Método de Cobro</label>
-            <select id="abonoMetodoPago" class="form-input text-xs sm:text-sm font-semibold">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Método de Cobro</label>
+            <select id="abonoMetodoPago" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-semibold">
               <option value="Efectivo">Efectivo</option>
               <option value="Transferencia">Transferencia</option>
               <option value="Tarjeta">Tarjeta</option>
@@ -1079,12 +1104,12 @@
             </select>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Nota del Abono</label>
-            <input type="text" id="abonoNotaInput" placeholder="Ej: Pago quincena 15" class="form-input text-xs sm:text-sm">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Nota del Abono</label>
+            <input type="text" id="abonoNotaInput" placeholder="Ej: Pago quincena 15" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm">
           </div>
         </div>
 
-        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
           <button type="button" class="close-modal-btn btn-tactile btn-subtle text-xs py-2 px-3.5">Cancelar</button>
           <button type="submit" id="btnSubmitAbono" class="btn-tactile btn-gold text-xs py-2 px-5 shadow-sm">Confirmar Abono</button>
         </div>
@@ -1097,22 +1122,22 @@
        ========================================================================= -->
   <div id="modalDetalleCobro" class="modal-container fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
     <div class="modal-backdrop fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
-    <div class="vaul-drawer relative w-full max-w-xl bg-white border border-slate-200 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-900">
+    <div class="vaul-drawer relative w-full max-w-xl bg-[#111827] border border-white/10 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-100">
       <div class="vaul-handle sm:hidden"></div>
-      <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
         <div class="flex items-center gap-2">
-          <span class="text-xl">📋</span>
+          <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
           <div>
-            <h3 class="font-brand font-bold text-lg text-slate-900">Detalle de Cuenta por Cobrar</h3>
-            <p id="detalleCobroCliente" class="text-xs text-slate-500">Cliente</p>
+            <h3 class="font-brand font-bold text-lg text-slate-100">Detalle de Cuenta por Cobrar</h3>
+            <p id="detalleCobroCliente" class="text-xs text-slate-400">Cliente</p>
           </div>
         </div>
-        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-600 text-lg">✕</button>
+        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-white p-1 rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
 
       <div id="detalleCobroBody" class="space-y-4"></div>
 
-      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
         <button type="button" class="close-modal-btn btn-tactile btn-subtle text-xs py-2 px-3.5">Cerrar</button>
       </div>
     </div>
@@ -1123,48 +1148,48 @@
        ========================================================================= -->
   <div id="modalTank" class="modal-container fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
     <div class="modal-backdrop fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
-    <div class="vaul-drawer relative w-full max-w-2xl bg-white border border-slate-200 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-900">
+    <div class="vaul-drawer relative w-full max-w-2xl bg-[#111827] border border-white/10 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-100">
       <div class="vaul-handle sm:hidden"></div>
-      <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
         <div class="flex items-center gap-2">
-          <span class="text-xl">🚢</span>
-          <h3 class="font-brand font-bold text-lg text-slate-900">Ingreso de Tanque desde EE.UU.</h3>
+          <svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          <h3 class="font-brand font-bold text-lg text-slate-100">Ingreso de Tanque desde EE.UU.</h3>
         </div>
-        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-600 text-lg">✕</button>
+        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-white p-1 rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
 
       <form id="formTank" class="space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre o Número de Tanque / Lote *</label>
-            <input type="text" id="tankName" placeholder="Ej: Tanque #4 Miami - Septiembre" class="form-input text-xs sm:text-sm" required>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Nombre o Número de Tanque / Lote *</label>
+            <input type="text" id="tankName" placeholder="Ej: Tanque #4 Miami - Septiembre" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm" required>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Origen / Ciudad</label>
-            <input type="text" id="tankOrigin" value="Miami, FL - EE.UU." class="form-input text-xs sm:text-sm">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Origen / Ciudad</label>
+            <input type="text" id="tankOrigin" value="Miami, FL - EE.UU." class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm">
           </div>
         </div>
 
         <div class="grid grid-cols-3 gap-3">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Fecha de Recepción</label>
-            <input type="date" id="tankDate" class="form-input text-xs sm:text-sm font-mono">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Fecha de Recepción</label>
+            <input type="date" id="tankDate" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono">
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Flete Total (USD $)</label>
-            <input type="number" step="0.01" id="tankFreightUsd" placeholder="0.00" class="form-input text-xs sm:text-sm font-mono">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Flete Total (USD $)</label>
+            <input type="number" step="0.01" id="tankFreightUsd" placeholder="0.00" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono">
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Tasa Cambio (USD ➔ RD$)</label>
-            <input type="number" step="0.01" id="tankRate" value="60.50" class="form-input text-xs sm:text-sm font-mono font-bold">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Tasa Cambio (USD a DOP)</label>
+            <input type="number" step="0.01" id="tankRate" value="60.50" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono font-bold">
           </div>
         </div>
 
         <!-- Lista Dinámica de Artículos del Tanque -->
-        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+        <div class="p-3.5 rounded-2xl bg-[#1A2234] border border-white/10 space-y-3">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <h4 class="font-bold text-xs sm:text-sm text-slate-800">Artículos en este Tanque</h4>
+              <h4 class="font-bold text-xs sm:text-sm text-slate-200">Artículos en este Tanque</h4>
               <span id="tankTotalDraftUnits" class="badge-gold font-bold">0 piezas</span>
             </div>
             <button type="button" onclick="ThorApp.addTankDraftItem()" class="btn-tactile btn-outline-gold text-xs py-1 px-2.5 flex items-center gap-1 shadow-xs">
@@ -1177,13 +1202,13 @@
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Notas u Observaciones del Lote</label>
-          <input type="text" id="tankNotes" placeholder="Condición del tanque, detalles de aduana, etc." class="form-input text-xs">
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Notas u Observaciones del Lote</label>
+          <input type="text" id="tankNotes" placeholder="Condición del tanque, detalles de aduana, etc." class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs">
         </div>
 
-        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
           <button type="button" class="close-modal-btn btn-tactile btn-subtle text-xs py-2 px-3.5">Cancelar</button>
-          <button type="submit" class="btn-tactile btn-gold text-xs py-2 px-5 shadow-sm">📦 Ingresar Tanque al Inventario</button>
+          <button type="submit" class="btn-tactile btn-gold text-xs py-2 px-5 shadow-sm">Ingresar Tanque al Inventario</button>
         </div>
       </form>
     </div>
@@ -1194,30 +1219,30 @@
        ========================================================================= -->
   <div id="modalDevSettings" class="modal-container fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 hidden">
     <div class="modal-backdrop fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
-    <div class="relative w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl p-5 space-y-4 text-slate-900">
-      <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+    <div class="relative w-full max-w-md bg-[#111827] border border-white/10 rounded-2xl shadow-2xl p-5 space-y-4 text-slate-100">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
         <div class="flex items-center gap-2">
-          <span>⚡</span>
-          <h3 class="font-bold text-sm text-slate-900">Ajustes de Conexión (jesusx26x)</h3>
+          <svg class="w-4 h-4 inline text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          <h3 class="font-bold text-sm text-slate-100">Ajustes de Conexión (jesusx26x)</h3>
         </div>
-        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-600">✕</button>
+        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
 
-      <div class="text-xs text-slate-600 space-y-2">
+      <div class="text-xs text-slate-400 space-y-2">
         <p>Esta ventana es exclusiva para el desarrollador. Pamela tiene todo pre-configurado de forma automática.</p>
         <div>
-          <label class="block text-[11px] font-semibold text-slate-600 mb-1">URL de Google Apps Script</label>
-          <input type="url" id="cfgGasUrl" placeholder="https://script.google.com/macros/s/.../exec" class="form-input text-xs font-mono">
+          <label class="block text-[11px] font-semibold text-slate-400 mb-1">URL de Google Apps Script</label>
+          <input type="url" id="cfgGasUrl" placeholder="https://script.google.com/macros/s/.../exec" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs font-mono">
         </div>
         <div>
-          <label class="block text-[11px] font-semibold text-slate-600 mb-1">Tasa Fija USD</label>
-          <input type="number" step="0.01" id="cfgUsdRate" value="60.50" class="form-input text-xs font-mono w-32">
+          <label class="block text-[11px] font-semibold text-slate-400 mb-1">Tasa Fija USD</label>
+          <input type="number" step="0.01" id="cfgUsdRate" value="60.50" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs font-mono w-32">
         </div>
       </div>
 
-      <div class="flex items-center justify-between pt-2 border-t border-slate-200">
+      <div class="flex items-center justify-between pt-2 border-t border-white/10">
         <button type="button" onclick="ThorApp.sincronizarConNube()" class="btn-tactile btn-outline-gold text-xs py-1.5 px-3 shadow-xs">
-          ☁️ Probar Conexión
+          Probar Conexión
         </button>
         <button type="button" onclick="ThorApp.closeAllModals()" class="btn-tactile btn-gold text-xs py-1.5 px-4 shadow-sm">
           Cerrar

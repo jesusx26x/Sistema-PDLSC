@@ -86,10 +86,10 @@ const ThorApp = (function() {
     if (!passInput) return;
     if (passInput.type === 'password') {
       passInput.type = 'text';
-      if (icon) icon.textContent = '🙈';
+      if (icon) icon.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>';
     } else {
       passInput.type = 'password';
-      if (icon) icon.textContent = '👁️';
+      if (icon) icon.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
     }
   }
 
@@ -132,7 +132,7 @@ const ThorApp = (function() {
     } finally {
       if (btnSubmit) btnSubmit.disabled = false;
       if (btnText) btnText.textContent = 'Iniciar Sesión';
-      if (btnIcon) btnIcon.textContent = '✨';
+      if (btnIcon) btnIcon.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>';
     }
   }
 
@@ -384,51 +384,145 @@ const ThorApp = (function() {
     renderRecentActivity();
   }
 
-  function renderDashboardAlerts(bajoStock, agotados) {
-    const container = document.getElementById('dashboardAlerts');
-    if (!container) return;
+  function toggleNotificationDrawer(forceOpen) {
+    const flyout = document.getElementById('notificationFlyout');
+    if (!flyout) return;
+    if (forceOpen === true) {
+      flyout.classList.remove('hidden');
+    } else if (forceOpen === false) {
+      flyout.classList.add('hidden');
+    } else {
+      flyout.classList.toggle('hidden');
+    }
+  }
 
-    if (bajoStock === 0 && agotados === 0) {
-      container.innerHTML = `
-        <div class="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3">
-          <span class="text-xl">✨</span>
-          <p class="text-xs sm:text-sm text-emerald-300 font-medium">¡Inventario óptimo! Todas las fragancias y artículos tienen existencias suficientes.</p>
+  function renderNotificationDrawer(itemsCriticos, cobrosUrgentes) {
+    const list = document.getElementById('notificationFlyoutList');
+    if (!list) return;
+
+    const totalAlertas = (itemsCriticos ? itemsCriticos.length : 0) + (cobrosUrgentes ? cobrosUrgentes.length : 0);
+    updateNotificationBadge(totalAlertas);
+
+    if (totalAlertas === 0) {
+      list.innerHTML = `
+        <div class="p-6 text-center text-slate-400 space-y-2">
+          <div class="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center mx-auto">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          </div>
+          <p class="text-xs font-semibold text-slate-200">Todo al día</p>
+          <p class="text-[11px] text-slate-500">No tienes alertas urgentes de stock ni cobros vencidos pendientes.</p>
         </div>
       `;
       return;
     }
 
-    const itemsCriticos = state.inventory
-      .filter(p => p.cantidad <= (p.stock_minimo || 3))
-      .slice(0, 4);
+    let html = '';
 
-    let html = `
-      <div class="space-y-2">
-        <div class="p-3 rounded-2xl bg-amber-50 border border-amber-200/80 shadow-xs flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span class="text-amber-600 text-lg">⚠️</span>
-            <span class="text-xs sm:text-sm text-amber-900 font-medium">Tienes <strong>${bajoStock}</strong> productos con stock bajo y <strong>${agotados}</strong> agotados.</span>
-          </div>
-          <button onclick="ThorApp.filterInventoryStock('low')" class="text-xs text-amber-700 underline font-bold hover:text-amber-800">Ver todos</button>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-    `;
-
-    itemsCriticos.forEach(p => {
-      const esAgotado = p.cantidad === 0;
+    // Sección: Stock Crítico
+    if (itemsCriticos && itemsCriticos.length > 0) {
       html += `
-        <div class="p-3 rounded-xl bg-white border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p class="text-xs font-semibold text-slate-800 truncate max-w-[170px] sm:max-w-[220px]">${p.nombre}</p>
-            <p class="text-[11px] text-slate-500">Quedan: <span class="font-bold ${esAgotado ? 'text-rose-600' : 'text-amber-600'}">${p.cantidad}</span> (Mín: ${p.stock_minimo || 3})</p>
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+            <span>Stock Crítico (${itemsCriticos.length})</span>
+            <button onclick="ThorApp.filterInventoryStock('low'); ThorApp.toggleNotificationDrawer(false);" class="text-amber-400 hover:text-amber-300">Ver todo</button>
           </div>
-          <button onclick="ThorApp.quickAdjustStock('${p.id}', 1)" class="btn-tactile px-2.5 py-1 text-xs bg-amber-50 text-amber-800 font-semibold rounded-lg border border-amber-200 hover:bg-amber-100">+ Stock</button>
-        </div>
       `;
+
+      itemsCriticos.forEach(p => {
+        const qty = parseInt(p.cantidad) || 0;
+        const esAgotado = qty === 0;
+        html += `
+          <div class="p-2.5 rounded-xl bg-[#0D131F] border border-white/10 hover:border-amber-500/30 transition flex items-center justify-between gap-2 shadow-xs">
+            <div class="min-w-0">
+              <p class="text-xs font-semibold text-slate-100 truncate">${p.nombre}</p>
+              <p class="text-[10px] text-slate-400">Quedan: <strong class="${esAgotado ? 'text-rose-400' : 'text-amber-400'} font-mono">${qty}</strong> (Mín: ${p.stock_minimo || 3})</p>
+            </div>
+            <button onclick="ThorApp.quickAdjustStock('${p.id}', 1)" class="btn-tactile px-2 py-1 text-[11px] bg-amber-500/15 text-amber-300 font-bold rounded-lg border border-amber-500/30 hover:bg-amber-500/25 shrink-0">
+              + Stock
+            </button>
+          </div>
+        `;
+      });
+
+      html += '</div>';
+    }
+
+    // Sección: Cuotas de Fiado
+    if (cobrosUrgentes && cobrosUrgentes.length > 0) {
+      html += `
+        <div class="space-y-1.5 pt-2 border-t border-white/10">
+          <div class="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+            <span>Cobros por Vencer (${cobrosUrgentes.length})</span>
+            <button onclick="ThorApp.switchTab('cobros'); ThorApp.toggleNotificationDrawer(false);" class="text-amber-400 hover:text-amber-300">Ver todo</button>
+          </div>
+      `;
+
+      cobrosUrgentes.forEach(c => {
+        const pendiente = Math.round(parseFloat(c.saldo_pendiente_dop) || 0);
+        html += `
+          <div class="p-2.5 rounded-xl bg-[#0D131F] border border-white/10 hover:border-amber-500/30 transition flex items-center justify-between gap-2 shadow-xs">
+            <div class="min-w-0">
+              <p class="text-xs font-semibold text-slate-100 truncate">${c.cliente}</p>
+              <p class="text-[10px] text-slate-400">Pendiente: <strong class="text-amber-400 font-mono">RD$ ${pendiente.toLocaleString()}</strong> • Vence: <span class="text-rose-400">${c.proximo_vencimiento || 'Pronto'}</span></p>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              ${c.telefono ? `
+                <button onclick="ThorApp.openWhatsAppReminder('${c.id_cobro}')" class="btn-tactile p-1.5 text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/25" title="WhatsApp">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                </button>
+              ` : ''}
+              <button onclick="ThorApp.openAbonoModal('${c.id_cobro}'); ThorApp.toggleNotificationDrawer(false);" class="btn-tactile px-2 py-1 text-[11px] bg-emerald-500/15 text-emerald-300 font-bold rounded-lg border border-emerald-500/30 hover:bg-emerald-500/25">
+                Abonar
+              </button>
+            </div>
+          </div>
+        `;
+      });
+
+      html += '</div>';
+    }
+
+    list.innerHTML = html;
+  }
+
+  function updateNotificationBadge(totalAlertas) {
+    const badge = document.getElementById('notificationBadge');
+    const countSpan = document.getElementById('flyoutAlertCount');
+    if (countSpan) countSpan.textContent = totalAlertas;
+
+    if (badge) {
+      if (totalAlertas > 0) {
+        badge.textContent = totalAlertas > 9 ? '9+' : totalAlertas;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+  }
+
+  function renderDashboardAlerts(bajoStock, agotados) {
+    // Recopilar alertas urgentes para el buzón flotante
+    const itemsCriticos = state.inventory
+      .filter(p => (parseInt(p.cantidad) || 0) <= (parseInt(p.stock_minimo) || 3));
+
+    const fechaLimite = new Date();
+    fechaLimite.setDate(fechaLimite.getDate() + 3);
+    const fechaLimiteStr = fechaLimite.toISOString().substring(0, 10);
+
+    const cobrosUrgentes = (state.cobros || []).filter(c => {
+      if (c.estado === 'Saldada' || c.estado === 'Cancelada') return false;
+      if (!c.proximo_vencimiento) return false;
+      return c.proximo_vencimiento <= fechaLimiteStr;
     });
 
-    html += `</div></div>`;
-    container.innerHTML = html;
+    renderNotificationDrawer(itemsCriticos, cobrosUrgentes);
+
+    // Ocultar banner invasivo antiguo de la pantalla de inicio
+    const legacy = document.getElementById('dashboardAlerts');
+    if (legacy) {
+      legacy.innerHTML = '';
+      legacy.classList.add('hidden');
+    }
   }
 
   function renderDashboardCharts() {
@@ -455,12 +549,12 @@ const ThorApp = (function() {
           datasets: [{
             label: 'Ventas (RD$)',
             data: dataVentas,
-            borderColor: '#D4AF37',
-            backgroundColor: 'rgba(212, 175, 55, 0.12)',
+            borderColor: '#E5B842',
+            backgroundColor: 'rgba(229, 184, 66, 0.12)',
             fill: true,
             tension: 0.35,
             borderWidth: 2.5,
-            pointBackgroundColor: '#F3E5AB',
+            pointBackgroundColor: '#F3C958',
             pointRadius: 4
           }]
         },
@@ -471,15 +565,15 @@ const ThorApp = (function() {
           scales: {
             y: {
               beginAtZero: true,
-              grid: { color: 'rgba(15, 23, 42, 0.06)' },
+              grid: { color: 'rgba(255, 255, 255, 0.06)' },
               ticks: {
-                color: '#64748B',
+                color: '#94A3B8',
                 callback: (val) => 'RD$ ' + val.toLocaleString()
               }
             },
             x: {
               grid: { display: false },
-              ticks: { color: '#64748B' }
+              ticks: { color: '#94A3B8' }
             }
           }
         }
@@ -506,10 +600,10 @@ const ThorApp = (function() {
           datasets: [{
             data: catValues,
             backgroundColor: [
-              '#D4AF37', '#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6', '#10B981', '#64748B'
+              '#E5B842', '#F59E0B', '#F472B6', '#818CF8', '#38BDF8', '#34D399', '#94A3B8'
             ],
-            borderColor: '#FFFFFF',
-            borderWidth: 3
+            borderColor: '#111827',
+            borderWidth: 2
           }]
         },
         options: {
@@ -518,7 +612,7 @@ const ThorApp = (function() {
           plugins: {
             legend: {
               position: 'bottom',
-              labels: { color: '#475569', font: { size: 11 }, boxWidth: 12 }
+              labels: { color: '#94A3B8', font: { size: 11 }, boxWidth: 12 }
             }
           }
         }
@@ -543,7 +637,7 @@ const ThorApp = (function() {
         <div class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
           <div class="flex items-center gap-3">
             <div class="w-8 h-8 rounded-full ${esCancelada ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-amber-50 text-amber-700 border border-amber-200'} flex items-center justify-center text-xs font-bold shrink-0">
-              ${esCancelada ? '✕' : '🛍️'}
+              ${esCancelada ? '<span class="text-rose-400 font-bold">✕</span>' : '<svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>'}
             </div>
             <div>
               <p class="text-xs font-semibold text-slate-800 ${esCancelada ? 'line-through text-slate-400' : ''}">${v.nombre_articulo}</p>
@@ -599,7 +693,7 @@ const ThorApp = (function() {
     if (filtered.length === 0) {
       const emptyMsg = `
         <div class="text-center py-12">
-          <span class="text-4xl">📦</span>
+          <svg class="w-12 h-12 mx-auto text-slate-500/50 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
           <p class="mt-2 text-sm text-slate-500 font-medium">No se encontraron productos con el filtro seleccionado (${state.selectedStockFilter === 'low' ? 'Stock Bajo' : state.selectedStockFilter === 'out' ? 'Agotados' : state.selectedStockFilter === 'in' ? 'En Stock' : 'Todos'}).</p>
           <button onclick="ThorApp.filterInventoryStock('all')" class="mt-4 btn-tactile btn-outline-gold text-xs py-2 px-4 shadow-xs">Ver Todos los Productos</button>
         </div>
@@ -631,8 +725,8 @@ const ThorApp = (function() {
 
           const esLocal = (p.origen === 'local' || p.origen === 'Compra Local');
           const badgeOrigen = esLocal
-            ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold whitespace-nowrap">🛍️ Local</span>'
-            : '<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold whitespace-nowrap">🚢 Tanque</span>';
+            ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold whitespace-nowrap">Local</span>'
+            : '<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold whitespace-nowrap">Tanque</span>';
 
           tableHtml += `
           <tr class="border-b border-slate-100 hover:bg-amber-50/40 transition">
@@ -667,13 +761,13 @@ const ThorApp = (function() {
             </td>
             <td class="py-3 px-4 text-right whitespace-nowrap">
               <button onclick="ThorApp.openSaleModalFor('${p.id}')" class="btn-tactile p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg mr-1 border border-emerald-200" title="Vender">
-                💰
+                <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               </button>
               <button onclick="ThorApp.openEditProductModal('${p.id}')" class="btn-tactile p-1.5 text-amber-700 hover:bg-amber-50 rounded-lg mr-1 border border-amber-200" title="Editar">
-                ✏️
+                <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
               </button>
               <button onclick="ThorApp.confirmDeleteProduct('${p.id}')" class="btn-tactile p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200" title="Eliminar">
-                🗑️
+                <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
               </button>
             </td>
           </tr>
@@ -700,8 +794,8 @@ const ThorApp = (function() {
 
         const esLocal = (p.origen === 'local' || p.origen === 'Compra Local');
         const badgeOrigen = esLocal
-          ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold whitespace-nowrap">🛍️ Local</span>'
-          : '<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold whitespace-nowrap">🚢 Tanque</span>';
+          ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold whitespace-nowrap">Local</span>'
+          : '<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold whitespace-nowrap">Tanque</span>';
 
         cardsHtml += `
           <div class="p-4 rounded-2xl bento-card space-y-3">
@@ -740,13 +834,13 @@ const ThorApp = (function() {
 
               <div class="flex items-center gap-1.5">
                 <button onclick="ThorApp.openSaleModalFor('${p.id}')" class="btn-tactile px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold flex items-center gap-1">
-                  💰 Vender
+                  <svg class="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Vender
                 </button>
                 <button onclick="ThorApp.openEditProductModal('${p.id}')" class="btn-tactile p-2 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 text-xs">
-                  ✏️
+                  <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                 </button>
                 <button onclick="ThorApp.confirmDeleteProduct('${p.id}')" class="btn-tactile p-2 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs">
-                  🗑️
+                  <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                 </button>
               </div>
             </div>
@@ -775,10 +869,10 @@ const ThorApp = (function() {
     });
 
     const pills = [
-      { id: 'all', label: `✨ Todos (${total})`, activeClass: 'bg-slate-800 text-white font-bold shadow-xs border-slate-800' },
-      { id: 'in', label: `🟢 En Stock (${inCount})`, activeClass: 'bg-emerald-100 text-emerald-900 border-emerald-400 font-bold shadow-xs' },
-      { id: 'low', label: `⚠️ Stock Bajo (${lowCount})`, activeClass: 'bg-amber-100 text-amber-900 border-amber-400 font-bold shadow-xs ring-2 ring-amber-400/50' },
-      { id: 'out', label: `🔴 Agotados (${outCount})`, activeClass: 'bg-rose-100 text-rose-900 border-rose-400 font-bold shadow-xs ring-2 ring-rose-400/50' }
+      { id: 'all', label: `Todos (${total})`, activeClass: 'bg-slate-800 text-white font-bold shadow-xs border-slate-800' },
+      { id: 'in', label: `En Stock (${inCount})`, activeClass: 'bg-emerald-100 text-emerald-900 border-emerald-400 font-bold shadow-xs' },
+      { id: 'low', label: `Stock Bajo (${lowCount})`, activeClass: 'bg-amber-100 text-amber-900 border-amber-400 font-bold shadow-xs ring-2 ring-amber-400/50' },
+      { id: 'out', label: `Agotados (${outCount})`, activeClass: 'bg-rose-100 text-rose-900 border-rose-400 font-bold shadow-xs ring-2 ring-rose-400/50' }
     ];
 
     let html = '';
@@ -808,7 +902,7 @@ const ThorApp = (function() {
 
     categories.forEach(cat => {
       const isSelected = state.selectedCategory === cat;
-      const label = cat === 'all' ? '✨ Todos' : cat;
+      const label = cat === 'all' ? 'Todos' : cat;
       html += `
         <button onclick="ThorApp.filterInventoryCategory('${cat}')" 
           class="btn-tactile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${
@@ -834,7 +928,7 @@ const ThorApp = (function() {
     if (state.sales.length === 0) {
       const emptyMsg = `
         <div class="text-center py-12">
-          <span class="text-4xl">🧾</span>
+          <svg class="w-12 h-12 mx-auto text-slate-500/50 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
           <p class="mt-2 text-sm text-slate-400">Aún no hay ventas registradas.</p>
           <button onclick="ThorApp.openSaleModal()" class="mt-4 btn-tactile btn-gold text-xs py-2 px-4">Registrar Primera Venta</button>
         </div>
@@ -928,7 +1022,7 @@ const ThorApp = (function() {
     if (state.receptions.length === 0) {
       container.innerHTML = `
         <div class="text-center py-12">
-          <span class="text-4xl">🚢</span>
+          <svg class="w-12 h-12 mx-auto text-slate-500/50 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
           <p class="mt-2 text-sm text-slate-400">Aún no hay recepciones de tanques registradas.</p>
           <button onclick="ThorApp.openTankModal()" class="mt-4 btn-tactile btn-gold text-xs py-2 px-4">+ Ingresar Primer Tanque</button>
         </div>
@@ -943,7 +1037,7 @@ const ThorApp = (function() {
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div class="flex items-center gap-2">
-                <span class="text-xl">📦</span>
+                <svg class="w-5 h-5 inline text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
                 <h3 class="font-bold text-base text-slate-800">${r.nombre_tanque}</h3>
               </div>
               <p class="text-xs text-slate-500 mt-0.5">Llegada: <strong>${r.fecha}</strong> • Origen: <strong>${r.origen || 'EE.UU.'}</strong></p>
@@ -1200,7 +1294,7 @@ const ThorApp = (function() {
     state.inventory.forEach(p => {
       const disabled = p.cantidad <= 0 ? 'disabled' : '';
       const stockTxt = p.cantidad <= 0 ? '(Agotado)' : `(${p.cantidad} disp.)`;
-      const origTxt = (p.origen === 'local' || p.origen === 'Compra Local') ? '🛍️ Local' : '🚢 Tanque';
+      const origTxt = (p.origen === 'local' || p.origen === 'Compra Local') ? 'Local' : 'Tanque';
       select.innerHTML += `
         <option value="${p.id}" ${disabled} ${selectedProductId === p.id ? 'selected' : ''}>
           ${p.nombre} — RD$ ${Number(p.precio_venta_dop || 0).toLocaleString()} ${stockTxt} [${origTxt}]
@@ -1861,7 +1955,7 @@ const ThorApp = (function() {
     if (filtered.length === 0) {
       const emptyMsg = `
         <div class="text-center py-12">
-          <span class="text-4xl">💳</span>
+          <svg class="w-12 h-12 mx-auto text-slate-500/50 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
           <p class="mt-2 text-sm text-slate-500 font-medium">No se encontraron cuentas por cobrar con los filtros aplicados.</p>
           <button onclick="ThorApp.openSaleModalCredit()" class="mt-4 btn-tactile btn-gold text-xs py-2 px-4 shadow-xs">+ Registrar Venta a Crédito ("Fiado")</button>
         </div>
@@ -1884,10 +1978,10 @@ const ThorApp = (function() {
 
         if (isSaldada) {
           badgeClass = 'badge-success';
-          statusText = 'Saldada 🎉';
+          statusText = 'Saldada';
         } else if (isVencida) {
           badgeClass = 'badge-danger';
-          statusText = 'Vencida ⚠️';
+          statusText = 'Vencida';
         } else if (c.estado === 'Parcial') {
           badgeClass = 'badge-gold';
           statusText = 'Parcial';
@@ -1904,7 +1998,7 @@ const ThorApp = (function() {
               <div class="font-semibold text-slate-900 text-sm">${c.cliente}</div>
               <div class="text-xs text-slate-500 flex items-center gap-1.5">
                 <span>${c.telefono || 'Sin WhatsApp'}</span>
-                ${c.telefono ? `<button onclick="ThorApp.openWhatsAppReminder('${c.id_cobro}')" class="text-emerald-600 hover:text-emerald-700 text-xs font-bold" title="Recordar por WhatsApp">💬</button>` : ''}
+                ${c.telefono ? `<button onclick="ThorApp.openWhatsAppReminder('${c.id_cobro}')" class="text-emerald-600 hover:text-emerald-700 text-xs font-bold" title="WhatsApp"><svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg></button>` : ''}
               </div>
             </td>
             <td class="py-3 px-3">
@@ -1935,14 +2029,14 @@ const ThorApp = (function() {
             <td class="py-3 px-4 text-right whitespace-nowrap">
               ${!isSaldada ? `
                 <button onclick="ThorApp.openAbonoModal('${c.id_cobro}')" class="btn-tactile px-2.5 py-1 text-xs bg-emerald-50 text-emerald-800 font-bold rounded-lg border border-emerald-300 hover:bg-emerald-100 mr-1 shadow-2xs">
-                  💰 Abonar
+                  <svg class="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>Abonar
                 </button>
               ` : ''}
               <button onclick="ThorApp.openWhatsAppReminder('${c.id_cobro}')" class="btn-tactile p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg mr-1 border border-emerald-200" title="WhatsApp">
-                📲
+                <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
               </button>
               <button onclick="ThorApp.openDetalleCobro('${c.id_cobro}')" class="btn-tactile p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg border border-slate-200" title="Detalle">
-                👁️
+                <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
               </button>
             </td>
           </tr>
@@ -1963,10 +2057,10 @@ const ThorApp = (function() {
 
         if (isSaldada) {
           badgeClass = 'badge-success';
-          statusText = 'Saldada 🎉';
+          statusText = 'Saldada';
         } else if (isVencida) {
           badgeClass = 'badge-danger';
-          statusText = 'Vencida ⚠️';
+          statusText = 'Vencida';
         } else if (c.estado === 'Parcial') {
           badgeClass = 'badge-gold';
           statusText = 'Parcial';
@@ -2018,14 +2112,14 @@ const ThorApp = (function() {
               <div class="flex items-center gap-1.5">
                 ${!isSaldada ? `
                   <button onclick="ThorApp.openAbonoModal('${c.id_cobro}')" class="btn-tactile px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-xs">
-                    💰 Abonar
+                    <svg class="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>Abonar
                   </button>
                 ` : ''}
                 <button onclick="ThorApp.openWhatsAppReminder('${c.id_cobro}')" class="btn-tactile p-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs">
-                  📲
+                  <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                 </button>
                 <button onclick="ThorApp.openDetalleCobro('${c.id_cobro}')" class="btn-tactile p-1.5 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 text-xs">
-                  👁️
+                  <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                 </button>
               </div>
             </div>
@@ -2058,10 +2152,10 @@ const ThorApp = (function() {
     });
 
     const pills = [
-      { id: 'all', label: `✨ Todos (${total})` },
+      { id: 'all', label: `Todos (${total})` },
       { id: 'pending', label: `⏳ Con Deuda (${pendingCount})` },
-      { id: 'overdue', label: `⚠️ Vencidos (${overdueCount})` },
-      { id: 'paid', label: `🎉 Saldados (${paidCount})` }
+      { id: 'overdue', label: `Vencidos (${overdueCount})` },
+      { id: 'paid', label: `Saldados (${paidCount})` }
     ];
 
     let html = '';
@@ -2237,7 +2331,7 @@ const ThorApp = (function() {
         renderAll();
 
         if (nuevoSaldo <= 0) {
-          Sonner.success(`🎉 ¡Cuenta saldada por completo! ${cobro.cliente} ha completado el pago de RD$ ${Number(cobro.monto_total_dop).toLocaleString()}.`, 6000);
+          Sonner.success(`¡Cuenta saldada por completo! ${cobro.cliente} ha completado el pago de RD$ ${Number(cobro.monto_total_dop).toLocaleString()}.`, 6000);
         } else {
           Sonner.success(`Abono de RD$ ${Number(monto).toLocaleString()} registrado con éxito. Resta: RD$ ${Number(nuevoSaldo).toLocaleString()}`, 4500);
         }
@@ -2289,7 +2383,7 @@ const ThorApp = (function() {
       }
     }
 
-    const mensaje = `¡Hola ${cobro.cliente}! Te saluda Pamela de Thor Essence ✨. Te escribo con un cordial saludo para recordarte la cuota pendiente de tu compra (${cobro.articulo}) por valor de RD$ ${Number(proximoMonto).toLocaleString()} acordada para el ${proximaFecha}. Saldo restante total: RD$ ${Number(cobro.saldo_pendiente_dop).toLocaleString()}. ¡Muchas gracias por tu preferencia y confianza! 💖`;
+    const mensaje = `¡Hola ${cobro.cliente}! Te saluda Pamela de Thor Essence. Te escribo con un cordial saludo para recordarte la cuota pendiente de tu compra (${cobro.articulo}) por valor de RD$ ${Number(proximoMonto).toLocaleString()} acordada para el ${proximaFecha}. Saldo restante total: RD$ ${Number(cobro.saldo_pendiente_dop).toLocaleString()}. ¡Muchas gracias por tu preferencia y confianza!`;
 
     const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(mensaje)}`;
     window.open(url, '_blank');
@@ -2418,6 +2512,17 @@ const ThorApp = (function() {
     document.querySelectorAll('.close-modal-btn').forEach(btn => {
       btn.addEventListener('click', closeAllModals);
     });
+
+    // Cerrar buzón flotante de alertas al hacer clic afuera
+    document.addEventListener('click', (e) => {
+      const flyout = document.getElementById('notificationFlyout');
+      const btn = document.getElementById('btnNotifications');
+      if (flyout && !flyout.classList.contains('hidden')) {
+        if (!flyout.contains(e.target) && btn && !btn.contains(e.target)) {
+          flyout.classList.add('hidden');
+        }
+      }
+    });
   }
 
   function setupCurrencyHandlers() {
@@ -2469,6 +2574,7 @@ const ThorApp = (function() {
 
   return {
     init,
+    toggleNotificationDrawer,
     switchTab,
     openNewProductModal,
     openEditProductModal,
