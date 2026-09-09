@@ -145,6 +145,13 @@
           <span class="text-lg">💰</span>
           <span>Ventas</span>
         </a>
+        <a href="#" data-tab="cobros" class="sidebar-link flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-700 hover:text-amber-900 hover:bg-white/80">
+          <div class="flex items-center gap-3">
+            <span class="text-lg">💳</span>
+            <span>Cobros & Fiados</span>
+          </div>
+          <span id="sidebarCobrosBadge" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">0</span>
+        </a>
         <a href="#" data-tab="tanques" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-700 hover:text-amber-900 hover:bg-white/80">
           <span class="text-lg">🚢</span>
           <span>Tanques de EE.UU.</span>
@@ -235,17 +242,17 @@
 
       <!-- Botones de Acción Rápida & Usuario (Emil Kowalski Tactile Style) -->
       <div class="flex items-center gap-2">
-        <button onclick="ThorApp.openSaleModal()" class="btn-tactile btn-gold text-xs py-2 px-3 sm:px-4 shadow-sm">
+        <button onclick="ThorApp.openSaleModal()" class="btn-tactile btn-gold text-xs py-2 px-3 sm:px-4 shadow-sm flex items-center gap-1.5">
           <span>💰</span>
-          <span class="hidden sm:inline">Nueva</span> Venta
+          <span class="hidden sm:inline">Nueva</span> <span>Venta</span>
         </button>
-        <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 hidden sm:inline-flex items-center gap-1.5 shadow-xs">
+        <button onclick="ThorApp.openNewProductModal('Compra Local')" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 hidden sm:inline-flex items-center gap-1.5 shadow-xs" title="Agregar perfume o producto local sin tanque">
+          <span>🛍️</span>
+          <span>+ Producto Local</span>
+        </button>
+        <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 hidden md:inline-flex items-center gap-1.5 shadow-xs">
           <span>🚢</span>
           <span>+ Tanque</span>
-        </button>
-        <button onclick="ThorApp.openNewProductModal()" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 hidden lg:inline-flex items-center gap-1.5 shadow-xs">
-          <span>+</span>
-          <span>Producto</span>
         </button>
 
         <div class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 shadow-xs">
@@ -275,11 +282,33 @@
           <div>
             <span class="text-xs uppercase tracking-widest text-[#926704] font-bold">Panel Principal</span>
             <h2 class="font-brand text-xl sm:text-2xl font-bold text-slate-900 mt-1">Thor Essence — Inventario & Ventas</h2>
-            <p class="text-xs sm:text-sm text-slate-600 mt-1">Control rápido de mercancía importada de EE.UU., ventas y margen de beneficio.</p>
+            <p class="text-xs sm:text-sm text-slate-600 mt-1">Control de fragancias, compras locales, tanques de EE.UU., cobros y fiados.</p>
           </div>
           <div class="flex items-center gap-2 shrink-0">
+            <button onclick="ThorApp.openNewProductModal('Compra Local')" class="btn-tactile btn-outline-gold text-xs py-2.5 px-3.5 shadow-xs">
+              🛍️ + Producto Local
+            </button>
             <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-gold text-xs py-2.5 px-4 shadow-md">
               🚢 Ingresar Tanque
+            </button>
+          </div>
+        </div>
+
+        <!-- Resumen de Cuentas por Cobrar (Fiado) en Dashboard -->
+        <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-50 via-white to-orange-50 border border-amber-300/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div class="flex items-center gap-3.5">
+            <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-2xl shrink-0 border border-amber-300">💳</div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="font-brand font-bold text-slate-900 text-base">Cuentas por Cobrar ("Fiado")</h4>
+                <span id="kpiCobrosBadge" class="badge-gold text-[10px] font-bold">0 deudas activas</span>
+              </div>
+              <p class="text-xs text-slate-600 mt-0.5">Total pendiente: <strong id="kpiTotalPorCobrar" class="text-amber-800 font-mono text-sm">RD$ 0</strong> • <span id="kpiCuotasVencenPronto" class="text-rose-600 font-medium">0 cuotas vencen pronto</span></p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <button onclick="ThorApp.switchTab('cobros')" class="btn-tactile btn-gold text-xs py-2 px-4 shadow-sm w-full sm:w-auto">
+              Gestionar Cobros ➔
             </button>
           </div>
         </div>
@@ -298,11 +327,35 @@
               </div>
               <div>
                 <h4 class="font-bold text-slate-900 text-sm sm:text-base">Venta Rápida</h4>
-                <p class="text-xs text-slate-500 mt-0.5">Registrar venta y calcular cambio</p>
+                <p class="text-xs text-slate-500 mt-0.5">Al contado o a crédito ("fiado")</p>
               </div>
             </div>
 
-            <!-- Acción 2: Llegó Tanque -->
+            <!-- Acción 2: Nuevo Producto Local -->
+            <div onclick="ThorApp.openNewProductModal('Compra Local')" class="action-card-quick action-card-prod flex flex-col justify-between">
+              <div class="flex items-center justify-between mb-2">
+                <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-xl font-bold border border-amber-200">🛍️</div>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Directo</span>
+              </div>
+              <div>
+                <h4 class="font-bold text-slate-900 text-sm sm:text-base">+ Producto Local</h4>
+                <p class="text-xs text-slate-500 mt-0.5">Perfumes comprados sin tanque</p>
+              </div>
+            </div>
+
+            <!-- Acción 3: Cobros y Fiados -->
+            <div onclick="ThorApp.switchTab('cobros')" class="action-card-quick flex flex-col justify-between bg-gradient-to-br from-white to-orange-50/50 border border-orange-200">
+              <div class="flex items-center justify-between mb-2">
+                <div class="w-10 h-10 rounded-xl bg-orange-50 text-orange-700 flex items-center justify-center text-xl font-bold border border-orange-200">💳</div>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">Cuotas</span>
+              </div>
+              <div>
+                <h4 class="font-bold text-slate-900 text-sm sm:text-base">Cobros & Fiados</h4>
+                <p class="text-xs text-slate-500 mt-0.5">Cuotas 15 y 30 y WhatsApp</p>
+              </div>
+            </div>
+
+            <!-- Acción 4: Llegó Tanque -->
             <div onclick="ThorApp.openTankModal()" class="action-card-quick action-card-tank flex flex-col justify-between">
               <div class="flex items-center justify-between mb-2">
                 <div class="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center text-xl font-bold border border-sky-200">🚢</div>
@@ -311,30 +364,6 @@
               <div>
                 <h4 class="font-bold text-slate-900 text-sm sm:text-base">Ingresar Tanque</h4>
                 <p class="text-xs text-slate-500 mt-0.5">Lotes de fragancias importadas</p>
-              </div>
-            </div>
-
-            <!-- Acción 3: Nuevo Producto -->
-            <div onclick="ThorApp.openNewProductModal()" class="action-card-quick action-card-prod flex flex-col justify-between">
-              <div class="flex items-center justify-between mb-2">
-                <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-xl font-bold border border-amber-200">📦</div>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Catálogo</span>
-              </div>
-              <div>
-                <h4 class="font-bold text-slate-900 text-sm sm:text-base">Nuevo Producto</h4>
-                <p class="text-xs text-slate-500 mt-0.5">Crear artículo en inventario</p>
-              </div>
-            </div>
-
-            <!-- Acción 4: Ver Inventario -->
-            <div onclick="ThorApp.switchTab('inventario')" class="action-card-quick action-card-stock flex flex-col justify-between">
-              <div class="flex items-center justify-between mb-2">
-                <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl font-bold border border-purple-200">🔍</div>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">Stock</span>
-              </div>
-              <div>
-                <h4 class="font-bold text-slate-900 text-sm sm:text-base">Ver Inventario</h4>
-                <p class="text-xs text-slate-500 mt-0.5">Buscar productos y existencias</p>
               </div>
             </div>
           </div>
@@ -399,8 +428,8 @@
 
           <div class="bento-card p-5 space-y-4">
             <div>
-              <h3 class="font-bold text-sm sm:text-base text-slate-900">Distribución por Categoría</h3>
-              <p class="text-xs text-slate-500">Existencias físicas en almacén</p>
+              <h3 class="font-bold text-sm sm:text-base text-slate-900">Distribución por Categorías</h3>
+              <p class="text-xs text-slate-500">Existencias actuales en tienda</p>
             </div>
             <div class="h-60 w-full flex items-center justify-center">
               <canvas id="chartCategories"></canvas>
@@ -408,14 +437,16 @@
           </div>
         </div>
 
-        <!-- Actividad Reciente -->
-        <div class="bento-card p-5 space-y-3">
+        <!-- Últimos Movimientos -->
+        <div class="bento-card p-5 space-y-4">
           <div class="flex items-center justify-between border-b border-slate-200 pb-3">
             <div>
               <h3 class="font-bold text-sm sm:text-base text-slate-900">Últimas Ventas Registradas</h3>
-              <p class="text-xs text-slate-500">Movimientos comerciales más recientes</p>
+              <p class="text-xs text-slate-500">Actividad comercial reciente en tienda</p>
             </div>
-            <button onclick="ThorApp.switchTab('ventas')" class="btn-tactile text-xs text-amber-700 font-bold hover:underline">Ver todas ➔</button>
+            <button onclick="ThorApp.switchTab('ventas')" class="btn-tactile text-xs text-amber-700 hover:text-amber-800 font-semibold flex items-center gap-1">
+              Ver todas ➔
+            </button>
           </div>
           <div id="recentActivityList" class="divide-y divide-slate-100"></div>
         </div>
@@ -427,13 +458,13 @@
       <section id="view-inventario" class="tab-view hidden space-y-5">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 class="font-brand text-2xl font-bold text-slate-900">Catálogo de Inventario</h2>
-            <p class="text-xs text-slate-500 mt-0.5">Control de artículos, costos en USD/RD$ y existencias.</p>
+            <h2 class="font-brand text-2xl font-bold text-slate-900">Inventario de Productos</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Control de existencias, procedencia, costos en USD y precios de venta en RD$.</p>
           </div>
           <div class="flex items-center gap-2">
-            <button onclick="ThorApp.exportInventoryToExcel()" class="btn-tactile btn-outline-gold text-xs py-2 px-3 flex items-center gap-1.5 shadow-xs" title="Exportar a Excel">
-              <span>📥</span>
-              <span class="hidden sm:inline">Exportar</span> Excel
+            <span id="inventoryCountBadge" class="badge-gold font-bold">0 productos</span>
+            <button onclick="ThorApp.openNewProductModal('Compra Local')" class="btn-tactile btn-outline-gold text-xs py-2 px-3 shadow-xs">
+              🛍️ + Local
             </button>
             <button onclick="ThorApp.openNewProductModal()" class="btn-tactile btn-gold text-xs py-2 px-4 flex items-center gap-1.5 shadow-sm">
               <span>+</span>
@@ -442,51 +473,50 @@
           </div>
         </div>
 
-        <!-- Buscador y Filtros -->
-        <div class="bento-card p-4 space-y-3 bg-white/95">
-          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <div class="relative flex-1">
-              <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">🔍</span>
-              <input type="text" id="inventorySearchInput" placeholder="Buscar por nombre, ID o tanque..." class="form-input pl-9 text-xs sm:text-sm">
-            </div>
-
-            <div class="flex items-center gap-2 shrink-0">
-              <select id="inventoryStockSelect" onchange="ThorApp.filterInventoryStock(this.value)" class="form-input text-xs sm:text-sm py-2 px-3 bg-slate-50 font-semibold text-slate-700 border-slate-300">
-                <option value="all">📦 Todos los stocks</option>
-                <option value="in">🟢 En Stock</option>
-                <option value="low">⚠️ Stock Bajo</option>
-                <option value="out">🔴 Agotados (0 un.)</option>
-              </select>
-              <span id="inventoryCountBadge" class="badge-gold whitespace-nowrap font-bold">0 productos</span>
-            </div>
-          </div>
-
-          <!-- Filtro Rápido por Estado de Stock (Pills Táctiles con Conteo) -->
-          <div class="flex items-center gap-2 overflow-x-auto pb-0.5 pt-1 scrollbar-thin">
-            <span class="text-xs font-bold text-slate-600 whitespace-nowrap">Estado:</span>
-            <div id="stockFilterPillsContainer" class="flex items-center gap-1.5 shrink-0"></div>
-          </div>
-
-          <!-- Filtro por Categorías -->
-          <div class="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
-            <span class="text-xs font-bold text-slate-600 whitespace-nowrap">Categoría:</span>
-            <div id="categoryPillsContainer" class="flex items-center gap-1.5 shrink-0"></div>
+        <!-- Filtros Rápidos de Stock -->
+        <div class="p-3 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2.5">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <span class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <span>🎯</span>
+              <span>Filtrar por Estado:</span>
+            </span>
+            <div id="stockFilterPillsContainer" class="flex items-center gap-1.5 flex-wrap"></div>
           </div>
         </div>
 
-        <!-- Tarjetas Móviles -->
+        <!-- Barra de Búsqueda y Filtros de Categoría -->
+        <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+          <div class="relative flex-1 max-w-md">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">🔍</span>
+            <input type="text" id="inventorySearchInput" oninput="ThorApp.handleSearch(this.value)" placeholder="Buscar producto, categoría, ubicación o procedencia..." class="form-input pl-10 text-xs sm:text-sm">
+          </div>
+
+          <div class="flex items-center gap-2">
+            <div class="sm:hidden w-full">
+              <select id="inventoryStockSelect" onchange="ThorApp.filterInventoryStock(this.value)" class="form-input text-xs font-semibold">
+                <option value="all">✨ Todos los Estados</option>
+                <option value="low">⚠️ Stock Bajo</option>
+                <option value="in">🟢 En Stock</option>
+                <option value="out">🔴 Agotados</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0" id="categoryPillsContainer"></div>
+          </div>
+        </div>
+
+        <!-- Lista Móvil / Bento Cards de Inventario -->
         <div id="inventoryCardsMobile" class="grid grid-cols-1 gap-3 md:hidden"></div>
 
-        <!-- Tabla Desktop -->
+        <!-- Tabla Desktop de Inventario -->
         <div class="hidden md:block bento-card overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
               <thead>
                 <tr class="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-700 font-bold">
-                  <th class="py-3 px-4">Producto / Ubicación</th>
+                  <th class="py-3 px-4">Producto & Procedencia</th>
                   <th class="py-3 px-3">Categoría</th>
                   <th class="py-3 px-3 text-center">Stock</th>
-                  <th class="py-3 px-3 text-right">Costo (RD$ / USD)</th>
+                  <th class="py-3 px-3 text-right">Costo (DOP / USD)</th>
                   <th class="py-3 px-3 text-right">Precio Venta (RD$)</th>
                   <th class="py-3 px-3 text-center">Estado</th>
                   <th class="py-3 px-4 text-right">Acciones</th>
@@ -505,7 +535,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 class="font-brand text-2xl font-bold text-slate-900">Registro de Ventas</h2>
-            <p class="text-xs text-slate-500 mt-0.5">Historial comercial y ventas registradas.</p>
+            <p class="text-xs text-slate-500 mt-0.5">Historial comercial y ventas al contado o a crédito.</p>
           </div>
           <div class="flex items-center gap-2">
             <span id="salesCountBadge" class="badge-gold font-bold">0 ventas</span>
@@ -528,7 +558,7 @@
                   <th class="py-3 px-3 text-center">Cant.</th>
                   <th class="py-3 px-3 text-right">Total (RD$)</th>
                   <th class="py-3 px-3 text-right">Ganancia (RD$)</th>
-                  <th class="py-3 px-3 text-center">Estado</th>
+                  <th class="py-3 px-3 text-center">Modalidad / Estado</th>
                   <th class="py-3 px-4 text-right">Acción</th>
                 </tr>
               </thead>
@@ -539,41 +569,124 @@
       </section>
 
       <!-- =====================================================================
-           TAB 4: TANQUES DE EE.UU. (RECEPCIONES)
+           TAB 4: COBROS & CUENTAS POR COBRAR ("FIADO" DOMINICANO)
+           ===================================================================== -->
+      <section id="view-cobros" class="tab-view hidden space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xl">💳</span>
+              <h2 class="font-brand text-2xl font-bold text-slate-900">Cobros & Fiados</h2>
+              <span id="cobrosCountBadge" class="badge-gold font-bold">0 cuentas</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">Control de ventas a crédito, cuotas quincenales (15 y 30) o mensuales, abonos y WhatsApp.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="ThorApp.openSaleModalCredit()" class="btn-tactile btn-gold text-xs py-2 px-4 flex items-center gap-1.5 shadow-sm">
+              <span>💳</span>
+              <span>+ Venta a Crédito</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- KPI Bento Cards de Cobros -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+          <div class="bento-card bg-gradient-to-br from-white to-amber-50/70 p-4 sm:p-5 space-y-1 border-amber-300">
+            <span class="text-xs text-slate-600 block font-semibold">Total por Cobrar</span>
+            <p id="kpiCobrosTotalPendiente" class="text-xl sm:text-2xl font-bold text-amber-900 font-mono">RD$ 0</p>
+            <span class="text-[10px] text-amber-700 font-medium">Saldo pendiente global</span>
+          </div>
+
+          <div class="bento-card bg-gradient-to-br from-white to-rose-50/70 p-4 sm:p-5 space-y-1 border-rose-300">
+            <span class="text-xs text-slate-600 block font-semibold">Vencen Esta Quincena</span>
+            <p id="kpiCobrosVencenHoy" class="text-xl sm:text-2xl font-bold text-rose-700">0 cuotas</p>
+            <span class="text-[10px] text-rose-600 font-medium">Prioridad de cobro (15 / 30)</span>
+          </div>
+
+          <div class="bento-card bg-gradient-to-br from-white to-sky-50/70 p-4 sm:p-5 space-y-1 border-sky-300">
+            <span class="text-xs text-slate-600 block font-semibold">Clientes Deudores</span>
+            <p id="kpiCobrosClientes" class="text-xl sm:text-2xl font-bold text-sky-800">0 personas</p>
+            <span class="text-[10px] text-sky-700 font-medium">Con saldo activo</span>
+          </div>
+
+          <div class="bento-card bg-gradient-to-br from-white to-emerald-50/70 p-4 sm:p-5 space-y-1 border-emerald-300">
+            <span class="text-xs text-slate-600 block font-semibold">Total Cobrado (Abonos)</span>
+            <p id="kpiCobrosTotalRecuperado" class="text-xl sm:text-2xl font-bold text-emerald-700 font-mono">RD$ 0</p>
+            <span class="text-[10px] text-emerald-700 font-medium">Dinero ingresado</span>
+          </div>
+        </div>
+
+        <!-- Filtros y Búsqueda de Cobros -->
+        <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+          <div class="relative flex-1 max-w-md">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">🔍</span>
+            <input type="text" id="cobrosSearchInput" oninput="ThorApp.handleCobrosSearch(this.value)" placeholder="Buscar por cliente, teléfono o artículo..." class="form-input pl-10 text-xs sm:text-sm">
+          </div>
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0" id="cobrosFilterPillsContainer"></div>
+        </div>
+
+        <!-- Lista Móvil de Cobros -->
+        <div id="cobrosCardsMobile" class="grid grid-cols-1 gap-3 md:hidden"></div>
+
+        <!-- Tabla Desktop de Cobros -->
+        <div class="hidden md:block bento-card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-700 font-bold">
+                  <th class="py-3 px-4">Cliente & Contacto</th>
+                  <th class="py-3 px-3">Artículo Fiado</th>
+                  <th class="py-3 px-3 text-right">Total Fiado</th>
+                  <th class="py-3 px-3 text-right">Abonado / Pendiente</th>
+                  <th class="py-3 px-3 text-center">Progreso</th>
+                  <th class="py-3 px-3 text-center">Próx. Vencimiento</th>
+                  <th class="py-3 px-3 text-center">Estado</th>
+                  <th class="py-3 px-4 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="cobrosTableBody" class="divide-y divide-slate-100 text-xs"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- =====================================================================
+           TAB 5: TANQUES DE EE.UU. (RECEPCIONES)
            ===================================================================== -->
       <section id="view-tanques" class="tab-view hidden space-y-5">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <span class="text-xs font-bold text-amber-700 uppercase tracking-wider">Importaciones de EE.UU.</span>
-            <h2 class="font-brand text-2xl font-bold text-slate-900 mt-0.5">Tanques & Lotes Recibidos</h2>
-            <p class="text-xs text-slate-500 mt-0.5">Ingreso masivo de variedad de productos importados.</p>
+            <h2 class="font-brand text-2xl font-bold text-slate-900">Tanques y Lotes Recibidos</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Historial de tanques importados desde Miami y desglose de mercancía.</p>
           </div>
-          <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-gold text-xs py-2.5 px-4 flex items-center gap-2 self-start sm:self-auto shadow-md">
+          <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-gold text-xs py-2 px-4 flex items-center gap-1.5 shadow-sm">
             <span>🚢</span>
-            <span>+ Ingresar Nuevo Tanque</span>
+            <span>+ Ingresar Tanque</span>
           </button>
-        </div>
-
-        <div class="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3 shadow-xs">
-          <span class="text-2xl">💡</span>
-          <div class="text-xs text-slate-700 leading-relaxed">
-            <strong class="text-amber-900">¿Cómo funciona el módulo de tanques?</strong> Cada vez que llegue un tanque de EE.UU., haz clic en <strong>+ Ingresar Nuevo Tanque</strong>. Puedes ingresar los costos en dólares (USD) y el sistema los convertirá automáticamente a pesos dominicanos (RD$) a la tasa vigente, sumando todas las unidades al inventario en un solo paso.
-          </div>
         </div>
 
         <div id="receptionsList" class="space-y-4"></div>
       </section>
 
       <!-- =====================================================================
-           TAB 5: REPORTES
+           TAB 6: REPORTES & RENTABILIDAD
            ===================================================================== -->
-      <section id="view-reportes" class="tab-view hidden space-y-6">
-        <div>
-          <h2 class="font-brand text-2xl font-bold text-slate-900">Reportes Financieros</h2>
-          <p class="text-xs text-slate-500 mt-0.5">Resumen de ventas, costo de mercancía y ganancia neta en RD$.</p>
+      <section id="view-reportes" class="tab-view hidden space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 class="font-brand text-2xl font-bold text-slate-900">Reportes Financieros</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Resumen de margen neto, ingresos y rendimiento comercial.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="ThorApp.sincronizarConNube(true)" class="btn-tactile btn-outline-gold text-xs py-2 px-3.5 flex items-center gap-1.5">
+              <span>🔄</span>
+              <span>Actualizar Cifras</span>
+            </button>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div class="bento-card p-4 sm:p-5 space-y-1">
             <span class="text-xs text-slate-500 block font-medium">Ingresos Totales por Ventas</span>
             <p id="repTotalIngresos" class="text-xl sm:text-2xl font-bold text-slate-900">RD$ 0</p>
@@ -631,13 +744,14 @@
     <button onclick="ThorApp.openSaleModal()" class="btn-tactile flex flex-col items-center -mt-5 bg-gradient-to-tr from-amber-600 to-amber-400 text-white w-12 h-12 rounded-full shadow-lg font-bold justify-center active:scale-95 transition">
       <span class="text-xl">💰</span>
     </button>
+    <button data-tab="cobros" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-slate-500 transition relative">
+      <span class="text-lg">💳</span>
+      <span class="text-[10px] font-semibold">Cobros</span>
+      <span id="mobileCobrosDot" class="hidden absolute top-1 right-2 w-2 h-2 rounded-full bg-rose-500"></span>
+    </button>
     <button data-tab="tanques" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-slate-500 transition">
       <span class="text-lg">🚢</span>
       <span class="text-[10px] font-semibold">Tanques</span>
-    </button>
-    <button data-tab="reportes" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-slate-500 transition">
-      <span class="text-lg">📈</span>
-      <span class="text-[10px] font-semibold">Reportes</span>
     </button>
   </nav>
 
@@ -658,7 +772,18 @@
 
         <div>
           <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre del Producto *</label>
-          <input type="text" id="prodNombre" placeholder="Ej: Perfume Thor Gold Luxury 100ml" class="form-input text-xs sm:text-sm" required>
+          <input type="text" id="prodNombre" placeholder="Ej: Perfume Carolina Herrera 100ml / Thor Gold" class="form-input text-xs sm:text-sm" required>
+        </div>
+
+        <!-- Selector de Procedencia / Vía de Entrada -->
+        <div class="p-3 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2">
+          <label class="block text-xs font-bold text-amber-900">Vía de Entrada / Procedencia *</label>
+          <select id="prodOrigen" class="form-input text-xs sm:text-sm font-semibold bg-white">
+            <option value="Compra Local">🛍️ Compra Local / Distribuidor Directo (Perfumes & Variedades)</option>
+            <option value="Tanque EE.UU.">🚢 Tanque Importado (Miami - EE.UU.)</option>
+            <option value="Stock Tienda">🏬 Stock Tienda / Inventario Inicial</option>
+          </select>
+          <p class="text-[11px] text-slate-500">Permite registrar perfumes comprados localmente sin requerir la llegada de un tanque.</p>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
@@ -675,8 +800,8 @@
             </select>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Ubicación / Tanque</label>
-            <input type="text" id="prodUbicacion" placeholder="Ej: Tanque #2 / Estante A" class="form-input text-xs sm:text-sm">
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Ubicación en Tienda</label>
+            <input type="text" id="prodUbicacion" placeholder="Ej: Vitrina Principal / Estante B" class="form-input text-xs sm:text-sm">
           </div>
         </div>
 
@@ -725,7 +850,7 @@
 
         <div>
           <label class="block text-xs font-semibold text-slate-700 mb-1">Descripción u Observaciones</label>
-          <textarea id="prodDescripcion" rows="2" placeholder="Detalles de fragancia, ingredientes, notas olfativas..." class="form-input text-xs sm:text-sm"></textarea>
+          <textarea id="prodDescripcion" rows="2" placeholder="Detalles de fragancia, notas olfativas o proveedor..." class="form-input text-xs sm:text-sm"></textarea>
         </div>
 
         <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
@@ -737,7 +862,7 @@
   </div>
 
   <!-- =========================================================================
-       MODAL 2: REGISTRO DE VENTA RÁPIDA (VAUL DRAWER STYLE)
+       MODAL 2: REGISTRO DE VENTA RÁPIDA (CONTADO O CRÉDITO/FIADO)
        ========================================================================= -->
   <div id="modalSale" class="modal-container fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
     <div class="modal-backdrop fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
@@ -752,6 +877,22 @@
       </div>
 
       <form id="formSale" class="space-y-4">
+        <!-- Selector de Condición de Venta: Contado vs Crédito -->
+        <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+          <label class="block text-xs font-bold text-slate-800">Tipo de Pago / Condición de Venta *</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" id="saleModeContadoBtn" onclick="ThorApp.setSaleMode('contado')" class="btn-tactile py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition bg-amber-600 text-white border-amber-600 shadow-xs">
+              <span>🟢</span>
+              <span>Al Contado (Directo)</span>
+            </button>
+            <button type="button" id="saleModeCreditoBtn" onclick="ThorApp.setSaleMode('credito')" class="btn-tactile py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition bg-white text-slate-700 hover:bg-slate-100 border-slate-300">
+              <span>💳</span>
+              <span>A Crédito ("Fiado")</span>
+            </button>
+          </div>
+          <input type="hidden" id="saleTipoVenta" value="contado">
+        </div>
+
         <div>
           <label class="block text-xs font-semibold text-slate-700 mb-1">Seleccionar Producto a Vender *</label>
           <select id="saleProductSelect" class="form-input text-xs sm:text-sm font-semibold" required>
@@ -784,21 +925,21 @@
         <!-- Total y Ganancia Calculada en Vivo -->
         <div class="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-white to-amber-50 border border-emerald-200 space-y-2 shadow-xs">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-700">TOTAL A COBRAR:</span>
+            <span class="text-xs font-bold text-slate-700">TOTAL DE LA VENTA:</span>
             <span id="saleTotalDop" class="font-bold text-xl sm:text-2xl text-emerald-700 font-mono">RD$ 0.00</span>
           </div>
           <div class="flex items-center justify-between text-xs pt-1 border-t border-emerald-100">
-            <span class="text-slate-500">Ganancia Neta Estimada:</span>
+            <span class="text-slate-500">Ganancia Neta Proyectada:</span>
             <span id="saleNetProfitDop" class="font-bold text-emerald-600 font-mono">+RD$ 0.00</span>
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre del Cliente</label>
-            <input type="text" id="saleCustomerInput" placeholder="Ej: Laura Pérez" class="form-input text-xs sm:text-sm">
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre del Cliente *</label>
+            <input type="text" id="saleCustomerInput" placeholder="Ej: Jesús De La Rosa" class="form-input text-xs sm:text-sm" required>
           </div>
-          <div>
+          <div id="salePaymentMethodGroup">
             <label class="block text-xs font-semibold text-slate-700 mb-1">Método de Pago</label>
             <select id="salePaymentMethod" class="form-input text-xs sm:text-sm">
               <option value="Efectivo">Efectivo</option>
@@ -809,7 +950,51 @@
           </div>
         </div>
 
-        <div>
+        <!-- Sub-formulario para Venta a Crédito / Fiado -->
+        <div id="saleCreditFields" class="hidden p-3.5 rounded-2xl bg-amber-50/70 border border-amber-300 space-y-3">
+          <div class="flex items-center gap-2 text-xs font-bold text-amber-900 border-b border-amber-200 pb-2">
+            <span>📅</span>
+            <span>Plan de Cuotas & Seguimiento ("Fiado")</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Teléfono / WhatsApp del Cliente</label>
+              <input type="tel" id="saleCreditPhone" placeholder="809-xxx-xxxx" class="form-input text-xs sm:text-sm font-mono">
+              <span class="text-[10px] text-slate-500">Para enviar recordatorios con 1 clic</span>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Abono Inicial (RD$ - Opcional)</label>
+              <input type="number" step="0.01" min="0" id="saleCreditAbonoInicial" oninput="ThorApp.recalcularCuotasVenta()" placeholder="0.00" class="form-input text-xs sm:text-sm font-mono">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Cuota / Frecuencia *</label>
+              <select id="saleCreditFrecuencia" onchange="ThorApp.recalcularCuotasVenta()" class="form-input text-xs sm:text-sm font-medium">
+                <option value="quincenal">Quincenal (15 y 30 de cada mes)</option>
+                <option value="mensual">Mensual (Cada 30 días)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Número de Cuotas *</label>
+              <select id="saleCreditNumCuotas" onchange="ThorApp.recalcularCuotasVenta()" class="form-input text-xs sm:text-sm font-bold">
+                <option value="1">1 cuota</option>
+                <option value="2" selected>2 cuotas (15 y 30)</option>
+                <option value="3">3 cuotas</option>
+                <option value="4">4 cuotas</option>
+                <option value="6">6 cuotas</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Desglose proyectado en vivo de las cuotas -->
+          <div id="saleCreditCuotasPreview" class="p-2.5 rounded-xl bg-white border border-amber-200 text-xs space-y-1.5"></div>
+        </div>
+
+        <!-- Cambio en Efectivo (Solo al contado) -->
+        <div id="saleChangeGroup">
           <label class="block text-xs font-semibold text-slate-700 mb-1">Monto Recibido del Cliente (Para calcular cambio)</label>
           <div class="grid grid-cols-2 gap-3">
             <input type="number" step="0.01" min="0" id="saleReceivedInput" placeholder="RD$ Recibido" class="form-input text-xs sm:text-sm font-mono">
@@ -825,6 +1010,111 @@
           <button type="submit" class="btn-tactile btn-gold text-xs py-2 px-5 shadow-sm">Confirmar Venta</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL: REGISTRAR ABONO / PAGO DE CUOTA
+       ========================================================================= -->
+  <div id="modalAbono" class="modal-container fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="modal-backdrop fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+    <div class="vaul-drawer relative w-full max-w-lg bg-white border border-slate-200 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-900">
+      <div class="vaul-handle sm:hidden"></div>
+      <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">💵</span>
+          <div>
+            <h3 class="font-brand font-bold text-lg text-slate-900">Registrar Abono</h3>
+            <p id="modalAbonoSubtitle" class="text-xs text-slate-500">Cliente • Artículo</p>
+          </div>
+        </div>
+        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+
+      <form id="formAbono" onsubmit="ThorApp.handleRegisterAbono(event)" class="space-y-4">
+        <input type="hidden" id="abonoIdCobro">
+
+        <!-- Resumen de Deuda -->
+        <div class="grid grid-cols-3 gap-2 p-3 rounded-2xl bg-amber-50/80 border border-amber-200 text-center">
+          <div>
+            <span class="text-[10px] text-slate-500 block">Total Fiado</span>
+            <span id="abonoTotalDop" class="font-bold text-xs sm:text-sm text-slate-800 font-mono">RD$ 0</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-500 block">Abonado</span>
+            <span id="abonoCobradoDop" class="font-bold text-xs sm:text-sm text-emerald-600 font-mono">RD$ 0</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-500 block">Resta por Pagar</span>
+            <span id="abonoPendienteDop" class="font-bold text-xs sm:text-sm text-amber-700 font-mono">RD$ 0</span>
+          </div>
+        </div>
+
+        <!-- Cronograma de Cuotas -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-semibold text-slate-700">Estado de Cuotas Acordadas</label>
+          <div id="abonoCuotasList" class="space-y-1.5 max-h-40 overflow-y-auto pr-1"></div>
+        </div>
+
+        <!-- Monto del Abono -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs font-semibold text-slate-700">Monto que entrega el Cliente (RD$) *</label>
+            <div class="flex items-center gap-1.5">
+              <button type="button" onclick="ThorApp.sugerirMontoAbono('cuota')" class="text-[10px] px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-semibold hover:bg-amber-200">1 Cuota</button>
+              <button type="button" onclick="ThorApp.sugerirMontoAbono('todo')" class="text-[10px] px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-semibold hover:bg-emerald-200">Saldar Todo</button>
+            </div>
+          </div>
+          <input type="number" step="0.01" min="1" id="abonoMontoInput" placeholder="0.00" class="form-input text-base font-bold text-emerald-700 font-mono" required>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Método de Cobro</label>
+            <select id="abonoMetodoPago" class="form-input text-xs sm:text-sm font-semibold">
+              <option value="Efectivo">Efectivo</option>
+              <option value="Transferencia">Transferencia</option>
+              <option value="Tarjeta">Tarjeta</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Nota del Abono</label>
+            <input type="text" id="abonoNotaInput" placeholder="Ej: Pago quincena 15" class="form-input text-xs sm:text-sm">
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+          <button type="button" class="close-modal-btn btn-tactile btn-subtle text-xs py-2 px-3.5">Cancelar</button>
+          <button type="submit" id="btnSubmitAbono" class="btn-tactile btn-gold text-xs py-2 px-5 shadow-sm">Confirmar Abono</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL: DETALLE Y HISTORIAL DE COBRO ("FIADO")
+       ========================================================================= -->
+  <div id="modalDetalleCobro" class="modal-container fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="modal-backdrop fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+    <div class="vaul-drawer relative w-full max-w-xl bg-white border border-slate-200 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-900">
+      <div class="vaul-handle sm:hidden"></div>
+      <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📋</span>
+          <div>
+            <h3 class="font-brand font-bold text-lg text-slate-900">Detalle de Cuenta por Cobrar</h3>
+            <p id="detalleCobroCliente" class="text-xs text-slate-500">Cliente</p>
+          </div>
+        </div>
+        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+
+      <div id="detalleCobroBody" class="space-y-4"></div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+        <button type="button" class="close-modal-btn btn-tactile btn-subtle text-xs py-2 px-3.5">Cerrar</button>
+      </div>
     </div>
   </div>
 

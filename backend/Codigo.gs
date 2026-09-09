@@ -22,7 +22,8 @@ const SHEETS = {
   INVENTARIO: 'Inventario',
   VENTAS: 'Ventas',
   RECEPCIONES: 'Recepciones',
-  CONFIGURACION: 'Configuracion'
+  CONFIGURACION: 'Configuracion',
+  COBROS: 'Cobros'
 };
 
 // Credenciales oficiales predeterminadas para Pamela
@@ -287,6 +288,13 @@ function doGet(e) {
       });
     }
 
+    if (action === 'getCobros') {
+      return jsonResponse({
+        status: 'success',
+        data: obtenerCobros()
+      });
+    }
+
     return jsonResponse({ status: 'error', message: 'Acción GET no reconocida' }, 400);
 
   } catch (err) {
@@ -391,6 +399,9 @@ function doPost(e) {
       case 'registerReception':
         return jsonResponse(registrarRecepcionTanque(payload.data));
 
+      case 'registerPayment':
+        return jsonResponse(registrarAbono(payload.data));
+
       case 'saveConfig':
         return jsonResponse(guardarConfiguracion(payload.data));
 
@@ -420,6 +431,7 @@ function obtenerTodosLosDatos() {
     inventario: obtenerInventario(),
     ventas: obtenerVentas(),
     recepciones: obtenerRecepciones(),
+    cobros: obtenerCobros(),
     configuracion: obtenerConfiguracion(),
     metricas: calcularMetricasGenerales()
   };
@@ -581,7 +593,7 @@ function registrarVenta(venta) {
   const costoUnitarioDop = parseFloat(producto[7]) || 0;
   const gananciaNetaDop = totalVentaDop - (costoUnitarioDop * cantidadVenta);
 
-  // Actualizar inventario
+  // Actualizar inventario (Deducción inmediata de stock)
   const nuevoStock = stockActual - cantidadVenta;
   const stockMin = parseInt(producto[5]) || 3;
   const nuevoEstado = nuevoStock === 0 ? 'Agotado' : (nuevoStock <= stockMin ? 'Stock Bajo' : 'En Stock');
@@ -589,6 +601,13 @@ function registrarVenta(venta) {
   invSheet.getRange(filaProd, 5).setValue(nuevoStock);
   invSheet.getRange(filaProd, 11).setValue(nuevoEstado);
   invSheet.getRange(filaProd, 13).setValue(ahora);
+
+  // Modalidad: Contado vs Crédito / Fiado
+  const esCredito = (venta.tipo_venta === 'credito' || venta.metodo_pago === 'Crédito' || venta.metodo_pago === 'Fiado' || venta.es_credito === true);
+  const estadoVenta = esCredito ? 'Pendiente de Cobro' : 'Completada';
+  const metodoPago = esCredito ? 'Crédito / Fiado' : String(venta.metodo_pago || 'Efectivo').trim();
+  const clienteNombre = String(venta.cliente || 'Consumidor Final').trim();
+  const clienteTelefono = String(venta.telefono || '').trim();
 
   // Registrar en hoja Ventas
   const venSheet = getSheet(SHEETS.VENTAS);
@@ -603,18 +622,333 @@ function registrarVenta(venta) {
     totalVentaDop,
     costoUnitarioDop,
     gananciaNetaDop,
-    String(venta.cliente || 'Consumidor Final').trim(),
-    String(venta.metodo_pago || 'Efectivo').trim(),
+    clienteNombre,
+    metodoPago,
     String(venta.notas || '').trim(),
-    'Completada'
+    estadoVenta
   ]);
+
+  let cobroCreado = null;
+  if (esCredito) {
+    cobroCreado = crearRegistroCobro({
+      id_venta: idVenta,
+      cliente: clienteNombre,
+      telefono: clienteTelefono,
+      articulo: producto[1],
+      total_dop: totalVentaDop,
+      abono_inicial: parseFloat(venta.abono_inicial) || 0,
+      num_cuotas: parseInt(venta.num_cuotas) || 2,
+      frecuencia: venta.frecuencia || 'quincenal',
+      fecha_venta: ahora
+    });
+  }
 
   return {
     status: 'success',
-    message: 'Venta registrada con éxito. Ganancia neta: RD$ ' + gananciaNetaDop.toFixed(2),
+    message: esCredito 
+      ? 'Venta a crédito ("fiado") registrada con éxito. Se descontó stock y se creó cuenta por cobrar.'
+      : 'Venta registrada con éxito. Ganancia neta: RD$ ' + gananciaNetaDop.toFixed(2),
     id_venta: idVenta,
-    nuevoStock: nuevoStock
+    nuevoStock: nuevoStock,
+    cobro: cobroCreado
   };
+}
+
+function crearRegistroCobro(info) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const cobSheet = getSheet(SHEETS.COBROS);
+  const ahora = info.fecha_venta || new Date();
+  const idCobro = 'COB-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss');
+  
+  const totalDop = parseFloat(info.total_dop) || 0;
+  const abonoInicial = parseFloat(info.abono_inicial) || 0;
+  const saldoPendiente = Math.max(0, totalDop - abonoInicial);
+  const numCuotas = parseInt(info.num_cuotas) || 1;
+  const frecuencia = info.frecuencia || 'quincenal';
+
+  const planCuotas = calcularPlanCuotas(totalDop, abonoInicial, numCuotas, frecuencia, ahora);
+  
+  const historialAbonos = [];
+  if (abonoInicial > 0) {
+    historialAbonos.push({
+      id_abono: 'ABN-INI-' + Date.now(),
+      fecha: Utilities.formatDate(ahora, Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd HH:mm:ss'),
+      monto: abonoInicial,
+      metodo_pago: 'Efectivo',
+      nota: 'Abono inicial en venta'
+    });
+  }
+
+  let proximoVencimiento = '';
+  const primerPendiente = planCuotas.find(c => c.estado === 'Pendiente');
+  if (primerPendiente) {
+    proximoVencimiento = primerPendiente.fecha_vencimiento;
+  }
+
+  const estado = saldoPendiente <= 0 ? 'Saldada' : (abonoInicial > 0 ? 'Parcial' : 'Pendiente');
+
+  cobSheet.appendRow([
+    idCobro,
+    info.id_venta,
+    ahora,
+    String(info.cliente || 'Cliente').trim(),
+    String(info.telefono || '').trim(),
+    String(info.articulo || '').trim(),
+    totalDop,
+    abonoInicial,
+    abonoInicial,
+    saldoPendiente,
+    numCuotas,
+    frecuencia,
+    estado,
+    proximoVencimiento,
+    JSON.stringify(historialAbonos),
+    JSON.stringify(planCuotas)
+  ]);
+
+  return {
+    id_cobro: idCobro,
+    id_venta: info.id_venta,
+    cliente: info.cliente,
+    telefono: info.telefono,
+    articulo: info.articulo,
+    total_dop: totalDop,
+    abono_inicial_dop: abonoInicial,
+    total_cobrado_dop: abonoInicial,
+    saldo_pendiente_dop: saldoPendiente,
+    num_cuotas: numCuotas,
+    frecuencia: frecuencia,
+    estado: estado,
+    proximo_vencimiento: proximoVencimiento,
+    historial_abonos: historialAbonos,
+    plan_cuotas: planCuotas
+  };
+}
+
+function calcularPlanCuotas(montoTotal, abonoInicial, numCuotas, frecuencia, fechaInicio) {
+  numCuotas = Math.max(1, parseInt(numCuotas) || 1);
+  const saldoRestante = Math.max(0, montoTotal - (abonoInicial || 0));
+  const montoBasePorCuota = Math.floor((saldoRestante / numCuotas) * 100) / 100;
+  
+  const cuotas = [];
+  const baseD = fechaInicio ? new Date(fechaInicio) : new Date();
+
+  for (let i = 1; i <= numCuotas; i++) {
+    let fechaVenc;
+    if (frecuencia === 'mensual') {
+      fechaVenc = new Date(baseD.getFullYear(), baseD.getMonth() + i, baseD.getDate(), 12, 0, 0);
+    } else {
+      fechaVenc = obtenerProximaQuincena(baseD, i);
+    }
+
+    const fechaStr = Utilities.formatDate(fechaVenc, Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd');
+    const montoCuota = i === numCuotas 
+      ? Math.round((saldoRestante - (montoBasePorCuota * (numCuotas - 1))) * 100) / 100 
+      : montoBasePorCuota;
+
+    cuotas.push({
+      numero: i,
+      monto: montoCuota,
+      monto_abonado: saldoRestante === 0 ? montoCuota : 0,
+      fecha_vencimiento: fechaStr,
+      estado: saldoRestante === 0 ? 'Cobrada' : 'Pendiente',
+      fecha_pago: saldoRestante === 0 ? fechaStr : null
+    });
+  }
+
+  return cuotas;
+}
+
+function obtenerProximaQuincena(baseDate, step) {
+  const year = baseDate.getFullYear();
+  const month = baseDate.getMonth();
+  const day = baseDate.getDate();
+
+  const isAfter15 = day > 15;
+  const totalHalfMonths = (year * 24) + (month * 2) + (isAfter15 ? 1 : 0) + (step - 1);
+
+  const targetYear = Math.floor(totalHalfMonths / 24);
+  const rem = totalHalfMonths % 24;
+  const targetMonth = Math.floor(rem / 2);
+  const isSecondHalf = (rem % 2) === 1;
+
+  if (isSecondHalf) {
+    const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+    const targetDay = Math.min(30, lastDay);
+    return new Date(targetYear, targetMonth, targetDay, 12, 0, 0);
+  } else {
+    return new Date(targetYear, targetMonth, 15, 12, 0, 0);
+  }
+}
+
+function registrarAbono(pago) {
+  if (!pago || !pago.id_cobro || !pago.monto) {
+    return { status: 'error', message: 'ID de cobro y monto de abono son requeridos' };
+  }
+
+  const montoAbono = parseFloat(pago.monto);
+  if (montoAbono <= 0) {
+    return { status: 'error', message: 'El monto a abonar debe ser mayor a 0' };
+  }
+
+  const cobSheet = getSheet(SHEETS.COBROS);
+  const rows = cobSheet.getDataRange().getValues();
+  let filaEncontrada = -1;
+  let filaData = null;
+
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(pago.id_cobro)) {
+      filaEncontrada = i + 1;
+      filaData = rows[i];
+      break;
+    }
+  }
+
+  if (filaEncontrada <= 0) {
+    return { status: 'error', message: 'Registro de cobro no encontrado: ' + pago.id_cobro };
+  }
+
+  const totalDop = parseFloat(filaData[6]) || 0;
+  let totalCobrado = parseFloat(filaData[8]) || 0;
+  let saldoPendiente = parseFloat(filaData[9]) || 0;
+
+  if (saldoPendiente <= 0) {
+    return { status: 'error', message: 'Esta cuenta ya está totalmente saldada' };
+  }
+
+  const abonoEfectivo = Math.min(montoAbono, saldoPendiente);
+  totalCobrado += abonoEfectivo;
+  saldoPendiente = Math.max(0, totalDop - totalCobrado);
+
+  let historialAbonos = [];
+  try {
+    if (filaData[14]) historialAbonos = JSON.parse(filaData[14]);
+  } catch (e) {}
+
+  const ahora = new Date();
+  const fechaStr = Utilities.formatDate(ahora, Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd HH:mm:ss');
+  historialAbonos.push({
+    id_abono: 'ABN-' + Date.now(),
+    fecha: fechaStr,
+    monto: abonoEfectivo,
+    metodo_pago: pago.metodo_pago || 'Efectivo',
+    nota: pago.nota || 'Abono a cuenta'
+  });
+
+  let planCuotas = [];
+  try {
+    if (filaData[15]) planCuotas = JSON.parse(filaData[15]);
+  } catch (e) {}
+
+  // Distribuir abono progresivamente entre las cuotas pendientes
+  let rem = abonoEfectivo;
+  for (let i = 0; i < planCuotas.length; i++) {
+    if (planCuotas[i].estado !== 'Cobrada') {
+      const montoTotalCuota = parseFloat(planCuotas[i].monto) || 0;
+      const yaAbonado = parseFloat(planCuotas[i].monto_abonado) || 0;
+      const faltaEnCuota = montoTotalCuota - yaAbonado;
+
+      if (rem >= faltaEnCuota) {
+        planCuotas[i].monto_abonado = montoTotalCuota;
+        planCuotas[i].estado = 'Cobrada';
+        planCuotas[i].fecha_pago = fechaStr;
+        rem -= faltaEnCuota;
+      } else if (rem > 0) {
+        planCuotas[i].monto_abonado = yaAbonado + rem;
+        planCuotas[i].estado = 'Parcial';
+        rem = 0;
+      }
+    }
+  }
+
+  let proximoVencimiento = '';
+  const primerPendiente = planCuotas.find(c => c.estado !== 'Cobrada');
+  if (primerPendiente) {
+    proximoVencimiento = primerPendiente.fecha_vencimiento;
+  }
+
+  const nuevoEstado = saldoPendiente <= 0 ? 'Saldada' : 'Parcial';
+
+  cobSheet.getRange(filaEncontrada, 9).setValue(totalCobrado);
+  cobSheet.getRange(filaEncontrada, 10).setValue(saldoPendiente);
+  cobSheet.getRange(filaEncontrada, 13).setValue(nuevoEstado);
+  cobSheet.getRange(filaEncontrada, 14).setValue(proximoVencimiento);
+  cobSheet.getRange(filaEncontrada, 15).setValue(JSON.stringify(historialAbonos));
+  cobSheet.getRange(filaEncontrada, 16).setValue(JSON.stringify(planCuotas));
+
+  if (saldoPendiente <= 0 && filaData[1]) {
+    actualizarEstadoVenta(filaData[1], 'Completada');
+  }
+
+  return {
+    status: 'success',
+    message: saldoPendiente <= 0 
+      ? '¡Cuenta saldada en su totalidad! Saldo restante: RD$ 0.00' 
+      : 'Abono de RD$ ' + abonoEfectivo.toFixed(2) + ' registrado. Saldo pendiente: RD$ ' + saldoPendiente.toFixed(2),
+    id_cobro: pago.id_cobro,
+    saldo_pendiente_dop: saldoPendiente,
+    total_cobrado_dop: totalCobrado,
+    estado: nuevoEstado,
+    proximo_vencimiento: proximoVencimiento,
+    historial_abonos: historialAbonos,
+    plan_cuotas: planCuotas
+  };
+}
+
+function actualizarEstadoVenta(idVenta, nuevoEstado) {
+  try {
+    const venSheet = getSheet(SHEETS.VENTAS);
+    const data = venSheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(idVenta)) {
+        venSheet.getRange(i + 1, 14).setValue(nuevoEstado);
+        break;
+      }
+    }
+  } catch (e) {
+    console.warn('No se pudo actualizar estado en Ventas:', e);
+  }
+}
+
+function obtenerCobros() {
+  const sheet = getSheet(SHEETS.COBROS);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return [];
+
+  const items = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row[0]) continue;
+
+    let historialAbonos = [];
+    let planCuotas = [];
+    try {
+      if (row[14]) historialAbonos = JSON.parse(row[14]);
+    } catch (e) {}
+    try {
+      if (row[15]) planCuotas = JSON.parse(row[15]);
+    } catch (e) {}
+
+    items.push({
+      id_cobro: String(row[0]),
+      id_venta: String(row[1] || ''),
+      fecha_venta: row[2] ? formatearFecha(row[2]) : '',
+      cliente: String(row[3] || ''),
+      telefono: String(row[4] || ''),
+      articulo: String(row[5] || ''),
+      monto_total_dop: Number(row[6]) || 0,
+      abono_inicial_dop: Number(row[7]) || 0,
+      total_cobrado_dop: Number(row[8]) || 0,
+      saldo_pendiente_dop: Number(row[9]) || 0,
+      num_cuotas: Number(row[10]) || 1,
+      frecuencia: String(row[11] || 'quincenal'),
+      estado: String(row[12] || 'Pendiente'),
+      proximo_vencimiento: String(row[13] || ''),
+      historial_abonos: historialAbonos,
+      plan_cuotas: planCuotas
+    });
+  }
+  return items.reverse();
 }
 
 function cancelarVenta(idVenta) {
@@ -806,6 +1140,21 @@ function calcularMetricasGenerales() {
     }
   });
 
+  const cobros = obtenerCobros();
+  let totalPorCobrarDop = 0;
+  let cuotasPendientesHoy = 0;
+  let clientesConDeuda = 0;
+
+  cobros.forEach(c => {
+    if (c.estado !== 'Saldada') {
+      totalPorCobrarDop += (c.saldo_pendiente_dop || 0);
+      clientesConDeuda++;
+      if (c.proximo_vencimiento && c.proximo_vencimiento <= hoyStr) {
+        cuotasPendientesHoy++;
+      }
+    }
+  });
+
   return {
     total_productos: totalProductos,
     total_unidades_stock: totalUnidadesStock,
@@ -816,7 +1165,10 @@ function calcularMetricasGenerales() {
     ventas_hoy_dop: Math.round(ventasHoyDop),
     ganancia_hoy_dop: Math.round(gananciaHoyDop),
     ventas_mes_dop: Math.round(ventasMesDop),
-    ganancia_mes_dop: Math.round(gananciaMesDop)
+    ganancia_mes_dop: Math.round(gananciaMesDop),
+    total_por_cobrar_dop: Math.round(totalPorCobrarDop),
+    cuotas_pendientes_hoy: cuotasPendientesHoy,
+    clientes_con_deuda: clientesConDeuda
   };
 }
 
@@ -927,6 +1279,17 @@ function inicializarHojasSiNoExisten(forzar) {
       ['CATEGORIAS', 'Perfumes, Splash, Cremas, Body Wash, Accesorios, Maquillaje, Variedades']
     ];
     cfgSheet.getRange(2, 1, defaultValues.length, 2).setValues(defaultValues);
+  }
+
+  let cobSheet = ss.getSheetByName(SHEETS.COBROS);
+  if (!cobSheet || forzar) {
+    if (!cobSheet) cobSheet = ss.insertSheet(SHEETS.COBROS);
+    const cabecerasCob = [
+      ['ID Cobro', 'ID Venta', 'Fecha Venta', 'Cliente', 'Teléfono WhatsApp', 'Artículo', 'Monto Total DOP', 'Abono Inicial DOP', 'Total Cobrado DOP', 'Saldo Pendiente DOP', 'Num Cuotas', 'Frecuencia', 'Estado', 'Próximo Vencimiento', 'Historial Abonos (JSON)', 'Plan Cuotas (JSON)']
+    ];
+    cobSheet.getRange(1, 1, 1, cabecerasCob[0].length).setValues(cabecerasCob);
+    estilarCabecera(cobSheet, cabecerasCob[0].length, '#0B132B', '#D4AF37');
+    cobSheet.setFrozenRows(1);
   }
 
   // Asegurar que las credenciales de Pamela estén en PropertiesService en el servidor

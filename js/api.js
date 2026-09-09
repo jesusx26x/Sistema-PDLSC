@@ -166,6 +166,22 @@ const ThorAPI = (function() {
         metodo_pago: 'Transferencia',
         notas: 'Cliente frecuente',
         estado: 'Completada'
+      },
+      {
+        id_venta: 'VTA-002',
+        fecha_venta: '2026-09-05 16:00:00',
+        id_articulo: 'PROD-001',
+        nombre_articulo: 'Perfume Thor Gold Luxury 100ml',
+        categoria: 'Perfumes',
+        cantidad: 1,
+        precio_unitario_dop: 1950,
+        total_dop: 1950,
+        costo_unitario_dop: 907.50,
+        ganancia_dop: 1042.50,
+        cliente: 'Jesús De La Rosa',
+        metodo_pago: 'Crédito / Fiado',
+        notas: '2 cuotas quincenales (15 y 30)',
+        estado: 'Pendiente de Cobro'
       }
     ],
     recepciones: [
@@ -179,6 +195,51 @@ const ThorAPI = (function() {
         tasa_cambio: 60.50,
         notas: 'Llegó en excelente estado',
         articulos: []
+      }
+    ],
+    cobros: [
+      {
+        id_cobro: 'COB-001',
+        id_venta: 'VTA-002',
+        fecha_venta: '2026-09-05 16:00:00',
+        cliente: 'Jesús De La Rosa',
+        telefono: '809-555-0123',
+        articulo: 'Perfume Thor Gold Luxury 100ml',
+        monto_total_dop: 1950,
+        abono_inicial_dop: 450,
+        total_cobrado_dop: 450,
+        saldo_pendiente_dop: 1500,
+        num_cuotas: 2,
+        frecuencia: 'quincenal',
+        estado: 'Parcial',
+        proximo_vencimiento: '2026-09-15',
+        historial_abonos: [
+          {
+            id_abono: 'ABN-INI-001',
+            fecha: '2026-09-05 16:00:00',
+            monto: 450,
+            metodo_pago: 'Efectivo',
+            nota: 'Abono inicial en tienda'
+          }
+        ],
+        plan_cuotas: [
+          {
+            numero: 1,
+            monto: 750,
+            monto_abonado: 0,
+            fecha_vencimiento: '2026-09-15',
+            estado: 'Pendiente',
+            fecha_pago: null
+          },
+          {
+            numero: 2,
+            monto: 750,
+            monto_abonado: 0,
+            fecha_vencimiento: '2026-09-30',
+            estado: 'Pendiente',
+            fecha_pago: null
+          }
+        ]
       }
     ],
     configuracion: {
@@ -197,8 +258,11 @@ const ThorAPI = (function() {
       productos_agotados: 0,
       ventas_hoy_dop: 0,
       ganancia_hoy_dop: 0,
-      ventas_mes_dop: 3900,
-      ganancia_mes_dop: 2085
+      ventas_mes_dop: 5850,
+      ganancia_mes_dop: 3127.50,
+      total_por_cobrar_dop: 1500,
+      cuotas_pendientes_hoy: 1,
+      clientes_con_deuda: 1
     }
   };
 
@@ -443,6 +507,65 @@ const ThorAPI = (function() {
     }
   }
 
+  function obtenerProximaQuincenaJS(baseDate, step) {
+    const year = baseDate.getFullYear();
+    const month = baseDate.getMonth();
+    const day = baseDate.getDate();
+
+    const isAfter15 = day > 15;
+    const totalHalfMonths = (year * 24) + (month * 2) + (isAfter15 ? 1 : 0) + (step - 1);
+
+    const targetYear = Math.floor(totalHalfMonths / 24);
+    const rem = totalHalfMonths % 24;
+    const targetMonth = Math.floor(rem / 2);
+    const isSecondHalf = (rem % 2) === 1;
+
+    if (isSecondHalf) {
+      const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+      const targetDay = Math.min(30, lastDay);
+      return new Date(targetYear, targetMonth, targetDay, 12, 0, 0);
+    } else {
+      return new Date(targetYear, targetMonth, 15, 12, 0, 0);
+    }
+  }
+
+  function calcularPlanCuotasJS(montoTotal, abonoInicial, numCuotas, frecuencia, fechaInicio) {
+    numCuotas = Math.max(1, parseInt(numCuotas) || 1);
+    const saldoRestante = Math.max(0, montoTotal - (abonoInicial || 0));
+    const montoBasePorCuota = Math.floor((saldoRestante / numCuotas) * 100) / 100;
+    
+    const cuotas = [];
+    const baseD = fechaInicio ? new Date(fechaInicio) : new Date();
+
+    for (let i = 1; i <= numCuotas; i++) {
+      let fechaVenc;
+      if (frecuencia === 'mensual') {
+        fechaVenc = new Date(baseD.getFullYear(), baseD.getMonth() + i, baseD.getDate(), 12, 0, 0);
+      } else {
+        fechaVenc = obtenerProximaQuincenaJS(baseD, i);
+      }
+
+      const y = fechaVenc.getFullYear();
+      const m = String(fechaVenc.getMonth() + 1).padStart(2, '0');
+      const d = String(fechaVenc.getDate()).padStart(2, '0');
+      const fechaStr = `${y}-${m}-${d}`;
+      const montoCuota = i === numCuotas 
+        ? Math.round((saldoRestante - (montoBasePorCuota * (numCuotas - 1))) * 100) / 100 
+        : montoBasePorCuota;
+
+      cuotas.push({
+        numero: i,
+        monto: montoCuota,
+        monto_abonado: saldoRestante === 0 ? montoCuota : 0,
+        fecha_vencimiento: fechaStr,
+        estado: saldoRestante === 0 ? 'Cobrada' : 'Pendiente',
+        fecha_pago: saldoRestante === 0 ? fechaStr : null
+      });
+    }
+
+    return cuotas;
+  }
+
   function operarEnLocal(action, data) {
     const current = getCachedData();
 
@@ -505,6 +628,12 @@ const ThorAPI = (function() {
       const costo = (prod.costo_dop || 0) * cant;
       const ganancia = total - costo;
 
+      const esCredito = (v.tipo_venta === 'credito' || v.metodo_pago === 'Crédito' || v.metodo_pago === 'Fiado' || v.es_credito === true);
+      const estadoVenta = esCredito ? 'Pendiente de Cobro' : 'Completada';
+      const metodoPago = esCredito ? 'Crédito / Fiado' : (v.metodo_pago || 'Efectivo');
+      const clienteNombre = v.cliente || 'Cliente General';
+      const clienteTel = v.telefono || '';
+
       const nuevaVenta = {
         id_venta: 'VTA-' + Date.now().toString().slice(-6),
         fecha_venta: new Date().toLocaleString(),
@@ -516,23 +645,139 @@ const ThorAPI = (function() {
         total_dop: total,
         costo_unitario_dop: prod.costo_dop,
         ganancia_dop: ganancia,
-        cliente: v.cliente || 'Cliente General',
-        metodo_pago: v.metodo_pago || 'Efectivo',
-        notas: v.notas || '',
-        estado: 'Completada'
+        cliente: clienteNombre,
+        telefono: clienteTel,
+        metodo_pago: metodoPago,
+        notas: v.notas || (esCredito ? `${v.num_cuotas || 2} cuotas ${v.frecuencia || 'quincenal'}` : ''),
+        estado: estadoVenta
       };
 
       current.ventas.unshift(nuevaVenta);
+
+      let nuevoCobro = null;
+      if (esCredito) {
+        if (!current.cobros) current.cobros = [];
+        const abonoInicial = parseFloat(v.abono_inicial) || 0;
+        const saldoPendiente = Math.max(0, total - abonoInicial);
+        const numCuotas = parseInt(v.num_cuotas) || 2;
+        const frecuencia = v.frecuencia || 'quincenal';
+
+        const planCuotas = calcularPlanCuotasJS(total, abonoInicial, numCuotas, frecuencia, new Date());
+        const historialAbonos = [];
+        if (abonoInicial > 0) {
+          historialAbonos.push({
+            id_abono: 'ABN-INI-' + Date.now(),
+            fecha: new Date().toLocaleString(),
+            monto: abonoInicial,
+            metodo_pago: 'Efectivo',
+            nota: 'Abono inicial en venta'
+          });
+        }
+
+        let proximoVencimiento = '';
+        const primerPendiente = planCuotas.find(c => c.estado === 'Pendiente');
+        if (primerPendiente) proximoVencimiento = primerPendiente.fecha_vencimiento;
+
+        nuevoCobro = {
+          id_cobro: 'COB-' + Date.now().toString().slice(-6),
+          id_venta: nuevaVenta.id_venta,
+          fecha_venta: nuevaVenta.fecha_venta,
+          cliente: clienteNombre,
+          telefono: clienteTel,
+          articulo: prod.nombre,
+          monto_total_dop: total,
+          abono_inicial_dop: abonoInicial,
+          total_cobrado_dop: abonoInicial,
+          saldo_pendiente_dop: saldoPendiente,
+          num_cuotas: numCuotas,
+          frecuencia: frecuencia,
+          estado: saldoPendiente <= 0 ? 'Saldada' : (abonoInicial > 0 ? 'Parcial' : 'Pendiente'),
+          proximo_vencimiento: proximoVencimiento,
+          historial_abonos: historialAbonos,
+          plan_cuotas: planCuotas
+        };
+
+        current.cobros.unshift(nuevoCobro);
+      }
+
       recalcularMetricasLocales(current);
       setCachedData(current);
 
       return {
         status: 'success',
-        message: 'Venta registrada con éxito',
+        message: esCredito ? 'Venta a crédito ("fiado") registrada con éxito.' : 'Venta registrada con éxito',
         id_venta: nuevaVenta.id_venta,
         stock_restante: prod.cantidad,
         total_dop: total,
-        ganancia_dop: ganancia
+        ganancia_dop: ganancia,
+        cobro: nuevoCobro
+      };
+    }
+
+    if (action === 'registerPayment') {
+      if (!current.cobros) current.cobros = [];
+      const { id_cobro, monto, metodo_pago, nota } = data;
+      const cobro = current.cobros.find(x => x.id_cobro === id_cobro);
+      if (!cobro) return { status: 'error', message: 'Cuenta por cobrar no encontrada' };
+
+      const montoAbono = parseFloat(monto) || 0;
+      if (montoAbono <= 0) return { status: 'error', message: 'El monto debe ser mayor a 0' };
+
+      const abonoEfectivo = Math.min(montoAbono, cobro.saldo_pendiente_dop);
+      cobro.total_cobrado_dop = (cobro.total_cobrado_dop || 0) + abonoEfectivo;
+      cobro.saldo_pendiente_dop = Math.max(0, cobro.monto_total_dop - cobro.total_cobrado_dop);
+
+      const fechaStr = new Date().toLocaleString();
+      if (!cobro.historial_abonos) cobro.historial_abonos = [];
+      cobro.historial_abonos.push({
+        id_abono: 'ABN-' + Date.now(),
+        fecha: fechaStr,
+        monto: abonoEfectivo,
+        metodo_pago: metodo_pago || 'Efectivo',
+        nota: nota || 'Abono a cuenta'
+      });
+
+      // Distribuir entre cuotas
+      let rem = abonoEfectivo;
+      if (cobro.plan_cuotas) {
+        for (let i = 0; i < cobro.plan_cuotas.length; i++) {
+          if (cobro.plan_cuotas[i].estado !== 'Cobrada') {
+            const montoCuota = parseFloat(cobro.plan_cuotas[i].monto) || 0;
+            const yaAbonado = parseFloat(cobro.plan_cuotas[i].monto_abonado) || 0;
+            const falta = montoCuota - yaAbonado;
+
+            if (rem >= falta) {
+              cobro.plan_cuotas[i].monto_abonado = montoCuota;
+              cobro.plan_cuotas[i].estado = 'Cobrada';
+              cobro.plan_cuotas[i].fecha_pago = fechaStr;
+              rem -= falta;
+            } else if (rem > 0) {
+              cobro.plan_cuotas[i].monto_abonado = yaAbonado + rem;
+              cobro.plan_cuotas[i].estado = 'Parcial';
+              rem = 0;
+            }
+          }
+        }
+      }
+
+      const primerPendiente = (cobro.plan_cuotas || []).find(c => c.estado !== 'Cobrada');
+      cobro.proximo_vencimiento = primerPendiente ? primerPendiente.fecha_vencimiento : '';
+      cobro.estado = cobro.saldo_pendiente_dop <= 0 ? 'Saldada' : 'Parcial';
+
+      if (cobro.saldo_pendiente_dop <= 0 && cobro.id_venta) {
+        const v = current.ventas.find(x => x.id_venta === cobro.id_venta);
+        if (v) v.estado = 'Completada';
+      }
+
+      recalcularMetricasLocales(current);
+      setCachedData(current);
+
+      return {
+        status: 'success',
+        message: cobro.saldo_pendiente_dop <= 0 
+          ? '¡Cuenta saldada en su totalidad! RD$ 0.00 restante.' 
+          : `Abono de RD$ ${abonoEfectivo.toFixed(2)} registrado. Saldo pendiente: RD$ ${cobro.saldo_pendiente_dop.toFixed(2)}`,
+        cobro: cobro
       };
     }
 
@@ -544,6 +789,10 @@ const ThorAPI = (function() {
         if (prod) {
           prod.cantidad += v.cantidad;
           prod.estado = 'En Stock';
+        }
+        if (current.cobros) {
+          const cob = current.cobros.find(x => x.id_venta === data.id_venta);
+          if (cob) cob.estado = 'Cancelada';
         }
         recalcularMetricasLocales(current);
         setCachedData(current);
@@ -646,6 +895,22 @@ const ThorAPI = (function() {
       }
     });
 
+    if (!data.cobros) data.cobros = [];
+    let totalPorCobrar = 0;
+    let cuotasPendientesHoy = 0;
+    let clientesConDeuda = 0;
+    const hoyStr = new Date().toISOString().substring(0, 10);
+
+    data.cobros.forEach(c => {
+      if (c.estado !== 'Saldada' && c.estado !== 'Cancelada') {
+        totalPorCobrar += (parseFloat(c.saldo_pendiente_dop) || 0);
+        clientesConDeuda++;
+        if (c.proximo_vencimiento && c.proximo_vencimiento <= hoyStr) {
+          cuotasPendientesHoy++;
+        }
+      }
+    });
+
     data.metricas = {
       total_productos: totalProd,
       total_unidades_stock: totalUnidades,
@@ -656,7 +921,10 @@ const ThorAPI = (function() {
       ventas_hoy_dop: 0,
       ganancia_hoy_dop: 0,
       ventas_mes_dop: Math.round(ventasMes),
-      ganancia_mes_dop: Math.round(gananciaMes)
+      ganancia_mes_dop: Math.round(gananciaMes),
+      total_por_cobrar_dop: Math.round(totalPorCobrar),
+      cuotas_pendientes_hoy: cuotasPendientesHoy,
+      clientes_con_deuda: clientesConDeuda
     };
   }
 
@@ -694,13 +962,17 @@ const ThorAPI = (function() {
     clearSession,
     // Operaciones protegidas por RLS
     fetchAllData: () => apiGet('getAllData'),
+    fetchCobros: () => apiGet('getCobros'),
     saveProduct: (p) => apiPost('saveProduct', p),
     deleteProduct: (id) => apiPost('deleteProduct', id),
     adjustStock: (id, delta, motivo) => apiPost('adjustStock', { id, delta, motivo }),
     registerSale: (v) => apiPost('registerSale', v),
+    registerPayment: (p) => apiPost('registerPayment', p),
     cancelSale: (id_venta) => apiPost('cancelSale', { id_venta }),
     registerReception: (r) => apiPost('registerReception', r),
     saveConfig: (c) => apiPost('saveConfig', c),
+    calcularPlanCuotas: calcularPlanCuotasJS,
+    obtenerProximaQuincena: obtenerProximaQuincenaJS,
     DEFAULT_CATEGORIES
   };
 })();

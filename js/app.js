@@ -16,12 +16,16 @@ const ThorApp = (function() {
     inventory: [],
     sales: [],
     receptions: [],
+    cobros: [],
     metrics: {},
     config: {},
     exchangeRate: 60.50,
     searchQuery: '',
     selectedCategory: 'all',
     selectedStockFilter: 'all',
+    selectedCobrosFilter: 'all',
+    cobrosSearchQuery: '',
+    saleMode: 'contado',
     charts: {
       salesChart: null,
       categoryChart: null
@@ -147,6 +151,7 @@ const ThorApp = (function() {
     state.inventory = cached.inventario || [];
     state.sales = cached.ventas || [];
     state.receptions = cached.recepciones || [];
+    state.cobros = cached.cobros || [];
     state.metrics = cached.metricas || {};
     state.config = cached.configuracion || {};
     state.exchangeRate = ThorAPI.getUsdRate();
@@ -174,6 +179,7 @@ const ThorApp = (function() {
         state.inventory = res.data.inventario || [];
         state.sales = res.data.ventas || [];
         state.receptions = res.data.recepciones || [];
+        state.cobros = res.data.cobros || [];
         state.metrics = res.data.metricas || {};
         state.config = res.data.configuracion || {};
 
@@ -276,6 +282,7 @@ const ThorApp = (function() {
     if (tabName === 'dashboard') renderDashboard();
     if (tabName === 'inventario') renderInventory();
     if (tabName === 'ventas') renderSales();
+    if (tabName === 'cobros') renderCobros();
     if (tabName === 'tanques') renderReceptions();
     if (tabName === 'reportes') renderReports();
 
@@ -286,6 +293,7 @@ const ThorApp = (function() {
     renderDashboard();
     renderInventory();
     renderSales();
+    renderCobros();
     renderReceptions();
     renderReports();
   }
@@ -328,6 +336,48 @@ const ThorApp = (function() {
 
     actualizarTexto('kpiVentasMes', `RD$ ${Math.round(ventasMes).toLocaleString()}`);
     actualizarTexto('kpiGananciaMes', `RD$ ${Math.round(gananciaMes).toLocaleString()}`);
+
+    // =========================================================================
+    // KPI Y ALERTAS DE CUENTAS POR COBRAR ("FIADOS")
+    // =========================================================================
+    let totalPorCobrar = 0;
+    let deudasActivas = 0;
+    let cuotasVencenPronto = 0;
+    const hoyStr = new Date().toISOString().substring(0, 10);
+    const finQuincena = ThorAPI.obtenerProximaQuincena(new Date(), 1).toISOString().substring(0, 10);
+
+    (state.cobros || []).forEach(c => {
+      if (c.estado !== 'Saldada' && c.estado !== 'Cancelada') {
+        totalPorCobrar += (parseFloat(c.saldo_pendiente_dop) || 0);
+        deudasActivas++;
+        if (c.proximo_vencimiento && c.proximo_vencimiento <= finQuincena) {
+          cuotasVencenPronto++;
+        }
+      }
+    });
+
+    actualizarTexto('kpiTotalPorCobrar', `RD$ ${Math.round(totalPorCobrar).toLocaleString()}`);
+    actualizarTexto('kpiCobrosBadge', `${deudasActivas} deudas activas`);
+    actualizarTexto('kpiCuotasVencenPronto', `${cuotasVencenPronto} cuotas vencen pronto`);
+
+    // Actualizar insignias de notificación en barra lateral y móvil
+    const sidebarBadge = document.getElementById('sidebarCobrosBadge');
+    const mobileDot = document.getElementById('mobileCobrosDot');
+    if (sidebarBadge) {
+      if (deudasActivas > 0) {
+        sidebarBadge.textContent = deudasActivas;
+        sidebarBadge.classList.remove('hidden');
+      } else {
+        sidebarBadge.classList.add('hidden');
+      }
+    }
+    if (mobileDot) {
+      if (deudasActivas > 0) {
+        mobileDot.classList.remove('hidden');
+      } else {
+        mobileDot.classList.add('hidden');
+      }
+    }
 
     renderDashboardAlerts(bajoStock, agotados);
     renderDashboardCharts();
@@ -579,11 +629,19 @@ const ThorApp = (function() {
           ? Math.round(((p.precio_venta_dop - p.costo_dop) / p.precio_venta_dop) * 100) 
           : 0;
 
-        tableHtml += `
+          const esLocal = (p.origen === 'local' || p.origen === 'Compra Local');
+          const badgeOrigen = esLocal
+            ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold whitespace-nowrap">🛍️ Local</span>'
+            : '<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold whitespace-nowrap">🚢 Tanque</span>';
+
+          tableHtml += `
           <tr class="border-b border-slate-100 hover:bg-amber-50/40 transition">
             <td class="py-3 px-4">
-              <div class="font-semibold text-slate-800 text-sm">${p.nombre}</div>
-              <div class="text-xs text-slate-500 font-mono">${p.id} • ${p.ubicacion || 'Tanque'}</div>
+              <div class="font-semibold text-slate-800 text-sm flex items-center gap-1.5">
+                <span>${p.nombre}</span>
+                ${badgeOrigen}
+              </div>
+              <div class="text-xs text-slate-500 font-mono">${p.id} • ${p.ubicacion || (esLocal ? 'Tienda / Local' : 'Tanque')}</div>
             </td>
             <td class="py-3 px-3">
               <span class="text-xs px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-800 font-medium border border-amber-200/80">${p.categoria || 'Variedades'}</span>
@@ -640,13 +698,21 @@ const ThorApp = (function() {
           statusText = 'Stock Bajo';
         }
 
+        const esLocal = (p.origen === 'local' || p.origen === 'Compra Local');
+        const badgeOrigen = esLocal
+          ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold whitespace-nowrap">🛍️ Local</span>'
+          : '<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold whitespace-nowrap">🚢 Tanque</span>';
+
         cardsHtml += `
           <div class="p-4 rounded-2xl bento-card space-y-3">
             <div class="flex items-start justify-between gap-2">
               <div>
-                <span class="text-[10px] uppercase font-bold text-amber-700 tracking-wider">${p.categoria || 'Variedades'}</span>
+                <div class="flex items-center gap-1.5 mb-0.5">
+                  <span class="text-[10px] uppercase font-bold text-amber-700 tracking-wider">${p.categoria || 'Variedades'}</span>
+                  ${badgeOrigen}
+                </div>
                 <h4 class="font-bold text-slate-800 text-sm leading-snug">${p.nombre}</h4>
-                <p class="text-[11px] text-slate-500">${p.ubicacion || 'Tanque'} • ID: ${p.id}</p>
+                <p class="text-[11px] text-slate-500">${p.ubicacion || (esLocal ? 'Tienda / Local' : 'Tanque')} • ID: ${p.id}</p>
               </div>
               <span class="${badgeClass}">${statusText}</span>
             </div>
@@ -996,10 +1062,12 @@ const ThorApp = (function() {
     document.querySelectorAll('.modal-container').forEach(m => m.classList.add('hidden'));
   }
 
-  function openNewProductModal() {
-    document.getElementById('modalProductTitle').textContent = 'Nuevo Producto';
+  function openNewProductModal(preselectedOrigen = 'local') {
+    document.getElementById('modalProductTitle').textContent = preselectedOrigen === 'local' ? 'Nuevo Producto (Compra Local / Sin Tanque)' : 'Nuevo Producto';
     document.getElementById('formProduct').reset();
     document.getElementById('prodId').value = '';
+    const origenSelect = document.getElementById('prodOrigen');
+    if (origenSelect) origenSelect.value = preselectedOrigen;
     document.getElementById('prodCurrencyToggle').checked = true;
     toggleProductCurrency(true);
     document.getElementById('modalProduct').classList.remove('hidden');
@@ -1012,6 +1080,8 @@ const ThorApp = (function() {
     document.getElementById('modalProductTitle').textContent = 'Editar Producto';
     document.getElementById('prodId').value = prod.id;
     document.getElementById('prodNombre').value = prod.nombre;
+    const origenSelect = document.getElementById('prodOrigen');
+    if (origenSelect) origenSelect.value = prod.origen || 'local';
     document.getElementById('prodCategoria').value = prod.categoria || 'Variedades';
     document.getElementById('prodDescripcion').value = prod.descripcion || '';
     document.getElementById('prodCantidad').value = prod.cantidad;
@@ -1088,6 +1158,8 @@ const ThorApp = (function() {
     const nombre = document.getElementById('prodNombre').value.trim();
     if (!nombre) return;
 
+    const origenSelect = document.getElementById('prodOrigen');
+    const origen = origenSelect ? origenSelect.value : 'local';
     const costoUsd = parseFloat(document.getElementById('prodCostoUsd').value) || 0;
     const costoDop = parseFloat(document.getElementById('prodCostoDop').value) || (costoUsd * state.exchangeRate);
     const precioVenta = parseFloat(document.getElementById('prodPrecioVenta').value) || 0;
@@ -1097,6 +1169,7 @@ const ThorApp = (function() {
     const prodData = {
       id: id || undefined,
       nombre: nombre,
+      origen: origen,
       categoria: document.getElementById('prodCategoria').value,
       descripcion: document.getElementById('prodDescripcion').value.trim(),
       cantidad: cantidad,
@@ -1104,14 +1177,14 @@ const ThorApp = (function() {
       costo_usd: costoUsd,
       costo_dop: costoDop,
       precio_venta_dop: precioVenta,
-      ubicacion: document.getElementById('prodUbicacion').value.trim() || 'Almacén Principal'
+      ubicacion: document.getElementById('prodUbicacion').value.trim() || (origen === 'local' ? 'Compra Local' : 'Almacén Principal')
     };
 
     closeAllModals();
 
     const res = await ThorAPI.saveProduct(prodData);
     if (res && res.status === 'success') {
-      Sonner.success('Producto guardado correctamente');
+      Sonner.success(`Producto guardado correctamente (${origen === 'local' ? 'Compra Local' : 'Tanque EE.UU.'})`);
       await sincronizarConNube(false);
       renderAll();
     } else {
@@ -1119,7 +1192,7 @@ const ThorApp = (function() {
     }
   }
 
-  function openSaleModal(selectedProductId = null) {
+  function openSaleModal(selectedProductId = null, initialMode = 'contado') {
     const select = document.getElementById('saleProductSelect');
     if (!select) return;
 
@@ -1127,9 +1200,10 @@ const ThorApp = (function() {
     state.inventory.forEach(p => {
       const disabled = p.cantidad <= 0 ? 'disabled' : '';
       const stockTxt = p.cantidad <= 0 ? '(Agotado)' : `(${p.cantidad} disp.)`;
+      const origTxt = (p.origen === 'local' || p.origen === 'Compra Local') ? '🛍️ Local' : '🚢 Tanque';
       select.innerHTML += `
         <option value="${p.id}" ${disabled} ${selectedProductId === p.id ? 'selected' : ''}>
-          ${p.nombre} — RD$ ${Number(p.precio_venta_dop || 0).toLocaleString()} ${stockTxt}
+          ${p.nombre} — RD$ ${Number(p.precio_venta_dop || 0).toLocaleString()} ${stockTxt} [${origTxt}]
         </option>
       `;
     });
@@ -1141,8 +1215,96 @@ const ThorApp = (function() {
       select.value = selectedProductId;
     }
     
+    setSaleMode(initialMode);
     handleSaleProductChange();
     document.getElementById('modalSale').classList.remove('hidden');
+  }
+
+  function openSaleModalCredit(selectedProductId = null) {
+    openSaleModal(selectedProductId, 'credito');
+  }
+
+  function setSaleMode(mode) {
+    state.saleMode = mode;
+    const contadoBtn = document.getElementById('saleModeContadoBtn');
+    const creditoBtn = document.getElementById('saleModeCreditoBtn');
+    const creditFields = document.getElementById('saleCreditFields');
+    const changeGroup = document.getElementById('saleChangeGroup');
+    const tipoVentaInput = document.getElementById('saleTipoVenta');
+    const paymentMethodGroup = document.getElementById('salePaymentMethodGroup');
+
+    if (tipoVentaInput) tipoVentaInput.value = mode;
+
+    if (mode === 'credito') {
+      if (contadoBtn) {
+        contadoBtn.className = 'btn-tactile py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition bg-white text-slate-700 hover:bg-slate-100 border-slate-300';
+      }
+      if (creditoBtn) {
+        creditoBtn.className = 'btn-tactile py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition bg-amber-600 text-white border-amber-600 shadow-xs';
+      }
+      if (creditFields) creditFields.classList.remove('hidden');
+      if (changeGroup) changeGroup.classList.add('hidden');
+      if (paymentMethodGroup) paymentMethodGroup.classList.add('hidden');
+      recalcularCuotasVenta();
+    } else {
+      if (contadoBtn) {
+        contadoBtn.className = 'btn-tactile py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition bg-amber-600 text-white border-amber-600 shadow-xs';
+      }
+      if (creditoBtn) {
+        creditoBtn.className = 'btn-tactile py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition bg-white text-slate-700 hover:bg-slate-100 border-slate-300';
+      }
+      if (creditFields) creditFields.classList.add('hidden');
+      if (changeGroup) changeGroup.classList.remove('hidden');
+      if (paymentMethodGroup) paymentMethodGroup.classList.remove('hidden');
+    }
+  }
+
+  function recalcularCuotasVenta() {
+    const qtyInput = document.getElementById('saleQtyInput');
+    const priceInput = document.getElementById('salePriceInput');
+    const abonoInput = document.getElementById('saleCreditAbonoInicial');
+    const frecSelect = document.getElementById('saleCreditFrecuencia');
+    const cuotasSelect = document.getElementById('saleCreditNumCuotas');
+    const previewDiv = document.getElementById('saleCreditCuotasPreview');
+
+    if (!previewDiv) return;
+
+    const qty = parseInt(qtyInput ? qtyInput.value : 1) || 1;
+    const price = parseFloat(priceInput ? priceInput.value : 0) || 0;
+    const totalVenta = qty * price;
+    const abonoInicial = Math.min(totalVenta, Math.max(0, parseFloat(abonoInput ? abonoInput.value : 0) || 0));
+    const saldoFinanciar = Math.max(0, totalVenta - abonoInicial);
+    const frecuencia = frecSelect ? frecSelect.value : 'quincenal';
+    const numCuotas = parseInt(cuotasSelect ? cuotasSelect.value : 2) || 2;
+
+    if (totalVenta <= 0) {
+      previewDiv.innerHTML = '<p class="text-slate-400 text-center py-2 text-[11px]">Ingresa precio y cantidad para proyectar el cronograma de cuotas.</p>';
+      return;
+    }
+
+    const plan = ThorAPI.calcularPlanCuotas(totalVenta, abonoInicial, numCuotas, frecuencia, new Date());
+
+    let html = `
+      <div class="flex items-center justify-between text-[11px] font-semibold text-slate-700 pb-1 border-b border-amber-200">
+        <span>Venta: RD$ ${Number(totalVenta).toLocaleString()}</span>
+        ${abonoInicial > 0 ? `<span class="text-emerald-700 font-bold">Inicial: RD$ ${Number(abonoInicial).toLocaleString()}</span>` : ''}
+        <span class="text-amber-900 font-bold">Por Financiar: RD$ ${Number(saldoFinanciar).toLocaleString()}</span>
+      </div>
+      <div class="space-y-1 pt-1">
+    `;
+
+    plan.forEach(c => {
+      html += `
+        <div class="flex items-center justify-between text-[11px] py-1 px-2 rounded-lg bg-amber-50/80 border border-amber-200">
+          <span class="font-bold text-amber-950">Cuota #${c.numero} (${frecuencia === 'quincenal' ? '15 y 30' : 'Mensual'})</span>
+          <span class="font-mono text-slate-600">Vence: <strong>${c.fecha_vencimiento}</strong></span>
+          <span class="font-bold font-mono text-amber-800">RD$ ${Number(c.monto).toLocaleString()}</span>
+        </div>
+      `;
+    });
+
+    html += '</div>';
+    previewDiv.innerHTML = html;
   }
 
   function handleSaleProductChange() {
@@ -1175,6 +1337,9 @@ const ThorApp = (function() {
       if (priceInput) priceInput.value = '';
     }
     recalcularTotalVenta();
+    if (state.saleMode === 'credito') {
+      recalcularCuotasVenta();
+    }
   }
 
   function recalcularTotalVenta() {
@@ -1226,7 +1391,19 @@ const ThorApp = (function() {
     const cant = parseInt(qtyInput ? qtyInput.value : 0) || 0;
     const precio = parseFloat(priceInput ? priceInput.value : 0) || 0;
     const cliente = (customerInput && customerInput.value.trim()) || 'Cliente General';
-    const metodo = (methodInput && methodInput.value) || 'Efectivo';
+
+    const esCredito = (state.saleMode === 'credito');
+    const metodo = esCredito ? 'Crédito / Fiado' : ((methodInput && methodInput.value) || 'Efectivo');
+
+    const phoneInput = document.getElementById('saleCreditPhone');
+    const abonoInput = document.getElementById('saleCreditAbonoInicial');
+    const frecSelect = document.getElementById('saleCreditFrecuencia');
+    const cuotasSelect = document.getElementById('saleCreditNumCuotas');
+
+    const telefonoCliente = esCredito && phoneInput ? phoneInput.value.trim() : '';
+    const abonoInicial = esCredito ? Math.max(0, parseFloat(abonoInput ? abonoInput.value : 0) || 0) : 0;
+    const frecuencia = esCredito && frecSelect ? frecSelect.value : 'quincenal';
+    const numCuotas = esCredito && cuotasSelect ? (parseInt(cuotasSelect.value) || 2) : 1;
 
     if (!idProd) {
       Sonner.warning('Por favor selecciona un producto para vender');
@@ -1249,6 +1426,12 @@ const ThorApp = (function() {
       return;
     }
 
+    const totalVenta = cant * precio;
+    if (esCredito && abonoInicial >= totalVenta) {
+      Sonner.warning('El abono inicial cubre el total de la venta. Puedes registrarla al contado.');
+      return;
+    }
+
     // =========================================================================
     // REDUCCIÓN AUTOMÁTICA DE STOCK INMEDIATA (0 LATENCIA VISUAL)
     // =========================================================================
@@ -1257,7 +1440,6 @@ const ThorApp = (function() {
     prod.estado = prod.cantidad === 0 ? 'Agotado' : (prod.cantidad <= stockMin ? 'Stock Bajo' : 'En Stock');
 
     // Registrar venta en memoria local de inmediato
-    const totalVenta = cant * precio;
     const costoUnit = parseFloat(prod.costo_dop) || 0;
     const ganancia = totalVenta - (costoUnit * cant);
     const idVentaLocal = 'VTA-' + Date.now().toString().slice(-6);
@@ -1273,28 +1455,87 @@ const ThorApp = (function() {
       costo_unitario_dop: costoUnit,
       ganancia_dop: ganancia,
       cliente: cliente,
+      telefono: telefonoCliente,
       metodo_pago: metodo,
-      estado: 'Completada'
+      estado: esCredito ? 'Pendiente de Cobro' : 'Completada',
+      notas: esCredito ? `${numCuotas} cuotas ${frecuencia === 'quincenal' ? 'quincenales (15 y 30)' : 'mensuales'}` : ''
     };
 
     state.sales.unshift(nuevaVenta);
 
+    // Si es crédito, registrar la deuda en Cobros de inmediato
+    let nuevoCobro = null;
+    if (esCredito) {
+      const idCobro = 'COB-' + Date.now().toString().slice(-6);
+      const saldoPendiente = Math.max(0, totalVenta - abonoInicial);
+      const planCuotas = ThorAPI.calcularPlanCuotas(totalVenta, abonoInicial, numCuotas, frecuencia, new Date());
+
+      const historialAbonos = [];
+      if (abonoInicial > 0) {
+        historialAbonos.push({
+          id_abono: 'ABN-INI-' + Date.now(),
+          fecha: new Date().toLocaleString(),
+          monto: abonoInicial,
+          metodo_pago: 'Efectivo',
+          nota: 'Abono inicial en tienda'
+        });
+      }
+
+      let proximoVencimiento = '';
+      const primerPendiente = planCuotas.find(c => c.estado === 'Pendiente');
+      if (primerPendiente) proximoVencimiento = primerPendiente.fecha_vencimiento;
+
+      nuevoCobro = {
+        id_cobro: idCobro,
+        id_venta: idVentaLocal,
+        fecha_venta: nuevaVenta.fecha_venta,
+        cliente: cliente,
+        telefono: telefonoCliente,
+        articulo: prod.nombre,
+        monto_total_dop: totalVenta,
+        abono_inicial_dop: abonoInicial,
+        total_cobrado_dop: abonoInicial,
+        saldo_pendiente_dop: saldoPendiente,
+        num_cuotas: numCuotas,
+        frecuencia: frecuencia,
+        estado: saldoPendiente <= 0 ? 'Saldada' : (abonoInicial > 0 ? 'Parcial' : 'Pendiente'),
+        proximo_vencimiento: proximoVencimiento,
+        historial_abonos: historialAbonos,
+        plan_cuotas: planCuotas
+      };
+
+      state.cobros.unshift(nuevoCobro);
+    }
+
     // Actualizar caché de inmediato en localStorage
     const cached = ThorAPI.getCachedData();
-    if (cached && cached.inventario) {
-      const cp = cached.inventario.find(x => x.id === prod.id);
-      if (cp) {
-        cp.cantidad = prod.cantidad;
-        cp.estado = prod.estado;
+    if (cached) {
+      if (cached.inventario) {
+        const cp = cached.inventario.find(x => x.id === prod.id);
+        if (cp) {
+          cp.cantidad = prod.cantidad;
+          cp.estado = prod.estado;
+        }
       }
-      if (cached.ventas) cached.ventas.unshift(nuevaVenta);
+      if (!cached.ventas) cached.ventas = [];
+      cached.ventas.unshift(nuevaVenta);
+      if (esCredito && nuevoCobro) {
+        if (!cached.cobros) cached.cobros = [];
+        cached.cobros.unshift(nuevoCobro);
+      }
       ThorAPI.setCachedData(cached);
     }
 
     // Cerrar modal y re-renderizar inmediatamente
     closeAllModals();
     renderAll();
-    Sonner.success(`¡Venta registrada! Total: RD$ ${Number(totalVenta).toLocaleString()} — Stock restante: ${prod.cantidad} un.`, 4500);
+
+    if (esCredito) {
+      const saldo = totalVenta - abonoInicial;
+      Sonner.success(`¡Venta a Crédito ("Fiado") registrada! Cliente: ${cliente} • Saldo: RD$ ${Number(saldo).toLocaleString()} en ${numCuotas} cuotas ${frecuencia}.`, 5500);
+    } else {
+      Sonner.success(`¡Venta registrada! Total: RD$ ${Number(totalVenta).toLocaleString()} — Stock restante: ${prod.cantidad} un.`, 4500);
+    }
 
     // Sincronizar con Google Sheets en segundo plano sin congelar la pantalla
     const salePayload = {
@@ -1302,7 +1543,13 @@ const ThorApp = (function() {
       cantidad: cant,
       precio_unitario_dop: precio,
       cliente: cliente,
-      metodo_pago: metodo
+      metodo_pago: metodo,
+      tipo_venta: esCredito ? 'credito' : 'contado',
+      es_credito: esCredito,
+      telefono: telefonoCliente,
+      abono_inicial: abonoInicial,
+      frecuencia: frecuencia,
+      num_cuotas: numCuotas
     };
 
     ThorAPI.registerSale(salePayload).then(res => {
@@ -1498,15 +1745,32 @@ const ThorApp = (function() {
           const min = parseInt(p.stock_minimo) || 3;
           p.estado = p.cantidad > min ? 'En Stock' : (p.cantidad > 0 ? 'Stock Bajo' : 'Agotado');
         }
+
+        // Si tenía cuenta por cobrar asociada, anularla también
+        const cobro = state.cobros.find(c => c.id_venta === idVenta);
+        if (cobro) {
+          cobro.estado = 'Cancelada';
+          cobro.saldo_pendiente_dop = 0;
+        }
+
         const cached = ThorAPI.getCachedData();
-        if (cached && cached.inventario) {
-          const cp = cached.inventario.find(x => x.id === v.id_articulo);
-          if (cp && p) {
-            cp.cantidad = p.cantidad;
-            cp.estado = p.estado;
+        if (cached) {
+          if (cached.inventario && p) {
+            const cp = cached.inventario.find(x => x.id === v.id_articulo);
+            if (cp) {
+              cp.cantidad = p.cantidad;
+              cp.estado = p.estado;
+            }
           }
           const cv = (cached.ventas || []).find(x => x.id_venta === idVenta);
           if (cv) cv.estado = 'Cancelada';
+          if (cached.cobros && cobro) {
+            const cc = cached.cobros.find(x => x.id_venta === idVenta);
+            if (cc) {
+              cc.estado = 'Cancelada';
+              cc.saldo_pendiente_dop = 0;
+            }
+          }
           ThorAPI.setCachedData(cached);
         }
         renderAll();
@@ -1537,6 +1801,592 @@ const ThorApp = (function() {
     Sonner.success('Descargando archivo Excel (.CSV)...');
   }
 
+  // =========================================================================
+  // MÓDULO DE COBROS & CUENTAS POR COBRAR ("FIADO")
+  // =========================================================================
+  function renderCobros() {
+    renderCobrosFilterPills();
+
+    const tbody = document.getElementById('cobrosTableBody');
+    const cardsContainer = document.getElementById('cobrosCardsMobile');
+    const countBadge = document.getElementById('cobrosCountBadge');
+
+    let totalPendiente = 0;
+    let vencenEstaQuincena = 0;
+    let clientesMap = new Set();
+    let totalRecuperado = 0;
+
+    const hoyStr = new Date().toISOString().substring(0, 10);
+    const finQuincena = ThorAPI.obtenerProximaQuincena(new Date(), 1).toISOString().substring(0, 10);
+
+    state.cobros.forEach(c => {
+      totalRecuperado += (parseFloat(c.total_cobrado_dop) || 0);
+      if (c.estado !== 'Saldada' && c.estado !== 'Cancelada') {
+        const saldo = parseFloat(c.saldo_pendiente_dop) || 0;
+        totalPendiente += saldo;
+        if (c.cliente) clientesMap.add(c.cliente.toLowerCase());
+        if (c.proximo_vencimiento && c.proximo_vencimiento <= finQuincena) {
+          vencenEstaQuincena++;
+        }
+      }
+    });
+
+    actualizarTexto('kpiCobrosTotalPendiente', `RD$ ${Math.round(totalPendiente).toLocaleString()}`);
+    actualizarTexto('kpiCobrosVencenHoy', `${vencenEstaQuincena} cuotas`);
+    actualizarTexto('kpiCobrosClientes', `${clientesMap.size} personas`);
+    actualizarTexto('kpiCobrosTotalRecuperado', `RD$ ${Math.round(totalRecuperado).toLocaleString()}`);
+
+    let filtered = state.cobros.filter(c => {
+      const q = state.cobrosSearchQuery.toLowerCase();
+      const matchSearch = !q ||
+        (c.cliente && c.cliente.toLowerCase().includes(q)) ||
+        (c.telefono && c.telefono.toLowerCase().includes(q)) ||
+        (c.articulo && c.articulo.toLowerCase().includes(q)) ||
+        (c.id_cobro && c.id_cobro.toLowerCase().includes(q));
+
+      let matchStatus = true;
+      if (state.selectedCobrosFilter === 'pending') {
+        matchStatus = c.estado === 'Pendiente' || c.estado === 'Parcial';
+      } else if (state.selectedCobrosFilter === 'paid') {
+        matchStatus = c.estado === 'Saldada';
+      } else if (state.selectedCobrosFilter === 'overdue') {
+        matchStatus = (c.estado !== 'Saldada' && c.estado !== 'Cancelada') && c.proximo_vencimiento && c.proximo_vencimiento < hoyStr;
+      }
+
+      return matchSearch && matchStatus;
+    });
+
+    if (countBadge) countBadge.textContent = `${filtered.length} cuentas`;
+
+    if (filtered.length === 0) {
+      const emptyMsg = `
+        <div class="text-center py-12">
+          <span class="text-4xl">💳</span>
+          <p class="mt-2 text-sm text-slate-500 font-medium">No se encontraron cuentas por cobrar con los filtros aplicados.</p>
+          <button onclick="ThorApp.openSaleModalCredit()" class="mt-4 btn-tactile btn-gold text-xs py-2 px-4 shadow-xs">+ Registrar Venta a Crédito ("Fiado")</button>
+        </div>
+      `;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8">${emptyMsg}</td></tr>`;
+      if (cardsContainer) cardsContainer.innerHTML = emptyMsg;
+      return;
+    }
+
+    // Render Desktop Table
+    if (tbody) {
+      let tableHtml = '';
+      filtered.forEach(c => {
+        const isSaldada = c.estado === 'Saldada';
+        const isVencida = !isSaldada && c.proximo_vencimiento && c.proximo_vencimiento < hoyStr;
+        const isHoy = !isSaldada && c.proximo_vencimiento === hoyStr;
+
+        let badgeClass = 'badge-warning';
+        let statusText = c.estado || 'Pendiente';
+
+        if (isSaldada) {
+          badgeClass = 'badge-success';
+          statusText = 'Saldada 🎉';
+        } else if (isVencida) {
+          badgeClass = 'badge-danger';
+          statusText = 'Vencida ⚠️';
+        } else if (c.estado === 'Parcial') {
+          badgeClass = 'badge-gold';
+          statusText = 'Parcial';
+        }
+
+        const total = parseFloat(c.monto_total_dop) || 0;
+        const cobrado = parseFloat(c.total_cobrado_dop) || 0;
+        const saldo = parseFloat(c.saldo_pendiente_dop) || 0;
+        const pct = total > 0 ? Math.round((cobrado / total) * 100) : 0;
+
+        tableHtml += `
+          <tr class="border-b border-slate-100 hover:bg-amber-50/40 transition">
+            <td class="py-3 px-4">
+              <div class="font-semibold text-slate-900 text-sm">${c.cliente}</div>
+              <div class="text-xs text-slate-500 flex items-center gap-1.5">
+                <span>${c.telefono || 'Sin WhatsApp'}</span>
+                ${c.telefono ? `<button onclick="ThorApp.openWhatsAppReminder('${c.id_cobro}')" class="text-emerald-600 hover:text-emerald-700 text-xs font-bold" title="Recordar por WhatsApp">💬</button>` : ''}
+              </div>
+            </td>
+            <td class="py-3 px-3">
+              <div class="font-medium text-slate-800 text-xs">${c.articulo}</div>
+              <div class="text-[11px] text-amber-800 font-medium">${c.num_cuotas} cuotas (${c.frecuencia === 'quincenal' ? '15 y 30' : 'Mensual'})</div>
+            </td>
+            <td class="py-3 px-3 text-right font-bold text-sm text-slate-900 font-mono">
+              RD$ ${Number(total).toLocaleString()}
+            </td>
+            <td class="py-3 px-3 text-right">
+              <div class="text-xs text-emerald-700 font-mono font-semibold">+RD$ ${Number(cobrado).toLocaleString()}</div>
+              <div class="text-xs font-bold font-mono ${isSaldada ? 'text-slate-400' : 'text-amber-900'}">RD$ ${Number(saldo).toLocaleString()}</div>
+            </td>
+            <td class="py-3 px-3 text-center">
+              <div class="w-20 mx-auto bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                <div class="bg-gradient-to-r from-amber-500 to-emerald-500 h-full rounded-full" style="width: ${Math.min(100, pct)}%"></div>
+              </div>
+              <span class="text-[10px] text-slate-500 font-mono block mt-0.5">${pct}%</span>
+            </td>
+            <td class="py-3 px-3 text-center">
+              <span class="text-xs font-medium ${isVencida ? 'text-rose-600 font-bold' : (isHoy ? 'text-amber-700 font-bold' : 'text-slate-700')}">
+                ${c.proximo_vencimiento || '-'}
+              </span>
+            </td>
+            <td class="py-3 px-3 text-center">
+              <span class="${badgeClass}">${statusText}</span>
+            </td>
+            <td class="py-3 px-4 text-right whitespace-nowrap">
+              ${!isSaldada ? `
+                <button onclick="ThorApp.openAbonoModal('${c.id_cobro}')" class="btn-tactile px-2.5 py-1 text-xs bg-emerald-50 text-emerald-800 font-bold rounded-lg border border-emerald-300 hover:bg-emerald-100 mr-1 shadow-2xs">
+                  💰 Abonar
+                </button>
+              ` : ''}
+              <button onclick="ThorApp.openWhatsAppReminder('${c.id_cobro}')" class="btn-tactile p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg mr-1 border border-emerald-200" title="WhatsApp">
+                📲
+              </button>
+              <button onclick="ThorApp.openDetalleCobro('${c.id_cobro}')" class="btn-tactile p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg border border-slate-200" title="Detalle">
+                👁️
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = tableHtml;
+    }
+
+    // Render Mobile Cards
+    if (cardsContainer) {
+      let cardsHtml = '';
+      filtered.forEach(c => {
+        const isSaldada = c.estado === 'Saldada';
+        const isVencida = !isSaldada && c.proximo_vencimiento && c.proximo_vencimiento < hoyStr;
+
+        let badgeClass = 'badge-warning';
+        let statusText = c.estado || 'Pendiente';
+
+        if (isSaldada) {
+          badgeClass = 'badge-success';
+          statusText = 'Saldada 🎉';
+        } else if (isVencida) {
+          badgeClass = 'badge-danger';
+          statusText = 'Vencida ⚠️';
+        } else if (c.estado === 'Parcial') {
+          badgeClass = 'badge-gold';
+          statusText = 'Parcial';
+        }
+
+        const total = parseFloat(c.monto_total_dop) || 0;
+        const cobrado = parseFloat(c.total_cobrado_dop) || 0;
+        const saldo = parseFloat(c.saldo_pendiente_dop) || 0;
+        const pct = total > 0 ? Math.round((cobrado / total) * 100) : 0;
+
+        cardsHtml += `
+          <div class="p-4 rounded-2xl bento-card space-y-3">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <span class="text-[10px] uppercase font-bold text-amber-700 tracking-wider font-mono">${c.id_cobro}</span>
+                <h4 class="font-bold text-slate-900 text-sm">${c.cliente}</h4>
+                <p class="text-xs text-slate-500">${c.articulo} • ${c.num_cuotas} cuotas</p>
+              </div>
+              <span class="${badgeClass}">${statusText}</span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-center">
+              <div>
+                <span class="text-[10px] text-slate-500 block">Total</span>
+                <span class="text-xs font-bold text-slate-800 font-mono">RD$ ${Number(total).toLocaleString()}</span>
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-500 block">Abonado</span>
+                <span class="text-xs font-bold text-emerald-600 font-mono">RD$ ${Number(cobrado).toLocaleString()}</span>
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-500 block">Resta</span>
+                <span class="text-xs font-bold text-amber-900 font-mono">RD$ ${Number(saldo).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <div class="flex items-center justify-between text-[11px] text-slate-500">
+                <span>Progreso de pago:</span>
+                <span class="font-bold font-mono text-slate-700">${pct}%</span>
+              </div>
+              <div class="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                <div class="bg-gradient-to-r from-amber-500 to-emerald-500 h-full rounded-full" style="width: ${Math.min(100, pct)}%"></div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
+              <span class="text-[11px] text-slate-500">Vence: <strong class="${isVencida ? 'text-rose-600' : 'text-slate-700'}">${c.proximo_vencimiento || '-'}</strong></span>
+              <div class="flex items-center gap-1.5">
+                ${!isSaldada ? `
+                  <button onclick="ThorApp.openAbonoModal('${c.id_cobro}')" class="btn-tactile px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-xs">
+                    💰 Abonar
+                  </button>
+                ` : ''}
+                <button onclick="ThorApp.openWhatsAppReminder('${c.id_cobro}')" class="btn-tactile p-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs">
+                  📲
+                </button>
+                <button onclick="ThorApp.openDetalleCobro('${c.id_cobro}')" class="btn-tactile p-1.5 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 text-xs">
+                  👁️
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      cardsContainer.innerHTML = cardsHtml;
+    }
+  }
+
+  function renderCobrosFilterPills() {
+    const container = document.getElementById('cobrosFilterPillsContainer');
+    if (!container) return;
+
+    const hoyStr = new Date().toISOString().substring(0, 10);
+    let total = state.cobros.length;
+    let pendingCount = 0;
+    let paidCount = 0;
+    let overdueCount = 0;
+
+    state.cobros.forEach(c => {
+      if (c.estado === 'Saldada') {
+        paidCount++;
+      } else if (c.estado !== 'Cancelada') {
+        pendingCount++;
+        if (c.proximo_vencimiento && c.proximo_vencimiento < hoyStr) {
+          overdueCount++;
+        }
+      }
+    });
+
+    const pills = [
+      { id: 'all', label: `✨ Todos (${total})` },
+      { id: 'pending', label: `⏳ Con Deuda (${pendingCount})` },
+      { id: 'overdue', label: `⚠️ Vencidos (${overdueCount})` },
+      { id: 'paid', label: `🎉 Saldados (${paidCount})` }
+    ];
+
+    let html = '';
+    pills.forEach(p => {
+      const isSelected = state.selectedCobrosFilter === p.id;
+      html += `
+        <button type="button" onclick="ThorApp.filterCobrosStatus('${p.id}')"
+          class="btn-tactile px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition border ${
+            isSelected
+              ? 'bg-amber-600 text-white font-bold shadow-xs border-amber-600'
+              : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-300 shadow-2xs'
+          }">
+          ${p.label}
+        </button>
+      `;
+    });
+
+    container.innerHTML = html;
+  }
+
+  function filterCobrosStatus(status) {
+    state.selectedCobrosFilter = status;
+    renderCobros();
+  }
+
+  function handleCobrosSearch(query) {
+    state.cobrosSearchQuery = query.trim();
+    renderCobros();
+  }
+
+  function openAbonoModal(idCobro) {
+    const cobro = state.cobros.find(c => c.id_cobro === idCobro);
+    if (!cobro) return;
+
+    document.getElementById('abonoIdCobro').value = cobro.id_cobro;
+    actualizarTexto('modalAbonoSubtitle', `${cobro.cliente} • ${cobro.articulo}`);
+    actualizarTexto('abonoTotalDop', `RD$ ${Number(cobro.monto_total_dop).toLocaleString()}`);
+    actualizarTexto('abonoCobradoDop', `RD$ ${Number(cobro.total_cobrado_dop).toLocaleString()}`);
+    actualizarTexto('abonoPendienteDop', `RD$ ${Number(cobro.saldo_pendiente_dop).toLocaleString()}`);
+
+    const montoInput = document.getElementById('abonoMontoInput');
+    const notaInput = document.getElementById('abonoNotaInput');
+    if (montoInput) {
+      montoInput.max = cobro.saldo_pendiente_dop;
+      let nextCuotaMonto = cobro.saldo_pendiente_dop;
+      if (cobro.plan_cuotas) {
+        const pend = cobro.plan_cuotas.find(c => c.estado === 'Pendiente');
+        if (pend) nextCuotaMonto = pend.monto;
+      }
+      montoInput.value = nextCuotaMonto;
+    }
+    if (notaInput) notaInput.value = 'Pago de cuota';
+
+    const cuotasContainer = document.getElementById('abonoCuotasList');
+    if (cuotasContainer) {
+      let cuotasHtml = '';
+      (cobro.plan_cuotas || []).forEach(c => {
+        const pagada = c.estado === 'Cobrada' || c.estado === 'Saldada';
+        cuotasHtml += `
+          <div class="flex items-center justify-between text-xs p-2 rounded-xl ${pagada ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50 border border-slate-200'}">
+            <span class="font-bold ${pagada ? 'text-emerald-800 line-through' : 'text-slate-800'}">Cuota #${c.numero} (${c.fecha_vencimiento})</span>
+            <span class="font-bold font-mono ${pagada ? 'text-emerald-700' : 'text-amber-800'}">RD$ ${Number(c.monto).toLocaleString()} ${pagada ? '✓ Pagada' : ''}</span>
+          </div>
+        `;
+      });
+      cuotasContainer.innerHTML = cuotasHtml;
+    }
+
+    document.getElementById('modalAbono').classList.remove('hidden');
+  }
+
+  function sugerirMontoAbono(tipo) {
+    const idCobro = document.getElementById('abonoIdCobro').value;
+    const cobro = state.cobros.find(c => c.id_cobro === idCobro);
+    if (!cobro) return;
+
+    const montoInput = document.getElementById('abonoMontoInput');
+    if (!montoInput) return;
+
+    if (tipo === 'todo') {
+      montoInput.value = cobro.saldo_pendiente_dop;
+    } else if (tipo === 'cuota') {
+      let nextCuotaMonto = cobro.saldo_pendiente_dop;
+      if (cobro.plan_cuotas) {
+        const pend = cobro.plan_cuotas.find(c => c.estado === 'Pendiente');
+        if (pend) nextCuotaMonto = pend.monto;
+      }
+      montoInput.value = nextCuotaMonto;
+    }
+  }
+
+  async function handleRegisterAbono(e) {
+    if (e) e.preventDefault();
+    const idCobro = document.getElementById('abonoIdCobro').value;
+    const montoInput = document.getElementById('abonoMontoInput');
+    const metodoInput = document.getElementById('abonoMetodoPago');
+    const notaInput = document.getElementById('abonoNotaInput');
+    const btnSubmit = document.getElementById('btnSubmitAbono');
+
+    const monto = parseFloat(montoInput ? montoInput.value : 0) || 0;
+    const metodo = metodoInput ? metodoInput.value : 'Efectivo';
+    const nota = (notaInput && notaInput.value.trim()) || 'Abono a cuota';
+
+    if (monto <= 0) {
+      Sonner.warning('El monto del abono debe ser mayor a RD$ 0');
+      return;
+    }
+
+    const cobro = state.cobros.find(c => c.id_cobro === idCobro);
+    if (!cobro) {
+      Sonner.error('No se encontró el registro de cobro');
+      return;
+    }
+
+    if (monto > cobro.saldo_pendiente_dop) {
+      Sonner.warning(`El monto (RD$ ${Number(monto).toLocaleString()}) no puede exceder el saldo restante (RD$ ${Number(cobro.saldo_pendiente_dop).toLocaleString()})`);
+      return;
+    }
+
+    if (btnSubmit) btnSubmit.disabled = true;
+
+    try {
+      const res = await ThorAPI.registerPayment({
+        id_cobro: idCobro,
+        monto: monto,
+        metodo_pago: metodo,
+        nota: nota
+      });
+
+      if (res && res.status === 'success') {
+        const nuevoCobrado = cobro.total_cobrado_dop + monto;
+        const nuevoSaldo = Math.max(0, cobro.saldo_pendiente_dop - monto);
+        cobro.total_cobrado_dop = nuevoCobrado;
+        cobro.saldo_pendiente_dop = nuevoSaldo;
+        cobro.estado = nuevoSaldo <= 0 ? 'Saldada' : 'Parcial';
+
+        let restanteParaCuotas = monto;
+        for (let c of (cobro.plan_cuotas || [])) {
+          if (c.estado !== 'Cobrada' && restanteParaCuotas > 0) {
+            const faltaPorCuota = c.monto - (c.monto_abonado || 0);
+            if (restanteParaCuotas >= faltaPorCuota) {
+              c.monto_abonado = c.monto;
+              c.estado = 'Cobrada';
+              c.fecha_pago = new Date().toISOString().substring(0, 10);
+              restanteParaCuotas -= faltaPorCuota;
+            } else {
+              c.monto_abonado = (c.monto_abonado || 0) + restanteParaCuotas;
+              restanteParaCuotas = 0;
+            }
+          }
+        }
+
+        const primerPendiente = (cobro.plan_cuotas || []).find(c => c.estado === 'Pendiente');
+        cobro.proximo_vencimiento = primerPendiente ? primerPendiente.fecha_vencimiento : 'Saldada';
+
+        if (!cobro.historial_abonos) cobro.historial_abonos = [];
+        cobro.historial_abonos.push({
+          id_abono: 'ABN-' + Date.now().toString().slice(-6),
+          fecha: new Date().toLocaleString(),
+          monto: monto,
+          metodo_pago: metodo,
+          nota: nota
+        });
+
+        const cached = ThorAPI.getCachedData();
+        if (cached && cached.cobros) {
+          const idx = cached.cobros.findIndex(x => x.id_cobro === idCobro);
+          if (idx >= 0) cached.cobros[idx] = cobro;
+          ThorAPI.setCachedData(cached);
+        }
+
+        closeAllModals();
+        renderAll();
+
+        if (nuevoSaldo <= 0) {
+          Sonner.success(`🎉 ¡Cuenta saldada por completo! ${cobro.cliente} ha completado el pago de RD$ ${Number(cobro.monto_total_dop).toLocaleString()}.`, 6000);
+        } else {
+          Sonner.success(`Abono de RD$ ${Number(monto).toLocaleString()} registrado con éxito. Resta: RD$ ${Number(nuevoSaldo).toLocaleString()}`, 4500);
+        }
+
+        sincronizarConNube(false);
+      } else {
+        Sonner.error(res.message || 'Error al procesar el abono');
+      }
+    } catch (err) {
+      Sonner.error('Error al registrar abono: ' + err.message);
+    } finally {
+      if (btnSubmit) btnSubmit.disabled = false;
+    }
+  }
+
+  function openWhatsAppReminder(idCobro) {
+    const cobro = state.cobros.find(c => c.id_cobro === idCobro);
+    if (!cobro) return;
+
+    let telefono = (cobro.telefono || '').trim();
+    if (!telefono) {
+      telefono = prompt(`Ingresa el número de WhatsApp para ${cobro.cliente} (ej: 809-555-0123):`, '');
+      if (!telefono) {
+        Sonner.info('No se ingresó teléfono. Puedes agregarlo en cualquier momento.');
+        return;
+      }
+      cobro.telefono = telefono.trim();
+      const cached = ThorAPI.getCachedData();
+      if (cached && cached.cobros) {
+        const c = cached.cobros.find(x => x.id_cobro === idCobro);
+        if (c) c.telefono = telefono.trim();
+        ThorAPI.setCachedData(cached);
+      }
+      renderCobros();
+    }
+
+    let cleanPhone = telefono.replace(/\D/g, '');
+    if (cleanPhone.length === 10) {
+      cleanPhone = '1' + cleanPhone;
+    }
+
+    let proximoMonto = cobro.saldo_pendiente_dop;
+    let proximaFecha = cobro.proximo_vencimiento || 'próximos días';
+    if (cobro.plan_cuotas && cobro.plan_cuotas.length > 0) {
+      const pend = cobro.plan_cuotas.find(c => c.estado === 'Pendiente');
+      if (pend) {
+        proximoMonto = pend.monto;
+        proximaFecha = pend.fecha_vencimiento;
+      }
+    }
+
+    const mensaje = `¡Hola ${cobro.cliente}! Te saluda Pamela de Thor Essence ✨. Te escribo con un cordial saludo para recordarte la cuota pendiente de tu compra (${cobro.articulo}) por valor de RD$ ${Number(proximoMonto).toLocaleString()} acordada para el ${proximaFecha}. Saldo restante total: RD$ ${Number(cobro.saldo_pendiente_dop).toLocaleString()}. ¡Muchas gracias por tu preferencia y confianza! 💖`;
+
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(mensaje)}`;
+    window.open(url, '_blank');
+  }
+
+  function openDetalleCobro(idCobro) {
+    const cobro = state.cobros.find(c => c.id_cobro === idCobro);
+    if (!cobro) return;
+
+    const titleCliente = document.getElementById('detalleCobroCliente');
+    const body = document.getElementById('detalleCobroBody');
+    if (titleCliente) titleCliente.textContent = `${cobro.cliente} • ${cobro.articulo} (${cobro.telefono || 'Sin teléfono'})`;
+
+    if (body) {
+      const pct = cobro.monto_total_dop > 0 ? Math.round((cobro.total_cobrado_dop / cobro.monto_total_dop) * 100) : 0;
+      let html = `
+        <div class="grid grid-cols-3 gap-2 p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 text-center">
+          <div>
+            <span class="text-[10px] text-slate-500 block">Total Fiado</span>
+            <span class="font-bold text-sm text-slate-900 font-mono">RD$ ${Number(cobro.monto_total_dop).toLocaleString()}</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-500 block">Abonado</span>
+            <span class="font-bold text-sm text-emerald-600 font-mono">RD$ ${Number(cobro.total_cobrado_dop).toLocaleString()} (${pct}%)</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-500 block">Saldo Restante</span>
+            <span class="font-bold text-sm text-amber-900 font-mono">RD$ ${Number(cobro.saldo_pendiente_dop).toLocaleString()}</span>
+          </div>
+        </div>
+
+        <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+          <div class="bg-gradient-to-r from-amber-500 to-emerald-500 h-full rounded-full transition-all duration-500" style="width: ${Math.min(100, pct)}%"></div>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-xs text-slate-800 mb-2">Cronograma de Cuotas (${cobro.frecuencia === 'quincenal' ? 'Quincenal 15 y 30' : 'Mensual'})</h4>
+          <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+      `;
+
+      (cobro.plan_cuotas || []).forEach(c => {
+        const pagada = c.estado === 'Cobrada' || c.estado === 'Saldada';
+        html += `
+          <div class="flex items-center justify-between p-2 rounded-xl text-xs ${pagada ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50 border border-slate-200'}">
+            <div class="flex items-center gap-2">
+              <span class="w-5 h-5 rounded-full ${pagada ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-slate-700'} flex items-center justify-center text-[10px] font-bold">
+                ${pagada ? '✓' : c.numero}
+              </span>
+              <div>
+                <span class="font-bold text-slate-800">Cuota #${c.numero}</span>
+                <span class="text-[10px] text-slate-500 block">Vence: <strong>${c.fecha_vencimiento}</strong></span>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="font-bold font-mono ${pagada ? 'text-emerald-700' : 'text-slate-800'}">RD$ ${Number(c.monto).toLocaleString()}</span>
+              <span class="block text-[10px] ${pagada ? 'text-emerald-600 font-semibold' : 'text-amber-700 font-semibold'}">${pagada ? 'Pagada (' + (c.fecha_pago || 'Abono') + ')' : 'Pendiente'}</span>
+            </div>
+          </div>
+        `;
+      });
+
+      html += `
+          </div>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-xs text-slate-800 mb-2">Historial de Abonos Recibidos</h4>
+          <div class="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+      `;
+
+      if (!cobro.historial_abonos || cobro.historial_abonos.length === 0) {
+        html += `<p class="text-[11px] text-slate-400 py-2 text-center">No se han registrado abonos todavía.</p>`;
+      } else {
+        cobro.historial_abonos.forEach(ab => {
+          html += `
+            <div class="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200 text-xs">
+              <div>
+                <span class="font-semibold text-slate-800">${ab.nota || 'Abono'}</span>
+                <span class="text-[10px] text-slate-400 block">${ab.fecha} • ${ab.metodo_pago || 'Efectivo'}</span>
+              </div>
+              <span class="font-bold font-mono text-emerald-600">+RD$ ${Number(ab.monto).toLocaleString()}</span>
+            </div>
+          `;
+        });
+      }
+
+      html += `
+          </div>
+        </div>
+      `;
+
+      body.innerHTML = html;
+    }
+
+    document.getElementById('modalDetalleCobro').classList.remove('hidden');
+  }
+
   function setupEventListeners() {
     const searchInput = document.getElementById('inventorySearchInput');
     if (searchInput) {
@@ -1546,11 +2396,21 @@ const ThorApp = (function() {
       });
     }
 
+    const cobrosSearch = document.getElementById('cobrosSearchInput');
+    if (cobrosSearch) {
+      cobrosSearch.addEventListener('input', (e) => {
+        handleCobrosSearch(e.target.value);
+      });
+    }
+
     const formProduct = document.getElementById('formProduct');
     if (formProduct) formProduct.addEventListener('submit', handleSaveProduct);
 
     const formSale = document.getElementById('formSale');
     if (formSale) formSale.addEventListener('submit', handleRegisterSale);
+
+    const formAbono = document.getElementById('formAbono');
+    if (formAbono) formAbono.addEventListener('submit', handleRegisterAbono);
 
     const formTank = document.getElementById('formTank');
     if (formTank) formTank.addEventListener('submit', handleSaveTank);
@@ -1614,6 +2474,9 @@ const ThorApp = (function() {
     openEditProductModal,
     openSaleModal,
     openSaleModalFor: (id) => openSaleModal(id),
+    openSaleModalCredit,
+    setSaleMode,
+    recalcularCuotasVenta,
     openTankModal,
     addTankDraftItem,
     removeTankDraftItem,
@@ -1629,6 +2492,16 @@ const ThorApp = (function() {
       switchTab('inventario'); 
       renderInventory(); 
     },
+    // Cobros & Cuentas por Cobrar
+    renderCobros,
+    filterCobrosStatus,
+    handleCobrosSearch,
+    openAbonoModal,
+    sugerirMontoAbono,
+    handleRegisterAbono,
+    openWhatsAppReminder,
+    openDetalleCobro,
+    // Sincronización & Config
     sincronizarConNube: () => sincronizarConNube(true),
     actualizarTasaCambio: () => actualizarTasaCambio(true),
     exportInventoryToExcel,
