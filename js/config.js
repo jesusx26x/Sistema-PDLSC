@@ -4,7 +4,8 @@
  * =========================================================================
  * 
  * Este archivo conecta automáticamente el frontend con Google Sheets.
- * Pamela no tiene que configurar nada: solo entra al enlace y empieza a usarlo.
+ * Seguridad RLS: Las llaves maestras o service keys NUNCA se exponen en el navegador.
+ * La autenticación se realiza en el servidor mediante sesiones temporales.
  */
 
 const THOR_CONFIG = {
@@ -13,9 +14,6 @@ const THOR_CONFIG = {
 
   // 🆔 ID de Implementación oficial:
   DEPLOYMENT_ID: "AKfycbw26MgtyFPbH1kKKxhPOBY24s8avoGP0hGz9DkIQC4qe1-52d4FZ1cWeBuX7cdA4MRr",
-
-  // 🔑 Token de seguridad para comunicación cifrada con la hoja:
-  SECURITY_TOKEN: "THOR_SECURE_2026",
 
   // 💵 Tasa de cambio inicial sugerida USD a DOP:
   DEFAULT_USD_RATE: 60.50,

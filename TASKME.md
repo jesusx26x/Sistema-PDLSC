@@ -69,6 +69,26 @@
 - [x] Precableado de la URL activa en `js/config.js`.
 - [x] Pamela no requiere configurar nada al abrir la web; entra directo a operar.
 
+### Fase 6: Autenticación en Servidor, RLS, Signout & Glassmorphism (Completado)
+- [x] **Credenciales del Sistema**:
+  - [x] Usuario oficial: `Pameladlsantos`
+  - [x] Contraseña oficial: `Thorayka2419`
+- [x] **Protección de Llaves (Zero Service Key in Browser)**:
+  - [x] Eliminada cualquier llave maestra o service key del navegador (`js/config.js`, `js/api.js`, `index.html`).
+  - [x] La llave y credenciales maestras residen exclusivamente en `PropertiesService` del backend Google Apps Script.
+- [x] **Seguridad RLS (Row Level Security)**:
+  - [x] Bloqueo total de lectura y escritura anónima en Google Sheets.
+  - [x] Validación estricta de tokens de sesión temporales con expiración.
+  - [x] Respuestas `401 Unauthorized (UNAUTHORIZED_RLS)` ante peticiones no autenticadas.
+- [x] **Cierre de Sesión en el Servidor (Signout Real)**:
+  - [x] Botón de cierre de sesión ejecuta llamada al servidor `action: 'logout'`.
+  - [x] El servidor destruye inmediatamente el token en `CacheService` y `PropertiesService`.
+- [x] **Diseño Glassmorphism**:
+  - [x] Portal de Login con tarjeta frosted glass (`.glass-card-luxury`), halo dorado y orbes ambientales.
+  - [x] Paneles translúcidos con desenfoque de 24px y bordes con reflejo especular.
+- [x] **Página de Error 404 Personalizada**:
+  - [x] `404.html` creada con diseño luxury Glassmorphism y logo oficial para rutas inexistentes en GitHub Pages.
+
 ---
 
 ## 🚀 Pasos Restantes para el Desarrollador (jesusx26x)

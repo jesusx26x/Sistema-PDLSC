@@ -35,15 +35,111 @@ const ThorApp = (function() {
     setupCurrencyHandlers();
     setupEventListeners();
 
-    // Cargar caché local de inmediato (latencia < 50ms)
-    cargarDatosDesdeCache();
-    renderAll();
+    // Configurar escucha de eventos de seguridad RLS
+    window.addEventListener('thor:session-expired', () => {
+      Sonner.warning('Tu sesión ha expirado en el servidor. Por favor ingresa nuevamente.', 4000);
+      showLoginView();
+    });
 
-    // Actualizar tasa de cambio en segundo plano sin bloquear
-    actualizarTasaCambio(false);
+    // Validar estado de autenticación (RLS)
+    if (checkAuthStatus()) {
+      // Cargar datos locales de inmediato
+      cargarDatosDesdeCache();
+      renderAll();
 
-    // Sincronizar automáticamente con Google Sheets
-    await sincronizarConNube(false);
+      // Actualizar tasa de cambio en segundo plano sin bloquear
+      actualizarTasaCambio(false);
+
+      // Sincronizar automáticamente con Google Sheets
+      await sincronizarConNube(false);
+    }
+  }
+
+  function checkAuthStatus() {
+    const isAuth = ThorAPI.isAuthenticated();
+    if (isAuth) {
+      hideLoginView();
+      return true;
+    } else {
+      showLoginView();
+      return false;
+    }
+  }
+
+  function showLoginView() {
+    const el = document.getElementById('view-login');
+    if (el) el.classList.remove('hidden');
+  }
+
+  function hideLoginView() {
+    const el = document.getElementById('view-login');
+    if (el) el.classList.add('hidden');
+  }
+
+  function togglePasswordVisibility() {
+    const passInput = document.getElementById('loginPassword');
+    const icon = document.getElementById('togglePasswordIcon');
+    if (!passInput) return;
+    if (passInput.type === 'password') {
+      passInput.type = 'text';
+      if (icon) icon.textContent = '🙈';
+    } else {
+      passInput.type = 'password';
+      if (icon) icon.textContent = '👁️';
+    }
+  }
+
+  async function handleLogin(e) {
+    if (e) e.preventDefault();
+    const userInput = document.getElementById('loginUsername');
+    const passInput = document.getElementById('loginPassword');
+    const rememberInput = document.getElementById('loginRemember');
+    const btnSubmit = document.getElementById('btnLoginSubmit');
+    const btnText = document.getElementById('loginBtnText');
+    const btnIcon = document.getElementById('loginBtnIcon');
+
+    const username = userInput ? userInput.value.trim() : '';
+    const password = passInput ? passInput.value.trim() : '';
+    const remember = rememberInput ? rememberInput.checked : true;
+
+    if (!username || !password) {
+      Sonner.warning('Por favor completa tu usuario y contraseña');
+      return;
+    }
+
+    if (btnSubmit) btnSubmit.disabled = true;
+    if (btnText) btnText.textContent = 'Verificando con servidor...';
+    if (btnIcon) btnIcon.textContent = '⏳';
+
+    try {
+      const res = await ThorAPI.login(username, password, remember);
+      if (res.success) {
+        Sonner.success('¡Bienvenida, Pamela! Conexión segura RLS activa.');
+        hideLoginView();
+        cargarDatosDesdeCache();
+        renderAll();
+        actualizarTasaCambio(false);
+        await sincronizarConNube(false);
+      } else {
+        Sonner.error(res.message || 'Usuario o contraseña incorrectos');
+      }
+    } catch (err) {
+      Sonner.error('Error al iniciar sesión: ' + err.message);
+    } finally {
+      if (btnSubmit) btnSubmit.disabled = false;
+      if (btnText) btnText.textContent = 'Iniciar Sesión';
+      if (btnIcon) btnIcon.textContent = '✨';
+    }
+  }
+
+  async function logout() {
+    const confirmLogout = confirm('¿Deseas cerrar tu sesión? El servidor destruirá la sesión activa de forma segura.');
+    if (!confirmLogout) return;
+
+    Sonner.info('Cerrando sesión en el servidor...', 1500);
+    await ThorAPI.logout();
+    showLoginView();
+    Sonner.success('Sesión cerrada de forma segura en el servidor.');
   }
 
   function cargarDatosDesdeCache() {
@@ -1361,6 +1457,12 @@ const ThorApp = (function() {
     sincronizarConNube: () => sincronizarConNube(true),
     actualizarTasaCambio: () => actualizarTasaCambio(true),
     exportInventoryToExcel,
-    closeAllModals
+    closeAllModals,
+    // Autenticación & RLS
+    handleLogin,
+    logout,
+    togglePasswordVisibility,
+    showLoginView,
+    hideLoginView
   };
 })();

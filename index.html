@@ -49,6 +49,75 @@
   <div id="sonner-container"></div>
 
   <!-- =========================================================================
+       PORTAL DE ACCESO / LOGIN (GLASSMORPHISM & RLS)
+       ========================================================================= -->
+  <div id="view-login" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#040714] overflow-hidden">
+    <!-- Luces ambientales de fondo (Glassmorphism Ambient Lighting) -->
+    <div class="ambient-glow-gold -top-20 -left-20"></div>
+    <div class="ambient-glow-navy -bottom-32 -right-32"></div>
+    <div class="ambient-glow-gold bottom-10 left-1/3 opacity-30"></div>
+
+    <!-- Tarjeta de Login Glassmorphism -->
+    <div class="glass-card-luxury relative w-full max-w-md p-6 sm:p-8 space-y-6 shadow-2xl border border-amber-500/30 z-10">
+      <!-- Encabezado con Logo -->
+      <div class="text-center space-y-3">
+        <div class="brand-logo-frame w-20 h-20 mx-auto shadow-2xl">
+          <img src="assets/logo.jpg" alt="Thor Essence Logo" class="w-full h-full object-cover">
+        </div>
+        <div>
+          <h1 class="font-brand text-2xl font-bold text-amber-300 tracking-wider">THOR ESSENCE</h1>
+          <p class="font-brand text-xs text-amber-200/80 italic -mt-0.5">Perfumes, Splash & Variedades</p>
+          <div class="inline-flex items-center gap-1.5 mt-2 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-semibold text-emerald-400">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Seguridad RLS Activa</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Formulario de Autenticación -->
+      <form id="loginForm" onsubmit="ThorApp.handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">Usuario del Sistema</label>
+          <div class="relative">
+            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">👤</span>
+            <input type="text" id="loginUsername" required autocomplete="username" placeholder="Ingresa tu usuario" value="Pameladlsantos" class="glass-input pl-10 text-sm w-full font-medium">
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block text-xs font-semibold text-slate-300">Contraseña</label>
+            <span class="text-[10px] text-amber-400/80 font-mono">Thor Essence 2026</span>
+          </div>
+          <div class="relative">
+            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔒</span>
+            <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••" value="Thorayka2419" class="glass-input pl-10 pr-10 text-sm w-full font-mono">
+            <button type="button" onclick="ThorApp.togglePasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-300 text-xs transition">
+              <span id="togglePasswordIcon">👁️</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+          <label class="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-300">
+            <input type="checkbox" id="loginRemember" checked class="rounded border-amber-500/40 text-amber-500 focus:ring-amber-500 bg-slate-900">
+            <span>Recordar mi sesión</span>
+          </label>
+        </div>
+
+        <button type="submit" id="btnLoginSubmit" class="btn-tactile btn-gold w-full py-3 text-sm font-bold shadow-xl flex items-center justify-center gap-2 mt-2">
+          <span id="loginBtnIcon">✨</span>
+          <span id="loginBtnText">Iniciar Sesión</span>
+        </button>
+
+        <p class="text-[11px] text-center text-slate-400 pt-2 border-t border-slate-800/80">
+          Protección RLS: El servidor destruye las sesiones activas en cada cierre de sesión.
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================================
        SIDEBAR DESKTOP / TABLET (UX-UI-PRO-MAX)
        ========================================================================= -->
   <aside class="hidden md:flex md:w-64 lg:w-72 bg-[#080E24] border-r border-amber-500/20 flex-col justify-between shrink-0 h-screen sticky top-0 z-30">
@@ -111,6 +180,29 @@
           ⚙️
         </button>
       </div>
+
+      <!-- Tarjeta de Usuario Autenticado & Signout en Servidor (Sidebar) -->
+      <div class="pt-2 border-t border-amber-500/20">
+        <div class="p-2.5 rounded-2xl bg-slate-900/80 border border-amber-500/25 flex items-center justify-between shadow-sm">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-600 to-amber-300 p-0.5 shrink-0 shadow-md">
+              <div class="w-full h-full rounded-full bg-[#080E24] flex items-center justify-center font-brand font-bold text-xs text-amber-300">
+                P
+              </div>
+            </div>
+            <div class="min-w-0">
+              <span id="sidebarUserName" class="text-xs font-bold text-slate-200 block truncate">Pamela</span>
+              <span class="text-[9px] text-emerald-400 block font-medium flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                Admin (RLS)
+              </span>
+            </div>
+          </div>
+          <button onclick="ThorApp.logout()" class="btn-tactile p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-xs transition border border-red-500/20 shrink-0" title="Cerrar sesión en el servidor">
+            🚪
+          </button>
+        </div>
+      </div>
     </div>
   </aside>
 
@@ -144,7 +236,7 @@
         </button>
       </div>
 
-      <!-- Botones de Acción Rápida (Emil Kowalski Tactile Style) -->
+      <!-- Botones de Acción Rápida & Usuario (Emil Kowalski Tactile Style) -->
       <div class="flex items-center gap-2">
         <button onclick="ThorApp.openSaleModal()" class="btn-tactile btn-gold text-xs py-2 px-3 sm:px-4">
           <span>💰</span>
@@ -157,6 +249,23 @@
         <button onclick="ThorApp.openNewProductModal()" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 flex items-center gap-1">
           <span>+</span>
           <span class="hidden sm:inline">Producto</span>
+        </button>
+
+        <!-- Chip de Usuario y Cerrar Sesión en Desktop -->
+        <div class="hidden lg:flex items-center gap-2 pl-2 border-l border-slate-800 ml-1">
+          <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900/80 border border-amber-500/25 text-xs">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span class="font-bold text-slate-200">Pamela</span>
+          </div>
+          <button onclick="ThorApp.logout()" class="btn-tactile px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 text-xs font-semibold transition" title="Cerrar sesión en el servidor">
+            <span>🚪</span>
+            <span class="hidden xl:inline">Salir</span>
+          </button>
+        </div>
+
+        <!-- Botón Móvil Cerrar Sesión -->
+        <button onclick="ThorApp.logout()" class="btn-tactile md:hidden p-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs" title="Cerrar sesión en el servidor">
+          🚪
         </button>
       </div>
     </header>
@@ -723,10 +832,6 @@
         <div>
           <label class="block text-[11px] font-semibold text-slate-400 mb-1">URL de Google Apps Script</label>
           <input type="url" id="cfgGasUrl" placeholder="https://script.google.com/macros/s/.../exec" class="form-input text-xs font-mono">
-        </div>
-        <div>
-          <label class="block text-[11px] font-semibold text-slate-400 mb-1">Token de Seguridad</label>
-          <input type="text" id="cfgSecurityToken" value="THOR_SECURE_2026" class="form-input text-xs font-mono">
         </div>
         <div>
           <label class="block text-[11px] font-semibold text-slate-400 mb-1">Tasa Fija USD</label>

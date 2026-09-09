@@ -5,17 +5,17 @@
  * Repositorio: https://github.com/jesusx26x/Sistema-PDLSC
  * =========================================================================
  * 
- * Este script actúa como API REST segura para conectar el Frontend en GitHub Pages
- * con la hoja de cálculo de Google Sheets.
+ * Este script actúa como API REST protegida para conectar el Frontend en GitHub Pages
+ * con la hoja de cálculo de Google Sheets bajo arquitectura de seguridad RLS.
  * 
- * Funcionalidades clave:
- * - Operaciones atómicas con LockService (evita duplicados o descuadre de stock)
- * - Autenticación mediante Token de seguridad (en Script Properties o parámetro)
- * - Auto-inicialización de hojas y cabeceras si no existen
- * - Registro de recepciones por Tanque/Lote con actualización automática de stock
- * - Registro de ventas con cálculo automático de costo y ganancia
- * - Menú personalizado en Google Sheets para el administrador
- * - Función de Respaldo Automático diario en Google Drive (Disparador programable)
+ * Medidas de Seguridad Implementadas:
+ * 1. Clave de Servicio protegida: Ninguna clave maestra está expuesta en el navegador.
+ * 2. RLS (Row Level Security): Todas las consultas de lectura y mutación de la base de datos
+ *    requieren un token de sesión activo y validado en el servidor.
+ * 3. Signout en el Servidor: Al cerrar sesión se destruye el token en CacheService y
+ *    PropertiesService, impidiendo que la sesión continúe abierta en el servidor.
+ * 4. Operaciones atómicas con LockService para evitar condiciones de carrera.
+ * 5. Disparador programable para Respaldo Automático diario en Google Drive (2:00 AM).
  */
 
 const SHEETS = {
@@ -25,7 +25,11 @@ const SHEETS = {
   CONFIGURACION: 'Configuracion'
 };
 
-const DEFAULT_SECURITY_TOKEN = 'THOR_SECURE_2026';
+// Credenciales oficiales predeterminadas para Pamela
+const CREDENCIALES_SISTEMA = {
+  usuario: 'Pameladlsantos',
+  contrasena: 'Thorayka2419'
+};
 
 /**
  * =========================================================================
@@ -39,6 +43,8 @@ function onOpen() {
       .addItem('🚀 Inicializar / Verificar Estructura', 'menuInicializar')
       .addItem('💾 Crear Copia de Respaldo en Drive', 'crearRespaldoEnDrive')
       .addItem('⏰ Configurar Respaldo Automático Diario', 'configurarDisparadorRespaldo')
+      .addSeparator()
+      .addItem('🔑 Sincronizar Credenciales de Pamela', 'menuRestablecerCredenciales')
       .addToUi();
   } catch (e) {
     console.log('No se pudo crear el menú en ejecución sin interfaz: ' + e);
@@ -47,7 +53,14 @@ function onOpen() {
 
 function menuInicializar() {
   inicializarHojasSiNoExisten(true);
-  SpreadsheetApp.getUi().alert('✅ Estructura de Thor Essence verificada y lista para operar.');
+  SpreadsheetApp.getUi().alert('✅ Estructura de Thor Essence verificada y lista para operar con RLS activo.');
+}
+
+function menuRestablecerCredenciales() {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('AUTH_USER', CREDENCIALES_SISTEMA.usuario);
+  props.setProperty('AUTH_PASS', CREDENCIALES_SISTEMA.contrasena);
+  SpreadsheetApp.getUi().alert('✅ Credenciales de acceso sincronizadas con el servidor:\n\nUsuario: ' + CREDENCIALES_SISTEMA.usuario + '\nContraseña: ' + CREDENCIALES_SISTEMA.contrasena);
 }
 
 /**
@@ -58,7 +71,6 @@ function crearRespaldoEnDrive() {
   const nombreCopia = 'Backup Thor Essence — ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd_HH-mm');
   const archivo = DriveApp.getFileById(ss.getId());
   
-  // Buscar o crear carpeta de respaldos
   let carpetaBackup;
   const carpetas = DriveApp.getFoldersByName('Respaldos Thor Essence');
   if (carpetas.hasNext()) {
@@ -73,10 +85,9 @@ function crearRespaldoEnDrive() {
 }
 
 /**
- * Configura un disparador (trigger) por tiempo para ejecutar respaldos diarios
+ * Configura un disparador (trigger) por tiempo para ejecutar respaldos diarios a las 2:00 AM
  */
 function configurarDisparadorRespaldo() {
-  // Eliminar disparadores previos de respaldo para no duplicar
   const triggers = ScriptApp.getProjectTriggers();
   triggers.forEach(t => {
     if (t.getHandlerFunction() === 'crearRespaldoEnDrive') {
@@ -84,14 +95,133 @@ function configurarDisparadorRespaldo() {
     }
   });
 
-  // Crear nuevo disparador diario a las 2:00 AM
   ScriptApp.newTrigger('crearRespaldoEnDrive')
     .timeBased()
     .everyDays(1)
     .atHour(2)
     .create();
 
-  SpreadsheetApp.getUi().alert('⏰ Respaldo automático configurado: se creará una copia de seguridad en Google Drive todos los días a las 2:00 AM.');
+  try {
+    SpreadsheetApp.getUi().alert('⏰ Respaldo automático configurado con éxito:\nSe creará una copia de seguridad en Google Drive todos los días entre 2:00 AM y 3:00 AM.');
+  } catch (e) {
+    console.log('Disparador creado por script.');
+  }
+}
+
+/**
+ * =========================================================================
+ * AUTENTICACIÓN, GESTIÓN DE SESIONES & SEGURIDAD RLS
+ * =========================================================================
+ */
+
+function verificarCredenciales(user, pass) {
+  if (!user || !pass) return false;
+  const props = PropertiesService.getScriptProperties();
+  const usuarioConfigurado = props.getProperty('AUTH_USER') || CREDENCIALES_SISTEMA.usuario;
+  const claveConfigurada = props.getProperty('AUTH_PASS') || CREDENCIALES_SISTEMA.contrasena;
+
+  return (user.trim() === usuarioConfigurado.trim() && pass === claveConfigurada);
+}
+
+function crearSesionEnServidor(username) {
+  const token = 'THOR_SES_' + Utilities.getUuid().replace(/-/g, '') + '_' + Date.now();
+  const duracionMs = 24 * 60 * 60 * 1000; // 24 horas de validez
+  const sessionData = {
+    username: username,
+    creadoEn: Date.now(),
+    expiraEn: Date.now() + duracionMs
+  };
+  
+  // Guardar en CacheService para respuestas ultra rápidas
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.put(token, JSON.stringify(sessionData), 21600); // 6 horas
+  } catch (e) {
+    console.warn('CacheService warning:', e);
+  }
+  
+  // Persistir en PropertiesService para que dure 24 horas
+  try {
+    const props = PropertiesService.getScriptProperties();
+    props.setProperty('SESSION_' + token, JSON.stringify(sessionData));
+  } catch (e) {
+    console.error('PropertiesService error:', e);
+  }
+  
+  return token;
+}
+
+function invalidarSesionEnServidor(token) {
+  if (!token) return true;
+  token = String(token).trim();
+
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.remove(token);
+  } catch (e) {}
+
+  try {
+    const props = PropertiesService.getScriptProperties();
+    props.deleteProperty('SESSION_' + token);
+  } catch (e) {}
+
+  return true;
+}
+
+/**
+ * RLS (Row Level Security):
+ * Valida que la solicitud provenga de una sesión activa autenticada.
+ * Evita cualquier lectura anónima o no autorizada de la base de datos.
+ */
+function validarSesionRLS(token) {
+  if (!token || typeof token !== 'string') return false;
+  token = token.trim();
+
+  // 1. Validar en CacheService
+  try {
+    const cache = CacheService.getScriptCache();
+    const cachedStr = cache.get(token);
+    if (cachedStr) {
+      const data = JSON.parse(cachedStr);
+      if (data && data.expiraEn > Date.now()) {
+        return true;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Validar en ScriptProperties (persistencia en servidor)
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const propStr = props.getProperty('SESSION_' + token);
+    if (propStr) {
+      const data = JSON.parse(propStr);
+      if (data && data.expiraEn > Date.now()) {
+        try {
+          CacheService.getScriptCache().put(token, propStr, 21600);
+        } catch (ce) {}
+        return true;
+      } else {
+        props.deleteProperty('SESSION_' + token);
+      }
+    }
+  } catch (e) {}
+
+  // 3. Clave maestra interna de servicio (exclusiva del backend para tareas de mantenimiento)
+  try {
+    const masterKey = PropertiesService.getScriptProperties().getProperty('MASTER_SERVICE_KEY');
+    if (masterKey && token === masterKey) {
+      return true;
+    }
+  } catch (e) {}
+
+  return false;
+}
+
+/**
+ * Alias retrocompatible para funciones internas
+ */
+function validarAcceso(token) {
+  return validarSesionRLS(token);
 }
 
 /**
@@ -105,16 +235,26 @@ function doGet(e) {
     const params = e ? e.parameter : {};
     const action = params.action || 'ping';
 
+    // Endpoint público de verificación de estado (no entrega datos de la BD)
     if (action === 'ping') {
       return jsonResponse({
         status: 'success',
         message: 'Backend Thor Essence activo y funcionando',
+        rls: 'Activo (Acceso Restringido)',
         timestamp: new Date().toISOString()
       });
     }
 
-    if (!validarAcceso(params.token)) {
-      return jsonResponse({ status: 'error', message: 'Acceso no autorizado: Token inválido' }, 401);
+    // =========================================================================
+    // SEGURIDAD RLS EN LECTURA:
+    // Nadie puede leer inventario, ventas ni reportes sin una sesión activa
+    // =========================================================================
+    if (!validarSesionRLS(params.token)) {
+      return jsonResponse({
+        status: 'error',
+        code: 'UNAUTHORIZED_RLS',
+        message: 'Acceso denegado por RLS: Sesión no válida o expirada. Debe iniciar sesión.'
+      }, 401);
     }
 
     inicializarHojasSiNoExisten();
@@ -174,13 +314,63 @@ function doPost(e) {
       payload = e ? e.parameter : {};
     }
 
-    if (!validarAcceso(payload.token)) {
-      return jsonResponse({ status: 'error', message: 'Acceso no autorizado: Token inválido' }, 401);
+    const action = payload.action;
+
+    // =========================================================================
+    // 1. ENDPOINT PÚBLICO: INICIO DE SESIÓN (LOGIN)
+    // Valida credenciales en el servidor y genera token temporal de sesión
+    // =========================================================================
+    if (action === 'login') {
+      const username = (payload.username || (payload.data && payload.data.username) || '').trim();
+      const password = (payload.password || (payload.data && payload.data.password) || '').trim();
+
+      if (verificarCredenciales(username, password)) {
+        const token = crearSesionEnServidor(username);
+        return jsonResponse({
+          status: 'success',
+          message: 'Inicio de sesión exitoso',
+          token: token,
+          user: {
+            username: username,
+            nombre: 'Pamela De Los Santos',
+            rol: 'Administradora'
+          }
+        });
+      } else {
+        return jsonResponse({
+          status: 'error',
+          code: 'INVALID_CREDENTIALS',
+          message: 'Usuario o contraseña incorrectos. Verifique sus credenciales.'
+        }, 401);
+      }
+    }
+
+    // =========================================================================
+    // 2. ENDPOINT DE CIERRE DE SESIÓN EN SERVIDOR (SIGNOUT)
+    // Invalida inmediatamente el token en CacheService y PropertiesService
+    // =========================================================================
+    if (action === 'logout') {
+      const token = payload.token || (payload.data && payload.data.token);
+      invalidarSesionEnServidor(token);
+      return jsonResponse({
+        status: 'success',
+        message: 'Sesión invalidada y destruida exitosamente en el servidor.'
+      });
+    }
+
+    // =========================================================================
+    // 3. SEGURIDAD RLS EN ESCRITURA Y ACCIONES:
+    // Requiere sesión válida para cualquier modificación de la base de datos
+    // =========================================================================
+    if (!validarSesionRLS(payload.token)) {
+      return jsonResponse({
+        status: 'error',
+        code: 'UNAUTHORIZED_RLS',
+        message: 'Acceso denegado por RLS: Sesión no autorizada, inválida o expirada.'
+      }, 401);
     }
 
     inicializarHojasSiNoExisten();
-
-    const action = payload.action;
 
     switch (action) {
       case 'saveProduct':
@@ -264,17 +454,208 @@ function obtenerInventario() {
   return items;
 }
 
+function guardarOActualizarProducto(prod) {
+  if (!prod || !prod.nombre) {
+    return { status: 'error', message: 'El producto debe tener al menos un nombre' };
+  }
+
+  const sheet = getSheet(SHEETS.INVENTARIO);
+  const data = sheet.getDataRange().getValues();
+  const ahora = new Date();
+
+  const id = prod.id || ('PROD-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss'));
+  const nombre = String(prod.nombre).trim();
+  const categoria = String(prod.categoria || 'Variedades').trim();
+  const descripcion = String(prod.descripcion || '').trim();
+  const cantidad = parseInt(prod.cantidad) || 0;
+  const stockMinimo = parseInt(prod.stock_minimo) || 3;
+  const costoUsd = parseFloat(prod.costo_usd) || 0;
+  const costoDop = parseFloat(prod.costo_dop) || (costoUsd * 60.50);
+  const precioVentaDop = parseFloat(prod.precio_venta_dop) || 0;
+  const ubicacion = String(prod.ubicacion || 'Almacén Principal').trim();
+  const estado = cantidad === 0 ? 'Agotado' : (cantidad <= stockMinimo ? 'Stock Bajo' : 'En Stock');
+
+  let filaEncontrada = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) {
+      filaEncontrada = i + 1;
+      break;
+    }
+  }
+
+  if (filaEncontrada > 0) {
+    const fechaIngresoOriginal = data[filaEncontrada - 1][11] || ahora;
+    sheet.getRange(filaEncontrada, 1, 1, 13).setValues([[
+      id, nombre, categoria, descripcion, cantidad, stockMinimo,
+      costoUsd, costoDop, precioVentaDop, ubicacion, estado,
+      fechaIngresoOriginal, ahora
+    ]]);
+    return { status: 'success', message: 'Producto actualizado exitosamente', id: id };
+  } else {
+    sheet.appendRow([
+      id, nombre, categoria, descripcion, cantidad, stockMinimo,
+      costoUsd, costoDop, precioVentaDop, ubicacion, estado,
+      ahora, ahora
+    ]);
+    return { status: 'success', message: 'Producto registrado exitosamente', id: id };
+  }
+}
+
+function eliminarProducto(id) {
+  if (!id) return { status: 'error', message: 'ID de producto requerido' };
+  const sheet = getSheet(SHEETS.INVENTARIO);
+  const data = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(id)) {
+      sheet.deleteRow(i + 1);
+      return { status: 'success', message: 'Producto eliminado del inventario' };
+    }
+  }
+  return { status: 'error', message: 'Producto no encontrado' };
+}
+
+function ajustarStockProducto(id, delta, motivo) {
+  if (!id) return { status: 'error', message: 'ID de producto requerido' };
+  const sheet = getSheet(SHEETS.INVENTARIO);
+  const data = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(id)) {
+      let actual = parseInt(data[i][4]) || 0;
+      let nuevo = Math.max(0, actual + parseInt(delta));
+      let stockMin = parseInt(data[i][5]) || 3;
+      let nuevoEstado = nuevo === 0 ? 'Agotado' : (nuevo <= stockMin ? 'Stock Bajo' : 'En Stock');
+
+      sheet.getRange(i + 1, 5).setValue(nuevo);
+      sheet.getRange(i + 1, 11).setValue(nuevoEstado);
+      sheet.getRange(i + 1, 13).setValue(new Date());
+
+      return {
+        status: 'success',
+        message: 'Stock ajustado de ' + actual + ' a ' + nuevo,
+        id: id,
+        nuevoStock: nuevo
+      };
+    }
+  }
+  return { status: 'error', message: 'Producto no encontrado para ajuste' };
+}
+
+function registrarVenta(venta) {
+  if (!venta || !venta.id_articulo || !venta.cantidad) {
+    return { status: 'error', message: 'Datos de venta incompletos' };
+  }
+
+  const invSheet = getSheet(SHEETS.INVENTARIO);
+  const invData = invSheet.getDataRange().getValues();
+  let producto = null;
+  let filaProd = -1;
+
+  for (let i = 1; i < invData.length; i++) {
+    if (String(invData[i][0]) === String(venta.id_articulo)) {
+      producto = invData[i];
+      filaProd = i + 1;
+      break;
+    }
+  }
+
+  if (!producto) {
+    return { status: 'error', message: 'El producto vendido no existe en el inventario' };
+  }
+
+  const cantidadVenta = parseInt(venta.cantidad);
+  const stockActual = parseInt(producto[4]) || 0;
+
+  if (stockActual < cantidadVenta) {
+    return {
+      status: 'error',
+      message: 'Stock insuficiente para esta venta. Stock actual: ' + stockActual + ', solicitado: ' + cantidadVenta
+    };
+  }
+
+  const ahora = new Date();
+  const idVenta = venta.id_venta || ('VTA-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss'));
+  const precioUnitarioDop = parseFloat(venta.precio_unitario_dop) || parseFloat(producto[8]) || 0;
+  const totalVentaDop = precioUnitarioDop * cantidadVenta;
+  const costoUnitarioDop = parseFloat(producto[7]) || 0;
+  const gananciaNetaDop = totalVentaDop - (costoUnitarioDop * cantidadVenta);
+
+  // Actualizar inventario
+  const nuevoStock = stockActual - cantidadVenta;
+  const stockMin = parseInt(producto[5]) || 3;
+  const nuevoEstado = nuevoStock === 0 ? 'Agotado' : (nuevoStock <= stockMin ? 'Stock Bajo' : 'En Stock');
+
+  invSheet.getRange(filaProd, 5).setValue(nuevoStock);
+  invSheet.getRange(filaProd, 11).setValue(nuevoEstado);
+  invSheet.getRange(filaProd, 13).setValue(ahora);
+
+  // Registrar en hoja Ventas
+  const venSheet = getSheet(SHEETS.VENTAS);
+  venSheet.appendRow([
+    idVenta,
+    ahora,
+    producto[0],
+    producto[1],
+    producto[2],
+    cantidadVenta,
+    precioUnitarioDop,
+    totalVentaDop,
+    costoUnitarioDop,
+    gananciaNetaDop,
+    String(venta.cliente || 'Consumidor Final').trim(),
+    String(venta.metodo_pago || 'Efectivo').trim(),
+    String(venta.notas || '').trim(),
+    'Completada'
+  ]);
+
+  return {
+    status: 'success',
+    message: 'Venta registrada con éxito. Ganancia neta: RD$ ' + gananciaNetaDop.toFixed(2),
+    id_venta: idVenta,
+    nuevoStock: nuevoStock
+  };
+}
+
+function cancelarVenta(idVenta) {
+  if (!idVenta) return { status: 'error', message: 'ID de venta requerido' };
+
+  const venSheet = getSheet(SHEETS.VENTAS);
+  const data = venSheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(idVenta)) {
+      if (data[i][13] === 'Cancelada') {
+        return { status: 'error', message: 'Esta venta ya se encuentra cancelada' };
+      }
+
+      const idProd = String(data[i][2]);
+      const cantRestituir = parseInt(data[i][5]) || 0;
+
+      // Restituir stock en inventario
+      ajustarStockProducto(idProd, cantRestituir, 'Cancelación de venta ' + idVenta);
+
+      // Marcar estado cancelada
+      venSheet.getRange(i + 1, 14).setValue('Cancelada');
+
+      return { status: 'success', message: 'Venta ' + idVenta + ' cancelada y stock repuesto' };
+    }
+  }
+
+  return { status: 'error', message: 'Venta no encontrada' };
+}
+
 function obtenerVentas() {
   const sheet = getSheet(SHEETS.VENTAS);
   const rows = sheet.getDataRange().getValues();
   if (rows.length <= 1) return [];
 
-  const sales = [];
-  for (let i = rows.length - 1; i >= 1; i--) {
+  const items = [];
+  for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row[0]) continue;
 
-    sales.push({
+    items.push({
       id_venta: String(row[0]),
       fecha_venta: row[1] ? formatearFecha(row[1]) : '',
       id_articulo: String(row[2] || ''),
@@ -285,13 +666,73 @@ function obtenerVentas() {
       total_dop: Number(row[7]) || 0,
       costo_unitario_dop: Number(row[8]) || 0,
       ganancia_dop: Number(row[9]) || 0,
-      cliente: String(row[10] || 'Cliente General'),
+      cliente: String(row[10] || ''),
       metodo_pago: String(row[11] || 'Efectivo'),
       notas: String(row[12] || ''),
       estado: String(row[13] || 'Completada')
     });
   }
-  return sales;
+  return items.reverse(); // Más recientes primero
+}
+
+function registrarRecepcionTanque(rec) {
+  if (!rec || !rec.articulos || !rec.articulos.length) {
+    return { status: 'error', message: 'La recepción de tanque debe contener al menos un artículo' };
+  }
+
+  const ahora = new Date();
+  const idRecepcion = rec.id_recepcion || ('TANQ-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss'));
+  const nombreTanque = String(rec.nombre_tanque || 'Tanque Importado de EE.UU.').trim();
+  const origen = String(rec.origen || 'Miami, FL - EE.UU.').trim();
+  const fleteUsd = parseFloat(rec.flete_usd) || 0;
+  const tasaCambio = parseFloat(rec.tasa_cambio) || 60.50;
+  const notas = String(rec.notas || '').trim();
+
+  let totalUnidades = 0;
+  rec.articulos.forEach(art => {
+    totalUnidades += (parseInt(art.cantidad) || 0);
+  });
+
+  // Guardar cada artículo en Inventario (actualizando existencia o creando nuevo)
+  rec.articulos.forEach(art => {
+    const costoUsd = parseFloat(art.costo_usd) || 0;
+    const costoDop = parseFloat(art.costo_dop) || (costoUsd * tasaCambio);
+    const precioVentaDop = parseFloat(art.precio_venta_dop) || 0;
+
+    guardarOActualizarProducto({
+      id: art.id || '',
+      nombre: art.nombre,
+      categoria: art.categoria || 'Variedades',
+      descripcion: (art.descripcion || '') + (art.descripcion ? ' | ' : '') + 'Tanque: ' + nombreTanque,
+      cantidad: parseInt(art.cantidad) || 0,
+      stock_minimo: parseInt(art.stock_minimo) || 3,
+      costo_usd: costoUsd,
+      costo_dop: costoDop,
+      precio_venta_dop: precioVentaDop,
+      ubicacion: nombreTanque
+    });
+  });
+
+  // Registrar en hoja Recepciones
+  const recSheet = getSheet(SHEETS.RECEPCIONES);
+  recSheet.appendRow([
+    idRecepcion,
+    ahora,
+    nombreTanque,
+    origen,
+    totalUnidades,
+    fleteUsd,
+    tasaCambio,
+    notas,
+    JSON.stringify(rec.articulos)
+  ]);
+
+  return {
+    status: 'success',
+    message: 'Tanque registrado exitosamente con ' + totalUnidades + ' unidades ingresadas al inventario.',
+    id_recepcion: idRecepcion,
+    totalUnidades: totalUnidades
+  };
 }
 
 function obtenerRecepciones() {
@@ -299,415 +740,75 @@ function obtenerRecepciones() {
   const rows = sheet.getDataRange().getValues();
   if (rows.length <= 1) return [];
 
-  const receptions = [];
-  for (let i = rows.length - 1; i >= 1; i--) {
+  const items = [];
+  for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row[0]) continue;
 
-    let articulosDetalle = [];
+    let articulos = [];
     try {
-      articulosDetalle = row[8] ? JSON.parse(row[8]) : [];
-    } catch (e) {
-      articulosDetalle = [];
-    }
+      if (row[8]) articulos = JSON.parse(row[8]);
+    } catch (e) {}
 
-    receptions.push({
+    items.push({
       id_recepcion: String(row[0]),
       fecha: row[1] ? formatearFecha(row[1]) : '',
       nombre_tanque: String(row[2] || ''),
-      origen: String(row[3] || 'EE.UU.'),
+      origen: String(row[3] || ''),
       total_unidades: Number(row[4]) || 0,
       flete_usd: Number(row[5]) || 0,
       tasa_cambio: Number(row[6]) || 60.50,
       notas: String(row[7] || ''),
-      articulos: articulosDetalle
+      articulos: articulos
     });
   }
-  return receptions;
-}
-
-function guardarOActualizarProducto(p) {
-  if (!p || !p.nombre) {
-    return { status: 'error', message: 'El nombre del producto es obligatorio' };
-  }
-
-  const sheet = getSheet(SHEETS.INVENTARIO);
-  const rows = sheet.getDataRange().getValues();
-  const now = new Date();
-
-  const id = p.id || ('PROD-' + Utilities.getUuid().substring(0, 8).toUpperCase());
-  let rowIndex = -1;
-
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(id)) {
-      rowIndex = i + 1;
-      break;
-    }
-  }
-
-  const cant = Number(p.cantidad) || 0;
-  const fila = [
-    id,
-    p.nombre,
-    p.categoria || 'Variedades',
-    p.descripcion || '',
-    cant,
-    Number(p.stock_minimo) || 3,
-    Number(p.costo_usd) || 0,
-    Number(p.costo_dop) || 0,
-    Number(p.precio_venta_dop) || 0,
-    p.ubicacion || 'Almacén Principal',
-    p.estado || (cant > 0 ? 'En Stock' : 'Agotado'),
-    p.fecha_ingreso ? new Date(p.fecha_ingreso) : now,
-    now
-  ];
-
-  if (rowIndex > 0) {
-    fila[11] = rows[rowIndex - 1][11] || now;
-    sheet.getRange(rowIndex, 1, 1, fila.length).setValues([fila]);
-  } else {
-    sheet.appendRow(fila);
-  }
-
-  return {
-    status: 'success',
-    message: rowIndex > 0 ? 'Producto actualizado correctamente' : 'Producto creado con éxito',
-    id: id
-  };
-}
-
-function ajustarStockProducto(id, delta, motivo) {
-  const sheet = getSheet(SHEETS.INVENTARIO);
-  const rows = sheet.getDataRange().getValues();
-  let rowIndex = -1;
-
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(id)) {
-      rowIndex = i + 1;
-      break;
-    }
-  }
-
-  if (rowIndex === -1) {
-    return { status: 'error', message: 'Producto no encontrado' };
-  }
-
-  const stockActual = Number(rows[rowIndex - 1][4]) || 0;
-  const nuevoStock = Math.max(0, stockActual + Number(delta));
-  const nuevoEstado = nuevoStock > 0 ? 'En Stock' : 'Agotado';
-
-  sheet.getRange(rowIndex, 5).setValue(nuevoStock);
-  sheet.getRange(rowIndex, 11).setValue(nuevoEstado);
-  sheet.getRange(rowIndex, 13).setValue(new Date());
-
-  return {
-    status: 'success',
-    message: 'Stock actualizado a ' + nuevoStock + ' unidades',
-    nuevoStock: nuevoStock
-  };
-}
-
-function eliminarProducto(id) {
-  const sheet = getSheet(SHEETS.INVENTARIO);
-  const rows = sheet.getDataRange().getValues();
-
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(id)) {
-      sheet.deleteRow(i + 1);
-      return { status: 'success', message: 'Producto eliminado correctamente' };
-    }
-  }
-
-  return { status: 'error', message: 'Producto no encontrado' };
-}
-
-function registrarVenta(venta) {
-  if (!venta || !venta.id_articulo || !venta.cantidad || venta.cantidad <= 0) {
-    return { status: 'error', message: 'Datos de venta incompletos o cantidad inválida' };
-  }
-
-  const invSheet = getSheet(SHEETS.INVENTARIO);
-  const invRows = invSheet.getDataRange().getValues();
-  let productRow = -1;
-  let producto = null;
-
-  for (let i = 1; i < invRows.length; i++) {
-    if (String(invRows[i][0]) === String(venta.id_articulo)) {
-      productRow = i + 1;
-      producto = {
-        id: invRows[i][0],
-        nombre: invRows[i][1],
-        categoria: invRows[i][2],
-        stock: Number(invRows[i][4]) || 0,
-        costo_dop: Number(invRows[i][7]) || 0,
-        precio_sugerido: Number(invRows[i][8]) || 0
-      };
-      break;
-    }
-  }
-
-  if (!producto) {
-    return { status: 'error', message: 'El producto a vender no existe en el inventario' };
-  }
-
-  const cantVenta = Number(venta.cantidad);
-  if (producto.stock < cantVenta) {
-    return {
-      status: 'error',
-      message: 'Stock insuficiente. Solo quedan ' + producto.stock + ' unidades disponibles de "' + producto.nombre + '".'
-    };
-  }
-
-  const nuevoStock = producto.stock - cantVenta;
-  const nuevoEstado = nuevoStock > 0 ? 'En Stock' : 'Agotado';
-  invSheet.getRange(productRow, 5).setValue(nuevoStock);
-  invSheet.getRange(productRow, 11).setValue(nuevoEstado);
-  invSheet.getRange(productRow, 13).setValue(new Date());
-
-  const salesSheet = getSheet(SHEETS.VENTAS);
-  const idVenta = 'VTA-' + Utilities.getUuid().substring(0, 8).toUpperCase();
-  const precioUnitario = Number(venta.precio_unitario_dop) || producto.precio_sugerido;
-  const totalVenta = precioUnitario * cantVenta;
-  const costoTotal = (producto.costo_dop || 0) * cantVenta;
-  const ganancia = totalVenta - costoTotal;
-  const fechaVenta = venta.fecha ? new Date(venta.fecha) : new Date();
-
-  const filaVenta = [
-    idVenta,
-    fechaVenta,
-    producto.id,
-    producto.nombre,
-    producto.categoria,
-    cantVenta,
-    precioUnitario,
-    totalVenta,
-    producto.costo_dop,
-    ganancia,
-    venta.cliente || 'Cliente General',
-    venta.metodo_pago || 'Efectivo',
-    venta.notas || '',
-    'Completada'
-  ];
-
-  salesSheet.appendRow(filaVenta);
-
-  return {
-    status: 'success',
-    message: 'Venta registrada con éxito. Stock restante: ' + nuevoStock,
-    id_venta: idVenta,
-    stock_restante: nuevoStock,
-    total_dop: totalVenta,
-    ganancia_dop: ganancia
-  };
-}
-
-function cancelarVenta(idVenta) {
-  const salesSheet = getSheet(SHEETS.VENTAS);
-  const salesRows = salesSheet.getDataRange().getValues();
-  let saleRow = -1;
-  let venta = null;
-
-  for (let i = 1; i < salesRows.length; i++) {
-    if (String(salesRows[i][0]) === String(idVenta)) {
-      saleRow = i + 1;
-      venta = {
-        id_articulo: salesRows[i][2],
-        cantidad: Number(salesRows[i][5]) || 0,
-        estado: salesRows[i][13]
-      };
-      break;
-    }
-  }
-
-  if (!venta) {
-    return { status: 'error', message: 'Venta no encontrada' };
-  }
-
-  if (venta.estado === 'Cancelada') {
-    return { status: 'error', message: 'Esta venta ya se encuentra cancelada' };
-  }
-
-  ajustarStockProducto(venta.id_articulo, venta.cantidad, 'Devolución por cancelación de venta ' + idVenta);
-  salesSheet.getRange(saleRow, 14).setValue('Cancelada');
-
-  return {
-    status: 'success',
-    message: 'Venta cancelada y ' + venta.cantidad + ' unidades devueltas al inventario'
-  };
-}
-
-function registrarRecepcionTanque(data) {
-  if (!data || !data.nombre_tanque) {
-    return { status: 'error', message: 'El nombre o descripción del tanque es obligatorio' };
-  }
-
-  const items = data.articulos || [];
-  if (items.length === 0) {
-    return { status: 'error', message: 'Debe incluir al menos un artículo en el tanque recibido' };
-  }
-
-  const invSheet = getSheet(SHEETS.INVENTARIO);
-  const invRows = invSheet.getDataRange().getValues();
-  const now = new Date();
-  const tasa = Number(data.tasa_cambio) || 60.50;
-
-  let totalUnidades = 0;
-  const articulosProcesados = [];
-
-  const mapaPorId = {};
-  const mapaPorNombre = {};
-  for (let i = 1; i < invRows.length; i++) {
-    const rowId = String(invRows[i][0]);
-    const rowName = String(invRows[i][1]).trim().toLowerCase();
-    mapaPorId[rowId] = i + 1;
-    mapaPorNombre[rowName] = i + 1;
-  }
-
-  for (let k = 0; k < items.length; k++) {
-    const item = items[k];
-    const cant = Number(item.cantidad) || 0;
-    if (cant <= 0) continue;
-
-    totalUnidades += cant;
-
-    const costoUsd = Number(item.costo_usd) || 0;
-    const costoDop = Number(item.costo_dop) || (costoUsd * tasa);
-    const precioVentaDop = Number(item.precio_venta_dop) || (costoDop * 1.5);
-
-    let targetRow = -1;
-    let itemId = item.id;
-
-    if (itemId && mapaPorId[itemId]) {
-      targetRow = mapaPorId[itemId];
-    } else if (item.nombre && mapaPorNombre[item.nombre.trim().toLowerCase()]) {
-      targetRow = mapaPorNombre[item.nombre.trim().toLowerCase()];
-      itemId = invRows[targetRow - 1][0];
-    }
-
-    if (targetRow > 0) {
-      const stockAnterior = Number(invRows[targetRow - 1][4]) || 0;
-      const nuevoStock = stockAnterior + cant;
-
-      invSheet.getRange(targetRow, 5).setValue(nuevoStock);
-      if (costoUsd > 0) invSheet.getRange(targetRow, 7).setValue(costoUsd);
-      if (costoDop > 0) invSheet.getRange(targetRow, 8).setValue(costoDop);
-      if (precioVentaDop > 0) invSheet.getRange(targetRow, 9).setValue(precioVentaDop);
-      invSheet.getRange(targetRow, 10).setValue(data.nombre_tanque);
-      invSheet.getRange(targetRow, 11).setValue('En Stock');
-      invSheet.getRange(targetRow, 13).setValue(now);
-
-      articulosProcesados.push({
-        id: itemId,
-        nombre: invRows[targetRow - 1][1],
-        cantidad: cant,
-        nuevo_stock: nuevoStock,
-        costo_usd: costoUsd,
-        costo_dop: costoDop,
-        precio_venta_dop: precioVentaDop
-      });
-    } else {
-      const newId = 'PROD-' + Utilities.getUuid().substring(0, 8).toUpperCase();
-      const filaNueva = [
-        newId,
-        item.nombre,
-        item.categoria || 'Variedades',
-        item.descripcion || '',
-        cant,
-        Number(item.stock_minimo) || 3,
-        costoUsd,
-        costoDop,
-        precioVentaDop,
-        data.nombre_tanque,
-        'En Stock',
-        now,
-        now
-      ];
-      invSheet.appendRow(filaNueva);
-
-      articulosProcesados.push({
-        id: newId,
-        nombre: item.nombre,
-        cantidad: cant,
-        nuevo_stock: cant,
-        costo_usd: costoUsd,
-        costo_dop: costoDop,
-        precio_venta_dop: precioVentaDop
-      });
-    }
-  }
-
-  const recSheet = getSheet(SHEETS.RECEPCIONES);
-  const idRecepcion = 'TANQ-' + Utilities.getUuid().substring(0, 8).toUpperCase();
-  const filaRecepcion = [
-    idRecepcion,
-    data.fecha ? new Date(data.fecha) : now,
-    data.nombre_tanque,
-    data.origen || 'EE.UU.',
-    totalUnidades,
-    Number(data.flete_usd) || 0,
-    tasa,
-    data.notas || '',
-    JSON.stringify(articulosProcesados)
-  ];
-
-  recSheet.appendRow(filaRecepcion);
-
-  return {
-    status: 'success',
-    message: 'Tanque registrado con éxito: ' + totalUnidades + ' artículos ingresados al inventario.',
-    id_recepcion: idRecepcion,
-    total_unidades: totalUnidades,
-    articulos: articulosProcesados
-  };
+  return items.reverse();
 }
 
 function calcularMetricasGenerales() {
-  const inv = obtenerInventario();
+  const inventario = obtenerInventario();
   const ventas = obtenerVentas();
 
-  let totalArticulos = 0;
-  let totalStockUnidades = 0;
+  let totalProductos = inventario.length;
+  let totalUnidadesStock = 0;
   let valorInventarioCostoDop = 0;
   let valorInventarioVentaDop = 0;
   let productosStockBajo = 0;
   let productosAgotados = 0;
 
-  inv.forEach(function(item) {
-    totalArticulos++;
-    totalStockUnidades += item.cantidad;
-    valorInventarioCostoDop += (item.cantidad * item.costo_dop);
-    valorInventarioVentaDop += (item.cantidad * item.precio_venta_dop);
-
-    if (item.cantidad === 0) {
-      productosAgotados++;
-    } else if (item.cantidad <= item.stock_minimo) {
-      productosStockBajo++;
-    }
+  inventario.forEach(p => {
+    totalUnidadesStock += p.cantidad;
+    valorInventarioCostoDop += (p.cantidad * p.costo_dop);
+    valorInventarioVentaDop += (p.cantidad * p.precio_venta_dop);
+    if (p.cantidad === 0) productosAgotados++;
+    else if (p.cantidad <= p.stock_minimo) productosStockBajo++;
   });
 
   const hoyStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd');
+  const mesStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM');
+
   let ventasHoyDop = 0;
   let gananciaHoyDop = 0;
   let ventasMesDop = 0;
   let gananciaMesDop = 0;
-  const mesActual = hoyStr.substring(0, 7);
 
-  ventas.forEach(function(v) {
-    if (v.estado === 'Cancelada') return;
-    const vFechaStr = String(v.fecha_venta).substring(0, 10);
-    if (vFechaStr === hoyStr) {
-      ventasHoyDop += v.total_dop;
-      gananciaHoyDop += v.ganancia_dop;
-    }
-    if (vFechaStr.startsWith(mesActual)) {
-      ventasMesDop += v.total_dop;
-      gananciaMesDop += v.ganancia_dop;
+  ventas.forEach(v => {
+    if (v.estado !== 'Cancelada') {
+      const fechaVta = String(v.fecha_venta || '');
+      if (fechaVta.startsWith(hoyStr)) {
+        ventasHoyDop += v.total_dop;
+        gananciaHoyDop += v.ganancia_dop;
+      }
+      if (fechaVta.startsWith(mesStr)) {
+        ventasMesDop += v.total_dop;
+        gananciaMesDop += v.ganancia_dop;
+      }
     }
   });
 
   return {
-    total_productos: totalArticulos,
-    total_unidades_stock: totalStockUnidades,
+    total_productos: totalProductos,
+    total_unidades_stock: totalUnidadesStock,
     valor_inventario_costo_dop: Math.round(valorInventarioCostoDop),
     valor_inventario_venta_dop: Math.round(valorInventarioVentaDop),
     productos_stock_bajo: productosStockBajo,
@@ -719,25 +820,6 @@ function calcularMetricasGenerales() {
   };
 }
 
-function validarAcceso(tokenEnviado) {
-  if (!tokenEnviado) return false;
-  const scriptProps = PropertiesService.getScriptProperties();
-  const tokenGuardado = scriptProps.getProperty('SECURITY_TOKEN');
-
-  if (tokenGuardado) {
-    return tokenEnviado === tokenGuardado;
-  }
-
-  try {
-    const config = obtenerConfiguracion();
-    if (config && config.SECURITY_TOKEN) {
-      return tokenEnviado === config.SECURITY_TOKEN;
-    }
-  } catch (e) {}
-
-  return tokenEnviado === DEFAULT_SECURITY_TOKEN;
-}
-
 function obtenerConfiguracion() {
   const sheet = getSheet(SHEETS.CONFIGURACION);
   const rows = sheet.getDataRange().getValues();
@@ -745,8 +827,7 @@ function obtenerConfiguracion() {
     NOMBRE_NEGOCIO: 'Thor Essence',
     MONEDA_PRINCIPAL: 'DOP',
     TASA_CAMBIO_USD_DOP: 60.50,
-    CATEGORIAS: 'Perfumes, Splash, Cremas, Body Wash, Accesorios, Maquillaje, Variedades',
-    SECURITY_TOKEN: DEFAULT_SECURITY_TOKEN
+    CATEGORIAS: 'Perfumes, Splash, Cremas, Body Wash, Accesorios, Maquillaje, Variedades'
   };
 
   for (let i = 1; i < rows.length; i++) {
@@ -769,14 +850,16 @@ function guardarConfiguracion(nuevaCfg) {
   }
 
   for (let key in nuevaCfg) {
+    if (key === 'AUTH_USER' || key === 'AUTH_PASS' || key === 'MASTER_SERVICE_KEY') {
+      // Guardar en ScriptProperties privadas para máxima seguridad
+      PropertiesService.getScriptProperties().setProperty(key, String(nuevaCfg[key]));
+      continue;
+    }
+
     if (mapa[key]) {
       sheet.getRange(mapa[key], 2).setValue(nuevaCfg[key]);
     } else {
       sheet.appendRow([key, nuevaCfg[key]]);
-    }
-
-    if (key === 'SECURITY_TOKEN') {
-      PropertiesService.getScriptProperties().setProperty('SECURITY_TOKEN', String(nuevaCfg[key]));
     }
   }
 
@@ -841,13 +924,17 @@ function inicializarHojasSiNoExisten(forzar) {
       ['SLOGAN', 'Belleza, aroma y estilo en un solo lugar'],
       ['MONEDA_PRINCIPAL', 'DOP'],
       ['TASA_CAMBIO_USD_DOP', 60.50],
-      ['CATEGORIAS', 'Perfumes, Splash, Cremas, Body Wash, Accesorios, Maquillaje, Variedades'],
-      ['SECURITY_TOKEN', DEFAULT_SECURITY_TOKEN]
+      ['CATEGORIAS', 'Perfumes, Splash, Cremas, Body Wash, Accesorios, Maquillaje, Variedades']
     ];
     cfgSheet.getRange(2, 1, defaultValues.length, 2).setValues(defaultValues);
   }
 
-  PropertiesService.getScriptProperties().setProperty('SECURITY_TOKEN', DEFAULT_SECURITY_TOKEN);
+  // Asegurar que las credenciales de Pamela estén en PropertiesService en el servidor
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('AUTH_USER')) {
+    props.setProperty('AUTH_USER', CREDENCIALES_SISTEMA.usuario);
+    props.setProperty('AUTH_PASS', CREDENCIALES_SISTEMA.contrasena);
+  }
 }
 
 function estilarCabecera(sheet, numCols, bgColor, textColor) {

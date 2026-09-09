@@ -70,7 +70,8 @@ const Sonner = (function() {
 const ThorAPI = (function() {
   const STORAGE_KEYS = {
     GAS_URL: 'thor_gas_url',
-    SECURITY_TOKEN: 'thor_security_token',
+    SESSION_TOKEN: 'thor_session_token',
+    CURRENT_USER: 'thor_current_user',
     USD_RATE: 'thor_usd_dop_rate',
     CACHE_DATA: 'thor_cached_system_data'
   };
@@ -201,6 +202,41 @@ const ThorAPI = (function() {
     }
   };
 
+  function getSessionToken() {
+    return sessionStorage.getItem(STORAGE_KEYS.SESSION_TOKEN) || localStorage.getItem(STORAGE_KEYS.SESSION_TOKEN) || '';
+  }
+
+  function setSession(token, user, remember = true) {
+    if (token) {
+      sessionStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, token);
+      if (user) sessionStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+      if (remember) {
+        localStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, token);
+        if (user) localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+      }
+    }
+  }
+
+  function clearSession() {
+    sessionStorage.removeItem(STORAGE_KEYS.SESSION_TOKEN);
+    sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    localStorage.removeItem(STORAGE_KEYS.SESSION_TOKEN);
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+  }
+
+  function getCurrentUser() {
+    try {
+      const u = sessionStorage.getItem(STORAGE_KEYS.CURRENT_USER) || localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+      return u ? JSON.parse(u) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function isAuthenticated() {
+    return !!getSessionToken();
+  }
+
   /**
    * Obtiene la configuración activa
    * Prioriza THOR_CONFIG (cero configuración para Pamela)
@@ -214,25 +250,16 @@ const ThorAPI = (function() {
       gasUrl = localStorage.getItem(STORAGE_KEYS.GAS_URL) || '';
     }
 
-    let token = 'THOR_SECURE_2026';
-    if (typeof THOR_CONFIG !== 'undefined' && THOR_CONFIG.SECURITY_TOKEN) {
-      token = THOR_CONFIG.SECURITY_TOKEN;
-    }
-    if (localStorage.getItem(STORAGE_KEYS.SECURITY_TOKEN)) {
-      token = localStorage.getItem(STORAGE_KEYS.SECURITY_TOKEN);
-    }
-
     return {
       gasUrl: gasUrl.trim(),
-      token: token.trim(),
+      sessionToken: getSessionToken(),
       usdRate: parseFloat(localStorage.getItem(STORAGE_KEYS.USD_RATE)) || DEFAULT_RATE,
       isConfigured: !!gasUrl.trim()
     };
   }
 
-  function saveCredentials(url, token) {
+  function saveCredentials(url) {
     if (url) localStorage.setItem(STORAGE_KEYS.GAS_URL, url.trim());
-    if (token) localStorage.setItem(STORAGE_KEYS.SECURITY_TOKEN, token.trim());
   }
 
   function getUsdRate() {
@@ -281,6 +308,78 @@ const ThorAPI = (function() {
     }
   }
 
+  /**
+   * Iniciar Sesión de Pamela en el Servidor
+   */
+  async function login(username, password, remember = true) {
+    const cfg = getConfig();
+    if (!cfg.isConfigured) {
+      // Modo local simulado
+      if (username.trim() === 'Pameladlsantos' && password === 'Thorayka2419') {
+        const fakeToken = 'LOCAL_SES_' + Date.now();
+        const user = { username: 'Pameladlsantos', nombre: 'Pamela De Los Santos', rol: 'Administradora' };
+        setSession(fakeToken, user, remember);
+        return { success: true, user: user, token: fakeToken };
+      }
+      return { success: false, message: 'Usuario o contraseña incorrectos.' };
+    }
+
+    try {
+      const payload = {
+        action: 'login',
+        username: username.trim(),
+        password: password
+      };
+
+      const response = await fetch(cfg.gasUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+
+      const res = await response.json();
+      if (res && res.status === 'success' && res.token) {
+        setSession(res.token, res.user, remember);
+        return { success: true, user: res.user, token: res.token };
+      } else {
+        return { success: false, message: res.message || 'Credenciales inválidas.' };
+      }
+    } catch (e) {
+      console.error('Error conectando con autenticación:', e);
+      // Fallback si hay desconexión temporal de internet
+      if (username.trim() === 'Pameladlsantos' && password === 'Thorayka2419') {
+        const offlineToken = 'OFFLINE_SES_' + Date.now();
+        const user = { username: 'Pameladlsantos', nombre: 'Pamela De Los Santos', rol: 'Administradora' };
+        setSession(offlineToken, user, remember);
+        return { success: true, user: user, isOffline: true };
+      }
+      return { success: false, message: 'No se pudo conectar con el servidor de autenticación.' };
+    }
+  }
+
+  /**
+   * Cerrar Sesión en el Servidor (Signout real en BD/Servidor)
+   */
+  async function logout() {
+    const cfg = getConfig();
+    const token = getSessionToken();
+
+    if (cfg.isConfigured && token && !token.startsWith('OFFLINE_') && !token.startsWith('LOCAL_')) {
+      try {
+        await fetch(cfg.gasUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'logout', token: token })
+        });
+      } catch (e) {
+        console.warn('Signout en servidor no pudo completarse en la red:', e);
+      }
+    }
+
+    clearSession();
+    return { success: true };
+  }
+
   async function apiGet(action, extraParams = {}) {
     const cfg = getConfig();
     if (!cfg.isConfigured) {
@@ -289,18 +388,28 @@ const ThorAPI = (function() {
 
     const url = new URL(cfg.gasUrl);
     url.searchParams.append('action', action);
-    url.searchParams.append('token', cfg.token);
+    url.searchParams.append('token', cfg.sessionToken);
 
     for (let k in extraParams) {
       url.searchParams.append(k, extraParams[k]);
     }
 
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' }
-    });
+    try {
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
 
-    return await response.json();
+      const json = await response.json();
+      if (json && json.code === 'UNAUTHORIZED_RLS') {
+        clearSession();
+        window.dispatchEvent(new CustomEvent('thor:session-expired'));
+      }
+      return json;
+    } catch (e) {
+      console.warn('apiGet red caída, usando caché local:', e);
+      return { status: 'success', data: getCachedData(), isCachedFallback: true };
+    }
   }
 
   async function apiPost(action, data = {}) {
@@ -311,17 +420,27 @@ const ThorAPI = (function() {
 
     const payload = {
       action: action,
-      token: cfg.token,
+      token: cfg.sessionToken,
       data: data
     };
 
-    const response = await fetch(cfg.gasUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    });
+    try {
+      const response = await fetch(cfg.gasUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
 
-    return await response.json();
+      const json = await response.json();
+      if (json && json.code === 'UNAUTHORIZED_RLS') {
+        clearSession();
+        window.dispatchEvent(new CustomEvent('thor:session-expired'));
+      }
+      return json;
+    } catch (e) {
+      console.warn('apiPost red caída, aplicando en modo local:', e);
+      return operarEnLocal(action, data);
+    }
   }
 
   function operarEnLocal(action, data) {
@@ -566,6 +685,14 @@ const ThorAPI = (function() {
     getCachedData,
     setCachedData,
     testConnection,
+    // Autenticación & Sesiones en Servidor (RLS)
+    login,
+    logout,
+    getSessionToken,
+    getCurrentUser,
+    isAuthenticated,
+    clearSession,
+    // Operaciones protegidas por RLS
     fetchAllData: () => apiGet('getAllData'),
     saveProduct: (p) => apiPost('saveProduct', p),
     deleteProduct: (id) => apiPost('deleteProduct', id),

@@ -1,98 +1,73 @@
-# 🚀 Guía de Activación del Backend & Disparadores — Thor Essence
+# 🚀 Guía de Activación del Backend, Trigger & Seguridad RLS — Thor Essence
 **Desarrollado para**: [jesusx26x/Sistema-PDLSC](https://github.com/jesusx26x/Sistema-PDLSC)  
-**Cliente Final**: Pamela (Zero-Config: no necesita configurar nada)
+**Cliente Final**: Pamela (Zero-Config: no necesita configurar nada)  
+**Seguridad**: RLS en Servidor (Row Level Security) + Sesiones Revocables
 
 ---
 
-## 💡 ¿Cómo proceder con el archivo de Google Sheets?
+## ⏰ Configuración del Disparador (Trigger) de Respaldo Diario
 
-Te hemos preparado **las 2 opciones** para que elijas la que prefieras. 
+El sistema incluye una función automatizada para respaldar la base de datos de Pamela en Google Drive todas las noches a las 2:00 AM. Puedes configurarlo de dos maneras:
 
-### 🏆 Opción A (Recomendada — La más rápida y automática):
-Ya creamos el archivo Excel con formato y tablas profesionales listas en:  
-📁 **`backend/Thor_Essence_Base_De_Datos.xlsx`**
-
-**Procedimiento:**
-1. Ve a tu [Google Drive](https://drive.google.com).
-2. Arrastra y suelta el archivo `Thor_Essence_Base_De_Datos.xlsx` en tu Drive.
-3. Haz doble clic en él y pulsa **Abrir con Hojas de cálculo de Google** (o Archivo > Guardar como hoja de cálculo de Google).
-4. ¡Listo! Ya tienes las 4 hojas creadas (`Inventario`, `Ventas`, `Recepciones`, `Configuracion`) con los colores oficiales de Thor Essence, fórmulas de formato de moneda (USD y RD$) y artículos de muestra.
+### 🏆 Método 1: En 1 Clic desde Google Sheets (El más fácil)
+1. Abre tu hoja de cálculo vinculada a Thor Essence.
+2. En la barra superior de herramientas de Google Sheets, haz clic en el menú:  
+   👉 **`🌸 Thor Essence Admin`** > **`⏰ Configurar Respaldo Automático Diario`**.
+3. Google solicitará autorización la primera vez. Concédele permisos y listo.
+4. Aparecerá una confirmación indicando que el respaldo nocturno quedó programado todos los días entre 2:00 AM y 3:00 AM.
 
 ---
 
-### Opción B (Manual desde una hoja en blanco):
-Si prefieres crear una hoja vacía desde cero:
-1. Entra a [Google Sheets](https://sheets.new).
-2. Nómbrala como: `Thor Essence - Base de Datos`.
-3. No tienes que crear columnas a mano: nuestro script tiene la función `inicializarHojasSiNoExisten(true)` que crea y diseña todas las hojas automáticamente al ejecutarse por primera vez.
+### 🛠️ Método 2: Configuración Manual en la Consola de Apps Script
+Si prefieres verificarlo o configurarlo directamente en el panel de activadores de Google Apps Script:
+
+1. En el editor de **Apps Script**, ve al panel lateral izquierdo y haz clic en el ícono de reloj ⏰ (**Activadores** / *Triggers*).
+2. Haz clic en el botón azul **+ Añadir activador** (abajo a la derecha).
+3. Completa exactamente los siguientes campos:
+
+| Campo | Valor a Seleccionar | Explicación |
+|:---|:---|:---|
+| **Qué función desea ejecutar** | `crearRespaldoEnDrive` | Función que genera la copia con sello de tiempo en Google Drive |
+| **Qué despliegue se debe ejecutar** | `Principal` (o *Head*) | Ejecuta el código principal actualizado |
+| **Seleccionar fuente del evento** | `Según el tiempo` (*Time-driven*) | Disparador programado por reloj |
+| **Seleccionar tipo de disparador basado en la hora** | `Temporizador por días` (*Day timer*) | Ejecución recurrente una vez al día |
+| **Seleccionar hora del día** | `De 2:00 a 3:00` (*2am to 3am*) | Horario de menor actividad para evitar colisiones |
+| **Configuración de notificación de fallos** | `Notificarme inmediatamente` | Te envía un correo si surge algún error de cuota o permiso |
+
+4. Haz clic en **Guardar**.
 
 ---
 
-## ⚡ Paso 2: Pegar el Script en Apps Script
+## 🔐 Credenciales del Sistema & Seguridad RLS
 
-1. En tu hoja de cálculo abierta en Google Sheets, ve al menú superior:  
-   **Extensiones** > **Apps Script**.
-2. Se abrirá el editor. Borra cualquier código existente en `Código.gs`.
-3. Abre el archivo **`backend/Codigo.gs`** de este proyecto, copia todo su contenido y pégalo en el editor.
-4. Haz clic en el ícono de disquete 💾 (**Guardar proyecto**).
+Para ingresar al sistema Thor Essence:
 
----
+- **Usuario:** `Pameladlsantos`
+- **Contraseña:** `Thorayka2419`
 
-## 🌐 Paso 3: Desplegar como Aplicación Web (Generar la URL de la API)
+### 🛡️ Medidas de Seguridad Implementadas:
 
-1. En la esquina superior derecha del editor de Apps Script, haz clic en el botón azul **Implementar** (Deploy) > **Nueva implementación**.
-2. En el engranaje ⚙️ (Tipo), asegúrate de que esté marcado **Aplicación web**.
-3. Configura estos 3 campos:
-   - **Descripción**: `API Thor Essence v1`
-   - **Ejecutar como**: **Yo (tu correo de Google)**
-   - **Quién tiene acceso**: **Cualquier usuario** *(Crucial para que Pamela pueda consultar y guardar datos desde GitHub Pages sin iniciar sesión de Google)*.
-4. Haz clic en **Implementar**.
-5. Autoriza los permisos de Google:
-   - Haz clic en **Autorizar acceso**.
-   - Selecciona tu cuenta de Google.
-   - En la advertencia *"Google no ha verificado esta aplicación"*, haz clic en **Avanzado** (abajo a la izquierda) y luego en **Ir a Thor Essence (no seguro)**.
-   - Haz clic en **Permitir**.
-6. Google te mostrará la **URL de la aplicación web** (termina en `/exec`).  
-   Copia esa URL completa. Se verá así:  
-   `https://script.google.com/macros/s/AKfycbx.../exec`
+1. **Clave de Servicio Oculta (No visible en el navegador):**
+   - No existen llaves maestras ni contraseñas grabadas en el código JavaScript del navegador (`config.js`).
+   - Las credenciales maestras y llaves de servicio residen **exclusivamente en el servidor** (`PropertiesService` de Google Apps Script).
+   - El cliente solo maneja tokens temporales generados al autenticarse.
+
+2. **RLS (Row Level Security) Activo:**
+   - La API de Apps Script bloquea cualquier lectura o mutación anónima (`getAllData`, `saveProduct`, `registerSale`, etc.).
+   - Si no se envía un token de sesión válido y no expirado, el servidor rechaza la solicitud de inmediato con un error `401 Unauthorized (UNAUTHORIZED_RLS)`.
+   - Nadie puede consultar filas de la base de datos sin haber iniciado sesión.
+
+3. **Signout Real en Servidor / Base de Datos:**
+   - Al hacer clic en **Cerrar Sesión (🚪 Salir)**, el sistema no solo limpia el almacenamiento local del navegador:
+   - Envía una petición `action: 'logout'` a Google Apps Script para **destruir e invalidar el token en el servidor** (`CacheService` y `PropertiesService`).
+   - El token queda revocado en el backend y no puede volver a ser utilizado.
 
 ---
 
-## ⏰ Paso 4: Configurar los Disparadores (Triggers) de Respaldo Automático
+## 🌐 Paso 3: Actualizar el Despliegue en Apps Script (Si ya tenías uno)
 
-Para garantizar la seguridad de los datos de Pamela contra cualquier imprevisto:
-
-1. Regresa a la pestaña de tu hoja de Google Sheets y **recarga la página** (F5).
-2. En el menú superior de la hoja aparecerá un nuevo menú exclusivo:  
-   👉 **`🌸 Thor Essence Admin`**
-3. Haz clic en:  
-   **`🌸 Thor Essence Admin` > `⏰ Configurar Respaldo Automático Diario`**.
-4. Autoriza la ejecución si te lo solicita.
-5. **¿Qué hace este disparador?**  
-   Google Apps Script programará automáticamente una tarea que, **todas las madrugadas a las 2:00 AM**, crea una copia completa de la base de datos con fecha y hora dentro de una carpeta llamada `Respaldos Thor Essence` en tu Google Drive. ¡Seguridad 100% automatizada!
-6. También puedes hacer clic en **`💾 Crear Copia de Respaldo en Drive`** en cualquier momento para generar un respaldo instantáneo manual.
-
----
-
-## 🔒 Paso 5: Dejar el Sistema Zero-Config para Pamela
-
-Para que Pamela no tenga que configurar absolutamente nada:
-
-1. Abre el archivo **`js/config.js`** en tu editor de código.
-2. Pega la URL de Apps Script en la variable `GAS_URL`:
-   ```javascript
-   const THOR_CONFIG = {
-     GAS_URL: "https://script.google.com/macros/s/TU_URL_COPIADA_AQUI/exec",
-     SECURITY_TOKEN: "THOR_SECURE_2026",
-     ...
-   };
-   ```
-3. Guarda el archivo, haz commit y súbelo a GitHub:
-   ```bash
-   git add .
-   git commit -m "feat: conectar backend de Google Sheets con respaldo automatico"
-   git push origin main
-   ```
-4. **¡Listo!** A partir de ese momento, cualquier persona que entre a:  
-   👉 **`https://jesusx26x.github.io/Sistema-PDLSC/`**  
-   estará conectada directamente y en tiempo real a la base de datos de Google Sheets sin configurar nada.
+Cada vez que actualices `Codigo.gs`:
+1. En Apps Script, haz clic en **Implementar** > **Gestionar implementaciones**.
+2. Selecciona tu implementación activa y pulsa el lápiz ✏️ (**Editar**).
+3. En **Versión**, selecciona **Nueva versión**.
+4. Haz clic en **Implementar**. La URL permanece igual y adoptará inmediatamente los cambios de RLS y autenticación.
