@@ -354,12 +354,12 @@ const ThorApp = (function() {
 
     let html = `
       <div class="space-y-2">
-        <div class="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-between">
+        <div class="p-3 rounded-2xl bg-amber-50 border border-amber-200/80 shadow-xs flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <span class="text-amber-400 text-lg">⚠️</span>
-            <span class="text-xs sm:text-sm text-amber-200 font-medium">Tienes <strong>${bajoStock}</strong> productos con stock bajo y <strong>${agotados}</strong> agotados.</span>
+            <span class="text-amber-600 text-lg">⚠️</span>
+            <span class="text-xs sm:text-sm text-amber-900 font-medium">Tienes <strong>${bajoStock}</strong> productos con stock bajo y <strong>${agotados}</strong> agotados.</span>
           </div>
-          <button onclick="ThorApp.filterInventoryStock('low')" class="text-xs text-amber-300 underline font-semibold hover:text-amber-100">Ver todos</button>
+          <button onclick="ThorApp.filterInventoryStock('low')" class="text-xs text-amber-700 underline font-bold hover:text-amber-800">Ver todos</button>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
     `;
@@ -367,12 +367,12 @@ const ThorApp = (function() {
     itemsCriticos.forEach(p => {
       const esAgotado = p.cantidad === 0;
       html += `
-        <div class="p-2.5 rounded-xl bg-slate-900/80 border border-slate-700/60 flex items-center justify-between">
+        <div class="p-3 rounded-xl bg-white border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
-            <p class="text-xs font-semibold text-slate-200 truncate max-w-[170px] sm:max-w-[220px]">${p.nombre}</p>
-            <p class="text-[11px] text-slate-400">Quedan: <span class="font-bold ${esAgotado ? 'text-rose-400' : 'text-amber-400'}">${p.cantidad}</span> (Mín: ${p.stock_minimo || 3})</p>
+            <p class="text-xs font-semibold text-slate-800 truncate max-w-[170px] sm:max-w-[220px]">${p.nombre}</p>
+            <p class="text-[11px] text-slate-500">Quedan: <span class="font-bold ${esAgotado ? 'text-rose-600' : 'text-amber-600'}">${p.cantidad}</span> (Mín: ${p.stock_minimo || 3})</p>
           </div>
-          <button onclick="ThorApp.quickAdjustStock('${p.id}', 1)" class="btn-tactile px-2.5 py-1 text-xs bg-amber-500/20 text-amber-300 rounded-lg border border-amber-500/30">+ Stock</button>
+          <button onclick="ThorApp.quickAdjustStock('${p.id}', 1)" class="btn-tactile px-2.5 py-1 text-xs bg-amber-50 text-amber-800 font-semibold rounded-lg border border-amber-200 hover:bg-amber-100">+ Stock</button>
         </div>
       `;
     });
@@ -421,15 +421,15 @@ const ThorApp = (function() {
           scales: {
             y: {
               beginAtZero: true,
-              grid: { color: 'rgba(255, 255, 255, 0.04)' },
+              grid: { color: 'rgba(15, 23, 42, 0.06)' },
               ticks: {
-                color: '#94a3b8',
+                color: '#64748B',
                 callback: (val) => 'RD$ ' + val.toLocaleString()
               }
             },
             x: {
               grid: { display: false },
-              ticks: { color: '#94a3b8' }
+              ticks: { color: '#64748B' }
             }
           }
         }
@@ -458,7 +458,7 @@ const ThorApp = (function() {
             backgroundColor: [
               '#D4AF37', '#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6', '#10B981', '#64748B'
             ],
-            borderColor: '#090e24',
+            borderColor: '#FFFFFF',
             borderWidth: 3
           }]
         },
@@ -468,7 +468,7 @@ const ThorApp = (function() {
           plugins: {
             legend: {
               position: 'bottom',
-              labels: { color: '#cbd5e1', font: { size: 11 }, boxWidth: 12 }
+              labels: { color: '#475569', font: { size: 11 }, boxWidth: 12 }
             }
           }
         }
@@ -482,7 +482,7 @@ const ThorApp = (function() {
 
     const ultimasVentas = state.sales.slice(0, 5);
     if (ultimasVentas.length === 0) {
-      list.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">No hay ventas registradas aún.</p>`;
+      list.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">No hay ventas registradas aún.</p>`;
       return;
     }
 
@@ -490,19 +490,19 @@ const ThorApp = (function() {
     ultimasVentas.forEach(v => {
       const esCancelada = v.estado === 'Cancelada';
       html += `
-        <div class="flex items-center justify-between py-2.5 border-b border-slate-800/80 last:border-0">
+        <div class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
           <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-full ${esCancelada ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'} flex items-center justify-center text-xs font-bold shrink-0">
+            <div class="w-8 h-8 rounded-full ${esCancelada ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-amber-50 text-amber-700 border border-amber-200'} flex items-center justify-center text-xs font-bold shrink-0">
               ${esCancelada ? '✕' : '🛍️'}
             </div>
             <div>
-              <p class="text-xs font-semibold text-slate-200 ${esCancelada ? 'line-through text-slate-500' : ''}">${v.nombre_articulo}</p>
-              <p class="text-[11px] text-slate-400">${v.cantidad} un. • ${v.cliente || 'Cliente'} • <span class="text-amber-400/90 font-medium">${v.metodo_pago || 'Efectivo'}</span></p>
+              <p class="text-xs font-semibold text-slate-800 ${esCancelada ? 'line-through text-slate-400' : ''}">${v.nombre_articulo}</p>
+              <p class="text-[11px] text-slate-500">${v.cantidad} un. • ${v.cliente || 'Cliente'} • <span class="text-amber-700 font-medium">${v.metodo_pago || 'Efectivo'}</span></p>
             </div>
           </div>
           <div class="text-right shrink-0">
-            <p class="text-xs font-bold ${esCancelada ? 'text-slate-500' : 'text-emerald-400'}">RD$ ${Number(v.total_dop || 0).toLocaleString()}</p>
-            <p class="text-[10px] text-slate-500">${(v.fecha_venta || '').substring(5, 16)}</p>
+            <p class="text-xs font-bold ${esCancelada ? 'text-slate-400' : 'text-emerald-600'}">RD$ ${Number(v.total_dop || 0).toLocaleString()}</p>
+            <p class="text-[10px] text-slate-400">${(v.fecha_venta || '').substring(5, 16)}</p>
           </div>
         </div>
       `;
@@ -574,41 +574,41 @@ const ThorApp = (function() {
           : 0;
 
         tableHtml += `
-          <tr class="border-b border-slate-800/80 hover:bg-slate-800/40 transition">
+          <tr class="border-b border-slate-100 hover:bg-amber-50/40 transition">
             <td class="py-3 px-4">
-              <div class="font-semibold text-slate-100 text-sm">${p.nombre}</div>
-              <div class="text-xs text-slate-400 font-mono">${p.id} • ${p.ubicacion || 'Tanque'}</div>
+              <div class="font-semibold text-slate-800 text-sm">${p.nombre}</div>
+              <div class="text-xs text-slate-500 font-mono">${p.id} • ${p.ubicacion || 'Tanque'}</div>
             </td>
             <td class="py-3 px-3">
-              <span class="text-xs px-2 py-0.5 rounded-md bg-slate-800 text-amber-200/90 border border-slate-700">${p.categoria || 'Variedades'}</span>
+              <span class="text-xs px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-800 font-medium border border-amber-200/80">${p.categoria || 'Variedades'}</span>
             </td>
             <td class="py-3 px-3 text-center">
               <div class="flex items-center justify-center gap-1.5">
-                <button onclick="ThorApp.quickAdjustStock('${p.id}', -1)" class="btn-tactile w-6 h-6 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center border border-slate-700">-</button>
-                <span class="font-bold text-sm px-1.5 ${qty === 0 ? 'text-rose-400' : qty <= min ? 'text-amber-400' : 'text-slate-100'}">${qty}</span>
-                <button onclick="ThorApp.quickAdjustStock('${p.id}', 1)" class="btn-tactile w-6 h-6 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center border border-slate-700">+</button>
+                <button onclick="ThorApp.quickAdjustStock('${p.id}', -1)" class="btn-tactile w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center border border-slate-200">-</button>
+                <span class="font-bold text-sm px-1.5 ${qty === 0 ? 'text-rose-600' : qty <= min ? 'text-amber-600' : 'text-slate-800'}">${qty}</span>
+                <button onclick="ThorApp.quickAdjustStock('${p.id}', 1)" class="btn-tactile w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center border border-slate-200">+</button>
               </div>
-              <span class="text-[10px] text-slate-500">Mín: ${min}</span>
+              <span class="text-[10px] text-slate-400">Mín: ${min}</span>
             </td>
             <td class="py-3 px-3 text-right">
-              <div class="text-xs text-slate-300 font-medium">RD$ ${Number(p.costo_dop || 0).toLocaleString()}</div>
-              <div class="text-[11px] text-amber-400/80 font-mono">$ ${Number(p.costo_usd || 0).toFixed(2)} USD</div>
+              <div class="text-xs text-slate-700 font-medium">RD$ ${Number(p.costo_dop || 0).toLocaleString()}</div>
+              <div class="text-[11px] text-amber-700 font-mono font-medium">$ ${Number(p.costo_usd || 0).toFixed(2)} USD</div>
             </td>
-            <td class="py-3 px-3 text-right font-bold text-sm text-emerald-400">
+            <td class="py-3 px-3 text-right font-bold text-sm text-emerald-600">
               RD$ ${Number(p.precio_venta_dop || 0).toLocaleString()}
-              <div class="text-[10px] font-normal text-slate-400">+${margen}% margen</div>
+              <div class="text-[10px] font-normal text-slate-500">+${margen}% margen</div>
             </td>
             <td class="py-3 px-3 text-center">
               <span class="${badgeClass}">${statusText}</span>
             </td>
             <td class="py-3 px-4 text-right whitespace-nowrap">
-              <button onclick="ThorApp.openSaleModalFor('${p.id}')" class="btn-tactile p-1.5 text-emerald-400 hover:bg-emerald-500/15 rounded-lg mr-1" title="Vender">
+              <button onclick="ThorApp.openSaleModalFor('${p.id}')" class="btn-tactile p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg mr-1 border border-emerald-200" title="Vender">
                 💰
               </button>
-              <button onclick="ThorApp.openEditProductModal('${p.id}')" class="btn-tactile p-1.5 text-amber-400 hover:bg-amber-500/15 rounded-lg mr-1" title="Editar">
+              <button onclick="ThorApp.openEditProductModal('${p.id}')" class="btn-tactile p-1.5 text-amber-700 hover:bg-amber-50 rounded-lg mr-1 border border-amber-200" title="Editar">
                 ✏️
               </button>
-              <button onclick="ThorApp.confirmDeleteProduct('${p.id}')" class="btn-tactile p-1.5 text-rose-400 hover:bg-rose-500/15 rounded-lg" title="Eliminar">
+              <button onclick="ThorApp.confirmDeleteProduct('${p.id}')" class="btn-tactile p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200" title="Eliminar">
                 🗑️
               </button>
             </td>
@@ -638,42 +638,42 @@ const ThorApp = (function() {
           <div class="p-4 rounded-2xl bento-card space-y-3">
             <div class="flex items-start justify-between gap-2">
               <div>
-                <span class="text-[10px] uppercase font-bold text-amber-400 tracking-wider">${p.categoria || 'Variedades'}</span>
-                <h4 class="font-bold text-slate-100 text-sm leading-snug">${p.nombre}</h4>
-                <p class="text-[11px] text-slate-400">${p.ubicacion || 'Tanque'} • ID: ${p.id}</p>
+                <span class="text-[10px] uppercase font-bold text-amber-700 tracking-wider">${p.categoria || 'Variedades'}</span>
+                <h4 class="font-bold text-slate-800 text-sm leading-snug">${p.nombre}</h4>
+                <p class="text-[11px] text-slate-500">${p.ubicacion || 'Tanque'} • ID: ${p.id}</p>
               </div>
               <span class="${badgeClass}">${statusText}</span>
             </div>
 
-            <div class="grid grid-cols-2 gap-2 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+            <div class="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
               <div>
-                <p class="text-[10px] text-slate-400">Costo (USD / RD$)</p>
-                <p class="text-xs font-semibold text-slate-300">$${Number(p.costo_usd || 0).toFixed(2)} / RD$${Number(p.costo_dop || 0).toLocaleString()}</p>
+                <p class="text-[10px] text-slate-500">Costo (USD / RD$)</p>
+                <p class="text-xs font-semibold text-slate-700">$${Number(p.costo_usd || 0).toFixed(2)} / RD$${Number(p.costo_dop || 0).toLocaleString()}</p>
               </div>
               <div class="text-right">
-                <p class="text-[10px] text-slate-400">Precio Venta</p>
-                <p class="text-sm font-bold text-emerald-400">RD$ ${Number(p.precio_venta_dop || 0).toLocaleString()}</p>
+                <p class="text-[10px] text-slate-500">Precio Venta</p>
+                <p class="text-sm font-bold text-emerald-600">RD$ ${Number(p.precio_venta_dop || 0).toLocaleString()}</p>
               </div>
             </div>
 
-            <div class="flex items-center justify-between pt-1 border-t border-slate-800/80">
+            <div class="flex items-center justify-between pt-1 border-t border-slate-100">
               <div class="flex items-center gap-2">
-                <button onclick="ThorApp.quickAdjustStock('${p.id}', -1)" class="btn-tactile w-9 h-9 rounded-xl bg-slate-800 text-slate-200 font-bold flex items-center justify-center border border-slate-700 text-sm">-</button>
+                <button onclick="ThorApp.quickAdjustStock('${p.id}', -1)" class="btn-tactile w-9 h-9 rounded-xl bg-slate-100 text-slate-700 font-bold flex items-center justify-center border border-slate-200 text-sm">-</button>
                 <div class="text-center px-1">
-                  <span class="text-base font-bold ${qty === 0 ? 'text-rose-400' : qty <= min ? 'text-amber-400' : 'text-slate-100'}">${qty}</span>
-                  <span class="block text-[9px] text-slate-400">unid.</span>
+                  <span class="text-base font-bold ${qty === 0 ? 'text-rose-600' : qty <= min ? 'text-amber-600' : 'text-slate-800'}">${qty}</span>
+                  <span class="block text-[9px] text-slate-500">unid.</span>
                 </div>
-                <button onclick="ThorApp.quickAdjustStock('${p.id}', 1)" class="btn-tactile w-9 h-9 rounded-xl bg-slate-800 text-slate-200 font-bold flex items-center justify-center border border-slate-700 text-sm">+</button>
+                <button onclick="ThorApp.quickAdjustStock('${p.id}', 1)" class="btn-tactile w-9 h-9 rounded-xl bg-slate-100 text-slate-700 font-bold flex items-center justify-center border border-slate-200 text-sm">+</button>
               </div>
 
               <div class="flex items-center gap-1.5">
-                <button onclick="ThorApp.openSaleModalFor('${p.id}')" class="btn-tactile px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1">
+                <button onclick="ThorApp.openSaleModalFor('${p.id}')" class="btn-tactile px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold flex items-center gap-1">
                   💰 Vender
                 </button>
-                <button onclick="ThorApp.openEditProductModal('${p.id}')" class="btn-tactile p-2 rounded-xl bg-slate-800 text-slate-300 border border-slate-700 text-xs">
+                <button onclick="ThorApp.openEditProductModal('${p.id}')" class="btn-tactile p-2 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 text-xs">
                   ✏️
                 </button>
-                <button onclick="ThorApp.confirmDeleteProduct('${p.id}')" class="btn-tactile p-2 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs">
+                <button onclick="ThorApp.confirmDeleteProduct('${p.id}')" class="btn-tactile p-2 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs">
                   🗑️
                 </button>
               </div>
@@ -699,8 +699,8 @@ const ThorApp = (function() {
         <button onclick="ThorApp.filterInventoryCategory('${cat}')" 
           class="btn-tactile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${
             isSelected 
-              ? 'bg-gradient-to-r from-amber-400 to-amber-300 text-slate-950 font-bold shadow-md' 
-              : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 border border-slate-700'
+              ? 'bg-gradient-to-r from-amber-400 to-amber-300 text-slate-950 font-bold shadow-xs' 
+              : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 shadow-xs'
           }">
           ${label}
         </button>
@@ -735,23 +735,23 @@ const ThorApp = (function() {
       state.sales.forEach(v => {
         const esCancelada = v.estado === 'Cancelada';
         html += `
-          <tr class="border-b border-slate-800 hover:bg-slate-800/40 transition ${esCancelada ? 'opacity-40' : ''}">
-            <td class="py-3 px-4 font-mono text-xs text-slate-400">
+          <tr class="border-b border-slate-100 hover:bg-amber-50/40 transition ${esCancelada ? 'opacity-40' : ''}">
+            <td class="py-3 px-4 font-mono text-xs text-slate-500">
               ${v.id_venta}
-              <div class="text-[11px] text-slate-500">${v.fecha_venta || ''}</div>
+              <div class="text-[11px] text-slate-400">${v.fecha_venta || ''}</div>
             </td>
             <td class="py-3 px-3">
-              <div class="font-semibold text-slate-100 text-sm ${esCancelada ? 'line-through' : ''}">${v.nombre_articulo}</div>
-              <div class="text-xs text-slate-400">${v.cliente || 'Cliente General'}</div>
+              <div class="font-semibold text-slate-800 text-sm ${esCancelada ? 'line-through text-slate-400' : ''}">${v.nombre_articulo}</div>
+              <div class="text-xs text-slate-500">${v.cliente || 'Cliente General'}</div>
             </td>
-            <td class="py-3 px-3 text-center font-bold text-sm text-slate-200">
+            <td class="py-3 px-3 text-center font-bold text-sm text-slate-800">
               ${v.cantidad} un.
             </td>
             <td class="py-3 px-3 text-right">
-              <div class="font-bold text-sm text-slate-100">RD$ ${Number(v.total_dop || 0).toLocaleString()}</div>
-              <div class="text-[11px] text-slate-400">${v.metodo_pago || 'Efectivo'}</div>
+              <div class="font-bold text-sm text-slate-800">RD$ ${Number(v.total_dop || 0).toLocaleString()}</div>
+              <div class="text-[11px] text-slate-500">${v.metodo_pago || 'Efectivo'}</div>
             </td>
-            <td class="py-3 px-3 text-right font-semibold text-sm ${esCancelada ? 'text-slate-500' : 'text-emerald-400'}">
+            <td class="py-3 px-3 text-right font-semibold text-sm ${esCancelada ? 'text-slate-400' : 'text-emerald-600'}">
               RD$ ${Number(v.ganancia_dop || 0).toLocaleString()}
             </td>
             <td class="py-3 px-3 text-center">
@@ -759,10 +759,10 @@ const ThorApp = (function() {
             </td>
             <td class="py-3 px-4 text-right">
               ${!esCancelada ? `
-                <button onclick="ThorApp.confirmCancelSale('${v.id_venta}')" class="btn-tactile px-2.5 py-1 text-xs text-rose-400 hover:bg-rose-500/15 rounded-lg border border-rose-500/30">
+                <button onclick="ThorApp.confirmCancelSale('${v.id_venta}')" class="btn-tactile px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200">
                   Anular
                 </button>
-              ` : '<span class="text-xs text-slate-500">Anulada</span>'}
+              ` : '<span class="text-xs text-slate-400">Anulada</span>'}
             </td>
           </tr>
         `;
@@ -777,27 +777,27 @@ const ThorApp = (function() {
         cardsHtml += `
           <div class="p-4 rounded-2xl bento-card space-y-2.5 ${esCancelada ? 'opacity-40' : ''}">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-mono text-amber-400/90">${v.id_venta}</span>
+              <span class="text-xs font-mono text-amber-700 font-semibold">${v.id_venta}</span>
               <span class="${esCancelada ? 'badge-danger' : 'badge-success'}">${v.estado || 'Completada'}</span>
             </div>
             <div>
-              <h4 class="font-bold text-slate-100 text-sm ${esCancelada ? 'line-through' : ''}">${v.nombre_articulo}</h4>
-              <p class="text-xs text-slate-400">${v.cantidad} unidades • ${v.cliente || 'Cliente General'}</p>
+              <h4 class="font-bold text-slate-800 text-sm ${esCancelada ? 'line-through text-slate-400' : ''}">${v.nombre_articulo}</h4>
+              <p class="text-xs text-slate-500">${v.cantidad} unidades • ${v.cliente || 'Cliente General'}</p>
             </div>
-            <div class="flex items-center justify-between bg-slate-900/60 p-2.5 rounded-xl text-xs">
+            <div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs">
               <div>
-                <span class="text-slate-400 block text-[10px]">Total Venta</span>
-                <span class="font-bold text-slate-100 text-sm">RD$ ${Number(v.total_dop || 0).toLocaleString()}</span>
+                <span class="text-slate-500 block text-[10px]">Total Venta</span>
+                <span class="font-bold text-slate-800 text-sm">RD$ ${Number(v.total_dop || 0).toLocaleString()}</span>
               </div>
               <div class="text-right">
-                <span class="text-slate-400 block text-[10px]">Ganancia Neta</span>
-                <span class="font-bold text-emerald-400 text-sm">RD$ ${Number(v.ganancia_dop || 0).toLocaleString()}</span>
+                <span class="text-slate-500 block text-[10px]">Ganancia Neta</span>
+                <span class="font-bold text-emerald-600 text-sm">RD$ ${Number(v.ganancia_dop || 0).toLocaleString()}</span>
               </div>
             </div>
-            <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+            <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1">
               <span>${v.fecha_venta || ''}</span>
               ${!esCancelada ? `
-                <button onclick="ThorApp.confirmCancelSale('${v.id_venta}')" class="text-rose-400 underline font-semibold">Anular Venta</button>
+                <button onclick="ThorApp.confirmCancelSale('${v.id_venta}')" class="text-rose-600 underline font-semibold">Anular Venta</button>
               ` : ''}
             </div>
           </div>
@@ -830,39 +830,39 @@ const ThorApp = (function() {
             <div>
               <div class="flex items-center gap-2">
                 <span class="text-xl">📦</span>
-                <h3 class="font-bold text-base text-slate-100">${r.nombre_tanque}</h3>
+                <h3 class="font-bold text-base text-slate-800">${r.nombre_tanque}</h3>
               </div>
-              <p class="text-xs text-slate-400 mt-0.5">Llegada: <strong>${r.fecha}</strong> • Origen: <strong>${r.origen || 'EE.UU.'}</strong></p>
+              <p class="text-xs text-slate-500 mt-0.5">Llegada: <strong>${r.fecha}</strong> • Origen: <strong>${r.origen || 'EE.UU.'}</strong></p>
             </div>
             <div class="flex items-center gap-2">
               <span class="badge-gold">${r.total_unidades} Unidades</span>
-              <span class="text-xs text-amber-300 font-mono">Tasa: RD$ ${Number(r.tasa_cambio || 60.50).toFixed(2)}</span>
+              <span class="text-xs text-amber-700 font-mono font-medium">Tasa: RD$ ${Number(r.tasa_cambio || 60.50).toFixed(2)}</span>
             </div>
           </div>
 
-          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-xs">
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
             <div>
-              <span class="text-slate-400 block text-[11px]">Flete / Envío</span>
-              <span class="font-semibold text-slate-200">$${Number(r.flete_usd || 0).toFixed(2)} USD</span>
+              <span class="text-slate-500 block text-[11px]">Flete / Envío</span>
+              <span class="font-semibold text-slate-800">$${Number(r.flete_usd || 0).toFixed(2)} USD</span>
             </div>
             <div>
-              <span class="text-slate-400 block text-[11px]">Unidades Ingresadas</span>
-              <span class="font-semibold text-emerald-400">${r.total_unidades} piezas</span>
+              <span class="text-slate-500 block text-[11px]">Unidades Ingresadas</span>
+              <span class="font-semibold text-emerald-600">${r.total_unidades} piezas</span>
             </div>
             <div class="col-span-2 sm:col-span-1">
-              <span class="text-slate-400 block text-[11px]">Notas / Observaciones</span>
-              <span class="text-slate-300 truncate block">${r.notas || 'Sin notas'}</span>
+              <span class="text-slate-500 block text-[11px]">Notas / Observaciones</span>
+              <span class="text-slate-700 truncate block">${r.notas || 'Sin notas'}</span>
             </div>
           </div>
 
           ${r.articulos && r.articulos.length > 0 ? `
             <div class="mt-2">
-              <p class="text-xs font-bold text-slate-300 mb-2">Artículos incluidos en este tanque:</p>
+              <p class="text-xs font-bold text-slate-700 mb-2">Artículos incluidos en este tanque:</p>
               <div class="max-h-40 overflow-y-auto space-y-1.5 pr-1">
                 ${r.articulos.map(item => `
-                  <div class="flex items-center justify-between text-xs py-1.5 px-3 rounded-xl bg-slate-800/70 border border-slate-700/60">
-                    <span class="text-slate-200 font-medium">${item.nombre}</span>
-                    <span class="text-amber-300 font-bold">${item.cantidad} un. • RD$ ${Number(item.precio_venta_dop || 0).toLocaleString()}</span>
+                  <div class="flex items-center justify-between text-xs py-1.5 px-3 rounded-xl bg-white border border-slate-200">
+                    <span class="text-slate-800 font-medium">${item.nombre}</span>
+                    <span class="text-amber-800 font-bold">${item.cantidad} un. • RD$ ${Number(item.precio_venta_dop || 0).toLocaleString()}</span>
                   </div>
                 `).join('')}
               </div>
@@ -914,19 +914,19 @@ const ThorApp = (function() {
         .slice(0, 5);
 
       if (sorted.length === 0) {
-        topList.innerHTML = `<p class="text-xs text-slate-400 py-3 text-center">Sin datos suficientes de ventas.</p>`;
+        topList.innerHTML = `<p class="text-xs text-slate-500 py-3 text-center">Sin datos suficientes de ventas.</p>`;
       } else {
         let html = '';
         sorted.forEach((item, idx) => {
           html += `
-            <div class="flex items-center justify-between py-2.5 border-b border-slate-800 last:border-0 text-xs">
+            <div class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0 text-xs">
               <div class="flex items-center gap-2.5">
-                <span class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 font-bold flex items-center justify-center text-[10px]">${idx + 1}</span>
-                <span class="text-slate-200 font-medium">${item.nombre}</span>
+                <span class="w-5 h-5 rounded-full bg-amber-50 text-amber-800 font-bold flex items-center justify-center text-[10px] border border-amber-200">${idx + 1}</span>
+                <span class="text-slate-800 font-medium">${item.nombre}</span>
               </div>
               <div class="text-right">
-                <span class="font-bold text-slate-100">${item.cantidad} un.</span>
-                <span class="text-slate-400 block text-[10px]">RD$ ${Math.round(item.total).toLocaleString()}</span>
+                <span class="font-bold text-slate-800">${item.cantidad} un.</span>
+                <span class="text-slate-500 block text-[10px]">RD$ ${Math.round(item.total).toLocaleString()}</span>
               </div>
             </div>
           `;
@@ -1202,9 +1202,9 @@ const ThorApp = (function() {
 
     if (state.tankDraftItems.length === 0) {
       container.innerHTML = `
-        <div class="text-center py-6 border-2 border-dashed border-slate-700/80 rounded-2xl">
-          <p class="text-xs text-slate-400">Aún no has agregado artículos a este tanque.</p>
-          <button type="button" onclick="ThorApp.addTankDraftItem()" class="btn-tactile mt-2 text-xs text-amber-300 font-semibold underline">+ Agregar primer artículo</button>
+        <div class="text-center py-6 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+          <p class="text-xs text-slate-500">Aún no has agregado artículos a este tanque.</p>
+          <button type="button" onclick="ThorApp.addTankDraftItem()" class="btn-tactile mt-2 text-xs text-amber-700 font-bold underline">+ Agregar primer artículo</button>
         </div>
       `;
       return;
@@ -1215,18 +1215,18 @@ const ThorApp = (function() {
 
     state.tankDraftItems.forEach((item, idx) => {
       html += `
-        <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-700 space-y-2.5">
+        <div class="p-3.5 rounded-xl bg-white border border-slate-200 shadow-xs space-y-2.5">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-amber-400">Artículo #${idx + 1}</span>
-            <button type="button" onclick="ThorApp.removeTankDraftItem(${item.tempId})" class="btn-tactile text-rose-400 text-xs hover:text-rose-300">✕ Quitar</button>
+            <span class="text-xs font-bold text-amber-700">Artículo #${idx + 1}</span>
+            <button type="button" onclick="ThorApp.removeTankDraftItem(${item.tempId})" class="btn-tactile text-rose-600 text-xs font-semibold hover:text-rose-700">✕ Quitar</button>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
-              <label class="block text-[10px] text-slate-400">Nombre del Producto</label>
+              <label class="block text-[10px] font-semibold text-slate-600">Nombre del Producto</label>
               <input type="text" value="${item.nombre}" onchange="ThorApp.updateTankDraftItem(${item.tempId}, 'nombre', this.value)" placeholder="Ej: Perfume 100ml..." class="form-input text-xs py-1.5" required>
             </div>
             <div>
-              <label class="block text-[10px] text-slate-400">Categoría</label>
+              <label class="block text-[10px] font-semibold text-slate-600">Categoría</label>
               <select onchange="ThorApp.updateTankDraftItem(${item.tempId}, 'categoria', this.value)" class="form-input text-xs py-1.5">
                 ${ThorAPI.DEFAULT_CATEGORIES.map(c => `<option value="${c}" ${item.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}
               </select>
@@ -1234,20 +1234,20 @@ const ThorApp = (function() {
           </div>
           <div class="grid grid-cols-3 gap-2">
             <div>
-              <label class="block text-[10px] text-slate-400">Cantidad</label>
+              <label class="block text-[10px] font-semibold text-slate-600">Cantidad</label>
               <input type="number" min="1" value="${item.cantidad}" onchange="ThorApp.updateTankDraftItem(${item.tempId}, 'cantidad', this.value)" class="form-input text-xs py-1.5 font-bold" required>
             </div>
             <div>
-              <label class="block text-[10px] text-slate-400">Costo USD ($)</label>
+              <label class="block text-[10px] font-semibold text-slate-600">Costo USD ($)</label>
               <input type="number" step="0.01" min="0" value="${item.costo_usd}" onchange="ThorApp.updateTankDraftItem(${item.tempId}, 'costo_usd', this.value)" class="form-input text-xs py-1.5 font-mono" required>
             </div>
             <div>
-              <label class="block text-[10px] text-slate-400">Precio Venta (RD$)</label>
-              <input type="number" step="1" min="0" value="${Math.round(item.precio_venta_dop)}" onchange="ThorApp.updateTankDraftItem(${item.tempId}, 'precio_venta_dop', this.value)" class="form-input text-xs py-1.5 font-bold text-emerald-400" required>
+              <label class="block text-[10px] font-semibold text-slate-600">Precio Venta (RD$)</label>
+              <input type="number" step="1" min="0" value="${Math.round(item.precio_venta_dop)}" onchange="ThorApp.updateTankDraftItem(${item.tempId}, 'precio_venta_dop', this.value)" class="form-input text-xs py-1.5 font-bold text-emerald-600" required>
             </div>
           </div>
-          <div class="text-[10px] text-slate-400 text-right">
-            Costo convertido: <strong class="text-slate-200">RD$ ${Math.round(item.costo_usd * tasa).toLocaleString()}</strong>
+          <div class="text-[10px] text-slate-500 text-right">
+            Costo convertido: <strong class="text-slate-800">RD$ ${Math.round(item.costo_usd * tasa).toLocaleString()}</strong>
           </div>
         </div>
       `;

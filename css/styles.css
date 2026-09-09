@@ -1,34 +1,34 @@
 /* ==========================================================================
-   THOR ESSENCE — ESTILOS ULTRA-PULIDOS (EMIL KOWALSKI & UX-UI-PRO-MAX)
+   THOR ESSENCE — WHITE LUXURY & GLASSMORPHISM (EMIL KOWALSKI STYLE)
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap');
 
 :root {
-  --bg-abyss: #040714;
-  --bg-surface: #090e24;
-  --bg-surface-raised: #101738;
-  --bg-card: rgba(14, 23, 46, 0.75);
-  --bg-card-hover: rgba(20, 32, 62, 0.85);
-  --bg-input: #0b122b;
+  --bg-abyss: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-raised: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-card-hover: #ffffff;
+  --bg-input: #ffffff;
   
-  --border-subtle: rgba(255, 255, 255, 0.07);
-  --border-gold: rgba(212, 175, 55, 0.22);
-  --border-gold-strong: rgba(212, 175, 55, 0.55);
+  --border-subtle: rgba(15, 23, 42, 0.08);
+  --border-gold: rgba(212, 175, 55, 0.35);
+  --border-gold-strong: rgba(212, 175, 55, 0.7);
   
-  --gold-primary: #d4af37;
-  --gold-light: #f5df88;
-  --gold-gradient: linear-gradient(135deg, #f7e089 0%, #d4af37 50%, #9e751d 100%);
-  --gold-gradient-hover: linear-gradient(135deg, #fff0aa 0%, #e5c04a 50%, #b38827 100%);
+  --gold-primary: #b8860b;
+  --gold-light: #d4af37;
+  --gold-gradient: linear-gradient(135deg, #dfb743 0%, #b8860b 100%);
+  --gold-gradient-hover: linear-gradient(135deg, #ecc557 0%, #c99718 100%);
   
   --rose-accent: #f472b6;
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
+  --text-main: #0f172a;
+  --text-muted: #475569;
   --text-dim: #64748b;
   
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
 
   /* Emil Kowalski Spring Physics Easing */
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
@@ -60,37 +60,28 @@ html, body {
   letter-spacing: 0.03em;
 }
 
-/* ==========================================================================
-   CONTENEDORES & TARJETAS (UX-UI-PRO-MAX BENTO GRID & GLASSMORPHISM)
-   ========================================================================== */
-
+/* Bento Card Luxury White */
 .bento-card {
   background: var(--bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-gold);
+  border: 1px solid rgba(212, 175, 55, 0.28);
   border-radius: 1.25rem;
   box-shadow: 
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.08),
-    0 10px 25px -5px rgba(0, 0, 0, 0.5),
-    0 0 15px -3px rgba(212, 175, 55, 0.04);
+    0 4px 20px -2px rgba(15, 23, 42, 0.05),
+    0 2px 6px -1px rgba(15, 23, 42, 0.02);
   transition: transform var(--duration-normal) var(--ease-spring),
               border-color var(--duration-normal) var(--ease-spring),
               box-shadow var(--duration-normal) var(--ease-spring);
 }
 
 .bento-card:hover {
-  border-color: var(--border-gold-strong);
+  border-color: rgba(212, 175, 55, 0.6);
   box-shadow: 
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.12),
-    0 16px 32px -6px rgba(0, 0, 0, 0.65),
-    0 0 25px 0 rgba(212, 175, 55, 0.14);
+    0 12px 30px -4px rgba(15, 23, 42, 0.08),
+    0 0 20px 0 rgba(212, 175, 55, 0.15);
+  transform: translateY(-2px);
 }
 
-/* ==========================================================================
-   BOTONES Y MICRO-INTERACCIONES (EMIL KOWALSKI STYLE)
-   ========================================================================== */
-
+/* Botones con física táctil Emil Kowalski */
 .btn-tactile {
   display: inline-flex;
   align-items: center;
@@ -111,15 +102,15 @@ html, body {
 
 .btn-gold {
   background: var(--gold-gradient);
-  color: #040714;
+  color: #ffffff;
   font-weight: 700;
   border: none;
-  box-shadow: 0 4px 16px rgba(212, 175, 55, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: 0 4px 14px rgba(184, 134, 11, 0.35);
 }
 
 .btn-gold:hover {
   background: var(--gold-gradient-hover);
-  box-shadow: 0 6px 22px rgba(212, 175, 55, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: 0 6px 18px rgba(184, 134, 11, 0.45);
   transform: translateY(-1px);
 }
 
@@ -128,39 +119,37 @@ html, body {
 }
 
 .btn-outline-gold {
-  background: rgba(212, 175, 55, 0.06);
-  color: var(--gold-light);
-  border: 1px solid var(--border-gold);
+  background: #ffffff;
+  color: #b8860b;
+  border: 1.5px solid rgba(212, 175, 55, 0.45);
+  font-weight: 600;
 }
 
 .btn-outline-gold:hover {
-  background: rgba(212, 175, 55, 0.15);
-  border-color: var(--gold-primary);
-  color: #fff;
+  background: #fffbeb;
+  border-color: #b8860b;
+  color: #926704;
 }
 
 .btn-subtle {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-muted);
-  border: 1px solid var(--border-subtle);
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
 }
 
 .btn-subtle:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-main);
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
-/* ==========================================================================
-   BADGES & PILLS
-   ========================================================================== */
-
+/* Badges con alto contraste y elegancia */
 .badge-gold {
-  background: rgba(212, 175, 55, 0.14);
-  color: #f7e089;
-  border: 1px solid rgba(212, 175, 55, 0.35);
+  background: #fef9e7;
+  color: #926704;
+  border: 1px solid #f3e5ab;
   font-size: 0.75rem;
   font-weight: 600;
-  padding: 0.2rem 0.6rem;
+  padding: 0.2rem 0.65rem;
   border-radius: 9999px;
   display: inline-flex;
   align-items: center;
@@ -168,12 +157,12 @@ html, body {
 }
 
 .badge-success {
-  background: rgba(16, 185, 129, 0.14);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
   font-size: 0.75rem;
   font-weight: 600;
-  padding: 0.2rem 0.6rem;
+  padding: 0.2rem 0.65rem;
   border-radius: 9999px;
   display: inline-flex;
   align-items: center;
@@ -181,12 +170,12 @@ html, body {
 }
 
 .badge-warning {
-  background: rgba(245, 158, 11, 0.14);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
   font-size: 0.75rem;
   font-weight: 600;
-  padding: 0.2rem 0.6rem;
+  padding: 0.2rem 0.65rem;
   border-radius: 9999px;
   display: inline-flex;
   align-items: center;
@@ -194,26 +183,23 @@ html, body {
 }
 
 .badge-danger {
-  background: rgba(239, 68, 68, 0.14);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
   font-size: 0.75rem;
   font-weight: 600;
-  padding: 0.2rem 0.6rem;
+  padding: 0.2rem 0.65rem;
   border-radius: 9999px;
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
 }
 
-/* ==========================================================================
-   INPUTS & FORMULARIOS
-   ========================================================================== */
-
+/* Inputs limpios, claros y de alta legibilidad */
 .form-input {
-  background-color: var(--bg-input);
-  border: 1px solid rgba(212, 175, 55, 0.22);
-  color: #fff;
+  background-color: #ffffff;
+  border: 1.5px solid rgba(212, 175, 55, 0.35);
+  color: #0f172a;
   border-radius: 0.875rem;
   padding: 0.7rem 0.95rem;
   width: 100%;
@@ -225,20 +211,17 @@ html, body {
 .form-input:focus {
   outline: none;
   border-color: var(--gold-primary);
-  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.25);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
 }
 
 .form-input::placeholder {
-  color: var(--text-dim);
+  color: #94a3b8;
 }
 
-/* ==========================================================================
-   SONNER-STYLE TOAST NOTIFICATION SYSTEM (EMIL KOWALSKI)
-   ========================================================================== */
-
+/* Toasts Sonner en Light Mode */
 #sonner-container {
   position: fixed;
-  bottom: 5.5rem; /* por encima de la barra móvil */
+  bottom: 5.5rem;
   right: 1.25rem;
   z-index: 9999;
   display: flex;
@@ -257,15 +240,13 @@ html, body {
 
 .sonner-toast {
   pointer-events: auto;
-  background: rgba(14, 23, 46, 0.95);
+  background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(212, 175, 55, 0.35);
+  border: 1.5px solid rgba(212, 175, 55, 0.4);
   border-radius: 1rem;
   padding: 0.85rem 1.15rem;
-  box-shadow: 
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 16px 36px -4px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.12);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -300,27 +281,21 @@ html, body {
   }
 }
 
-/* ==========================================================================
-   VAUL-STYLE MOBILE DRAWER & MODAL (EMIL KOWALSKI)
-   ========================================================================== */
-
+/* Vaul Drawer */
 .vaul-drawer {
   transition: transform var(--duration-drawer) var(--ease-spring),
               opacity var(--duration-drawer) var(--ease-spring);
 }
 
 .vaul-handle {
-  width: 40px;
+  width: 44px;
   height: 5px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.25);
+  background: #cbd5e1;
   margin: 0.5rem auto 1rem auto;
 }
 
-/* ==========================================================================
-   ANIMACIONES FLUIDAS & ELEMENTOS DECORATIVOS
-   ========================================================================== */
-
+/* Transiciones de pestañas */
 .tab-view {
   animation: viewFadeIn var(--duration-drawer) var(--ease-spring) forwards;
 }
@@ -336,13 +311,14 @@ html, body {
   }
 }
 
+/* Marco del logo con resplandor dorado */
 .brand-logo-frame {
   position: relative;
   display: inline-block;
   border-radius: 50%;
-  padding: 2px;
+  padding: 2.5px;
   background: var(--gold-gradient);
-  box-shadow: 0 0 20px rgba(212, 175, 55, 0.35);
+  box-shadow: 0 4px 16px rgba(184, 134, 11, 0.25);
 }
 
 .brand-logo-frame img {
@@ -366,66 +342,60 @@ html, body {
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
-/* Scrollbar estilizada */
+/* Scrollbar */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-abyss);
+  background: #f1f5f9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #cbd5e1;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--gold-primary);
+  background: #b8860b;
 }
 
-/* ==========================================================================
-   GLASSMORPHISM AVANZADO & EFECTOS DE ILUMINACIÓN AMBIENTAL
-   ========================================================================== */
-
+/* Glassmorphism Blanco Luminoso */
 .glass-panel {
-  background: rgba(8, 14, 36, 0.72);
+  background: rgba(255, 255, 255, 0.90);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(212, 175, 55, 0.22);
+  border: 1px solid rgba(212, 175, 55, 0.28);
   box-shadow: 
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 20px 40px -15px rgba(0, 0, 0, 0.7),
-    0 0 30px -5px rgba(212, 175, 55, 0.08);
+    0 12px 36px -4px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
 }
 
 .glass-card-luxury {
-  background: linear-gradient(135deg, rgba(16, 23, 56, 0.75) 0%, rgba(9, 14, 36, 0.85) 100%);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(212, 175, 55, 0.28);
+  border: 1.5px solid rgba(212, 175, 55, 0.35);
   border-radius: 1.5rem;
   box-shadow: 
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.15),
-    0 25px 50px -12px rgba(0, 0, 0, 0.8),
-    0 0 35px -5px rgba(212, 175, 55, 0.12);
+    0 20px 45px -10px rgba(15, 23, 42, 0.08),
+    0 0 25px -3px rgba(212, 175, 55, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
 }
 
 .glass-card-luxury:hover {
-  border-color: rgba(212, 175, 55, 0.45);
+  border-color: rgba(212, 175, 55, 0.6);
   box-shadow: 
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.2),
-    0 30px 60px -12px rgba(0, 0, 0, 0.85),
-    0 0 45px -5px rgba(212, 175, 55, 0.18);
+    0 25px 55px -10px rgba(15, 23, 42, 0.12),
+    0 0 35px -2px rgba(212, 175, 55, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
 }
 
 .glass-input {
-  background: rgba(4, 7, 20, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(212, 175, 55, 0.25);
-  color: #f8fafc;
+  background: #ffffff;
+  border: 1.5px solid rgba(212, 175, 55, 0.32);
+  color: #0f172a;
   border-radius: 0.875rem;
   padding: 0.75rem 1rem;
   transition: all var(--duration-normal) var(--ease-spring);
@@ -433,17 +403,16 @@ html, body {
 
 .glass-input:focus {
   outline: none;
-  background: rgba(8, 14, 36, 0.9);
   border-color: var(--gold-primary);
-  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.25), 0 0 20px rgba(212, 175, 55, 0.15);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
 }
 
 .ambient-glow-gold {
   position: absolute;
-  width: 340px;
-  height: 340px;
-  background: radial-gradient(circle, rgba(212, 175, 55, 0.22) 0%, rgba(212, 175, 55, 0) 70%);
-  filter: blur(55px);
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.16) 0%, rgba(212, 175, 55, 0) 70%);
+  filter: blur(65px);
   pointer-events: none;
   border-radius: 50%;
 }
@@ -452,9 +421,30 @@ html, body {
   position: absolute;
   width: 480px;
   height: 480px;
-  background: radial-gradient(circle, rgba(30, 58, 138, 0.35) 0%, rgba(30, 58, 138, 0) 70%);
-  filter: blur(65px);
+  background: radial-gradient(circle, rgba(244, 114, 182, 0.14) 0%, rgba(244, 114, 182, 0) 70%);
+  filter: blur(75px);
   pointer-events: none;
   border-radius: 50%;
 }
 
+/* Tarjetas de acción rápida en el Dashboard */
+.action-card-quick {
+  background: #ffffff;
+  border: 1.5px solid rgba(212, 175, 55, 0.25);
+  border-radius: 1.25rem;
+  padding: 1.25rem;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
+  transition: all var(--duration-normal) var(--ease-spring);
+  cursor: pointer;
+  user-select: none;
+}
+
+.action-card-quick:hover {
+  border-color: #b8860b;
+  box-shadow: 0 10px 28px -4px rgba(184, 134, 11, 0.18);
+  transform: translateY(-3px);
+}
+
+.action-card-quick:active {
+  transform: translateY(0px) scale(0.98);
+}
