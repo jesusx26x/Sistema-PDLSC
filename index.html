@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Thor Essence — Sistema de Inventario & Ventas</title>
+  
+  <!-- Metadatos PWA y Móvil -->
+  <meta name="theme-color" content="#040714">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Thor Essence">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/jpeg" href="assets/logo.jpg">
+  <link rel="apple-touch-icon" href="assets/logo.jpg">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              navy: '#040714',
+              surface: '#090E24',
+              surfaceRaised: '#101738',
+              card: '#0E172E',
+              gold: '#D4AF37',
+              goldLight: '#F5DF88'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Estilos Personalizados Emil Kowalski & UX-UI-PRO-MAX -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body class="bg-[#040714] text-slate-100 min-h-screen flex flex-col md:flex-row pb-20 md:pb-0 selection:bg-amber-400 selection:text-slate-950">
+
+  <!-- Contenedor de Toasts estilo Sonner -->
+  <div id="sonner-container"></div>
+
+  <!-- =========================================================================
+       SIDEBAR DESKTOP / TABLET (UX-UI-PRO-MAX)
+       ========================================================================= -->
+  <aside class="hidden md:flex md:w-64 lg:w-72 bg-[#080E24] border-r border-amber-500/20 flex-col justify-between shrink-0 h-screen sticky top-0 z-30">
+    <div class="p-5">
+      <!-- Logo Oficial de Thor Essence -->
+      <div class="flex items-center gap-3.5 pb-6 border-b border-amber-500/20">
+        <div class="brand-logo-frame w-14 h-14 shrink-0">
+          <img src="assets/logo.jpg" alt="Thor Essence Logo" class="w-full h-full object-cover">
+        </div>
+        <div>
+          <h1 class="font-brand font-bold text-lg text-amber-300 tracking-wide leading-tight">THOR</h1>
+          <p class="font-brand text-xs text-amber-200/90 italic -mt-0.5">Essence</p>
+          <span class="text-[9px] uppercase tracking-wider text-slate-400 block mt-1 font-semibold">Inventario & Ventas</span>
+        </div>
+      </div>
+
+      <!-- Menú de Navegación enfocado 100% en Pamela -->
+      <nav class="mt-6 space-y-1.5">
+        <a href="#" data-tab="dashboard" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition bg-amber-400/15 text-amber-300 border-l-2 border-amber-400">
+          <span class="text-lg">📊</span>
+          <span>Inicio</span>
+        </a>
+        <a href="#" data-tab="inventario" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-400 hover:text-amber-300 hover:bg-slate-800/50">
+          <span class="text-lg">📦</span>
+          <span>Inventario</span>
+        </a>
+        <a href="#" data-tab="ventas" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-400 hover:text-amber-300 hover:bg-slate-800/50">
+          <span class="text-lg">💰</span>
+          <span>Ventas</span>
+        </a>
+        <a href="#" data-tab="tanques" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-400 hover:text-amber-300 hover:bg-slate-800/50">
+          <span class="text-lg">🚢</span>
+          <span>Tanques de EE.UU.</span>
+        </a>
+        <a href="#" data-tab="reportes" class="sidebar-link flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition text-slate-400 hover:text-amber-300 hover:bg-slate-800/50">
+          <span class="text-lg">📈</span>
+          <span>Reportes</span>
+        </a>
+      </nav>
+    </div>
+
+    <!-- Pie del Sidebar: Tasa en vivo y Conexión Nube -->
+    <div class="p-4 border-t border-amber-500/20 bg-slate-950/60 space-y-3">
+      <div class="p-2.5 rounded-xl bg-slate-900/90 border border-amber-500/25 flex items-center justify-between shadow-inner">
+        <div>
+          <span class="text-[10px] text-slate-400 block font-medium">Tasa USD ➔ DOP</span>
+          <span id="sidebarUsdRate" class="text-xs font-bold text-amber-300">1 USD = RD$ 60.50</span>
+        </div>
+        <button onclick="ThorApp.actualizarTasaCambio()" class="btn-tactile p-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 text-xs transition" title="Consultar tasa hoy">
+          🔄
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between px-1 text-[11px] text-slate-400">
+        <div class="flex items-center gap-2">
+          <span id="syncIndicator" class="pulse-dot-green"></span>
+          <span id="syncText" class="truncate">Nube Activa</span>
+        </div>
+        <button onclick="document.getElementById('modalDevSettings').classList.remove('hidden')" class="text-[10px] text-slate-500 hover:text-amber-300 transition" title="Ajustes técnicos de conexión">
+          ⚙️
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- =========================================================================
+       CONTENIDO PRINCIPAL
+       ========================================================================= -->
+  <div class="flex-1 flex flex-col min-w-0">
+
+    <!-- Topbar Superior (Móvil y Desktop) -->
+    <header class="sticky top-0 z-20 bg-[#040714]/90 backdrop-blur-md border-b border-amber-500/20 px-4 py-3 flex items-center justify-between gap-3">
+      <!-- Identidad Móvil -->
+      <div class="flex items-center gap-3 md:hidden">
+        <div class="brand-logo-frame w-10 h-10 shrink-0">
+          <img src="assets/logo.jpg" alt="Thor Essence" class="w-full h-full object-cover">
+        </div>
+        <div>
+          <h2 class="font-brand font-bold text-sm text-amber-300 leading-tight">THOR ESSENCE</h2>
+          <span class="text-[10px] text-slate-400 block">Perfumes, Splash & Estilo</span>
+        </div>
+      </div>
+
+      <!-- Tasa en vivo en Desktop -->
+      <div class="hidden md:flex items-center gap-3">
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-amber-500/25 text-xs">
+          <span class="text-amber-400 font-bold">💵 Tasa Hoy:</span>
+          <span id="headerUsdRate" class="font-mono text-slate-200 font-semibold">1 USD = RD$ 60.50</span>
+          <button onclick="ThorApp.actualizarTasaCambio()" class="btn-tactile text-amber-400 hover:text-amber-200 transition ml-1" title="Actualizar en vivo">🔄</button>
+        </div>
+        <button onclick="ThorApp.sincronizarConNube()" class="btn-tactile px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition">
+          ☁️ Sincronizar
+        </button>
+      </div>
+
+      <!-- Botones de Acción Rápida (Emil Kowalski Tactile Style) -->
+      <div class="flex items-center gap-2">
+        <button onclick="ThorApp.openSaleModal()" class="btn-tactile btn-gold text-xs py-2 px-3 sm:px-4">
+          <span>💰</span>
+          <span class="hidden sm:inline">Nueva</span> Venta
+        </button>
+        <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 hidden sm:inline-flex items-center gap-1.5">
+          <span>🚢</span>
+          <span>+ Tanque</span>
+        </button>
+        <button onclick="ThorApp.openNewProductModal()" class="btn-tactile btn-outline-gold text-xs py-2 px-2.5 sm:px-3.5 flex items-center gap-1">
+          <span>+</span>
+          <span class="hidden sm:inline">Producto</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Contenedor Dinámico de Vistas SPA -->
+    <main class="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto space-y-6">
+
+      <!-- =====================================================================
+           TAB 1: INICIO (DASHBOARD BENTO GRID)
+           ===================================================================== -->
+      <section id="view-dashboard" class="tab-view space-y-6">
+        <!-- Banner de Bienvenida -->
+        <div class="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-[#090E24] via-[#101738] to-[#090E24] border border-amber-500/30 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <span class="text-xs uppercase tracking-widest text-amber-400 font-bold">Panel Principal</span>
+            <h2 class="font-brand text-xl sm:text-2xl font-bold text-slate-100 mt-1">Thor Essence — Inventario</h2>
+            <p class="text-xs sm:text-sm text-slate-300 mt-1">Control de mercancía importada desde EE.UU., ventas y ganancias al instante.</p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-gold text-xs py-2.5 px-4 shadow-lg">
+              🚢 Ingresar Tanque
+            </button>
+          </div>
+        </div>
+
+        <!-- Alertas Inteligentes de Stock -->
+        <div id="dashboardAlerts"></div>
+
+        <!-- Tarjetas de Métricas (Bento Grid) -->
+        <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+          <div class="bento-card p-4 space-y-1">
+            <div class="flex items-center justify-between text-slate-400">
+              <span class="text-xs font-semibold">Productos Activos</span>
+              <span class="text-base">📦</span>
+            </div>
+            <p id="kpiTotalProductos" class="text-xl sm:text-2xl font-bold text-slate-100">0</p>
+            <p class="text-[11px] text-slate-400"><span id="kpiUnidadesStock" class="text-amber-400 font-semibold">0</span> unidades totales</p>
+          </div>
+
+          <div class="bento-card p-4 space-y-1">
+            <div class="flex items-center justify-between text-slate-400">
+              <span class="text-xs font-semibold">Valor Inventario (Venta)</span>
+              <span class="text-base">💎</span>
+            </div>
+            <p id="kpiValorInventario" class="text-xl sm:text-2xl font-bold text-amber-300">RD$ 0</p>
+            <p class="text-[11px] text-slate-400">Costo: <span id="kpiCostoInventario" class="text-slate-300">RD$ 0</span></p>
+          </div>
+
+          <div class="bento-card p-4 space-y-1">
+            <div class="flex items-center justify-between text-slate-400">
+              <span class="text-xs font-semibold">Ventas del Mes</span>
+              <span class="text-base">💰</span>
+            </div>
+            <p id="kpiVentasMes" class="text-xl sm:text-2xl font-bold text-emerald-400">RD$ 0</p>
+            <p class="text-[11px] text-slate-400">Ganancia: <span id="kpiGananciaMes" class="text-emerald-300 font-semibold">RD$ 0</span></p>
+          </div>
+
+          <div class="bento-card p-4 space-y-1">
+            <div class="flex items-center justify-between text-slate-400">
+              <span class="text-xs font-semibold">Por Agotarse</span>
+              <span class="text-base">⚠️</span>
+            </div>
+            <p id="kpiBajoStock" class="text-xl sm:text-2xl font-bold text-rose-400">0</p>
+            <p class="text-[11px] text-slate-400">Artículos con stock crítico</p>
+          </div>
+        </div>
+
+        <!-- Gráficas del Dashboard -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2 bento-card p-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="font-bold text-sm text-slate-100">Tendencia de Ventas (Últimos 7 días)</h3>
+                <p class="text-xs text-slate-400">Ingresos diarios en pesos dominicanos</p>
+              </div>
+              <span class="text-xs font-mono text-amber-400 font-semibold">RD$</span>
+            </div>
+            <div class="h-60 w-full">
+              <canvas id="chartSalesTrend"></canvas>
+            </div>
+          </div>
+
+          <div class="bento-card p-5 space-y-4">
+            <div>
+              <h3 class="font-bold text-sm text-slate-100">Distribución por Categoría</h3>
+              <p class="text-xs text-slate-400">Existencias físicas en almacén</p>
+            </div>
+            <div class="h-60 w-full flex items-center justify-center">
+              <canvas id="chartCategories"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actividad Reciente -->
+        <div class="bento-card p-5 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div>
+              <h3 class="font-bold text-sm text-slate-100">Últimas Ventas Registradas</h3>
+              <p class="text-xs text-slate-400">Movimientos comerciales más recientes</p>
+            </div>
+            <button onclick="ThorApp.switchTab('ventas')" class="btn-tactile text-xs text-amber-300 font-semibold hover:underline">Ver todas ➔</button>
+          </div>
+          <div id="recentActivityList" class="divide-y divide-slate-800/60"></div>
+        </div>
+      </section>
+
+      <!-- =====================================================================
+           TAB 2: INVENTARIO
+           ===================================================================== -->
+      <section id="view-inventario" class="tab-view hidden space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 class="font-brand text-2xl font-bold text-slate-100">Catálogo de Inventario</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Control de artículos, costos en USD/RD$ y existencias.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="ThorApp.exportInventoryToExcel()" class="btn-tactile btn-outline-gold text-xs py-2 px-3 flex items-center gap-1.5" title="Exportar a Excel">
+              <span>📥</span>
+              <span class="hidden sm:inline">Exportar</span> Excel
+            </button>
+            <button onclick="ThorApp.openNewProductModal()" class="btn-tactile btn-gold text-xs py-2 px-4 flex items-center gap-1.5">
+              <span>+</span>
+              <span>Nuevo Producto</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Buscador y Filtros -->
+        <div class="bento-card p-4 space-y-3">
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div class="relative flex-1">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">🔍</span>
+              <input type="text" id="inventorySearchInput" placeholder="Buscar por nombre, ID o tanque..." class="form-input pl-9 text-xs sm:text-sm">
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+              <select onchange="ThorApp.filterInventoryStock(this.value)" class="form-input text-xs sm:text-sm py-2 px-3">
+                <option value="all">Todos los stocks</option>
+                <option value="in">En Stock</option>
+                <option value="low">Stock Bajo (Crítico)</option>
+                <option value="out">Agotados (0 un.)</option>
+              </select>
+              <span id="inventoryCountBadge" class="badge-gold whitespace-nowrap">0 productos</span>
+            </div>
+          </div>
+
+          <div id="categoryPillsContainer" class="flex items-center gap-2 overflow-x-auto pb-1 pt-1 scrollbar-thin"></div>
+        </div>
+
+        <!-- Tarjetas Móviles -->
+        <div id="inventoryCardsMobile" class="grid grid-cols-1 gap-3 md:hidden"></div>
+
+        <!-- Tabla Desktop -->
+        <div class="hidden md:block bento-card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-amber-500/20 bg-slate-900/80 text-[11px] uppercase tracking-wider text-amber-300 font-bold">
+                  <th class="py-3 px-4">Producto / Ubicación</th>
+                  <th class="py-3 px-3">Categoría</th>
+                  <th class="py-3 px-3 text-center">Stock</th>
+                  <th class="py-3 px-3 text-right">Costo (RD$ / USD)</th>
+                  <th class="py-3 px-3 text-right">Precio Venta (RD$)</th>
+                  <th class="py-3 px-3 text-center">Estado</th>
+                  <th class="py-3 px-4 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="inventoryTableBody" class="divide-y divide-slate-800 text-xs"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- =====================================================================
+           TAB 3: VENTAS
+           ===================================================================== -->
+      <section id="view-ventas" class="tab-view hidden space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 class="font-brand text-2xl font-bold text-slate-100">Registro de Ventas</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Historial comercial y ventas registradas.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="salesCountBadge" class="badge-gold">0 ventas</span>
+            <button onclick="ThorApp.openSaleModal()" class="btn-tactile btn-gold text-xs py-2 px-4 flex items-center gap-1.5">
+              <span>💰</span>
+              <span>Registrar Venta</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="salesCardsMobile" class="grid grid-cols-1 gap-3 md:hidden"></div>
+
+        <div class="hidden md:block bento-card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-amber-500/20 bg-slate-900/80 text-[11px] uppercase tracking-wider text-amber-300 font-bold">
+                  <th class="py-3 px-4">ID / Fecha</th>
+                  <th class="py-3 px-3">Artículo / Cliente</th>
+                  <th class="py-3 px-3 text-center">Cant.</th>
+                  <th class="py-3 px-3 text-right">Total (RD$)</th>
+                  <th class="py-3 px-3 text-right">Ganancia (RD$)</th>
+                  <th class="py-3 px-3 text-center">Estado</th>
+                  <th class="py-3 px-4 text-right">Acción</th>
+                </tr>
+              </thead>
+              <tbody id="salesTableBody" class="divide-y divide-slate-800 text-xs"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- =====================================================================
+           TAB 4: TANQUES DE EE.UU. (RECEPCIONES)
+           ===================================================================== -->
+      <section id="view-tanques" class="tab-view hidden space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <span class="text-xs font-bold text-amber-400 uppercase tracking-wider">Importaciones de EE.UU.</span>
+            <h2 class="font-brand text-2xl font-bold text-slate-100 mt-0.5">Tanques & Lotes Recibidos</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Ingreso masivo de variedad de productos importados.</p>
+          </div>
+          <button onclick="ThorApp.openTankModal()" class="btn-tactile btn-gold text-xs py-2.5 px-4 flex items-center gap-2 self-start sm:self-auto shadow-lg">
+            <span>🚢</span>
+            <span>+ Ingresar Nuevo Tanque</span>
+          </button>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3">
+          <span class="text-2xl">💡</span>
+          <div class="text-xs text-amber-200/90 leading-relaxed">
+            <strong>¿Cómo funciona el módulo de tanques?</strong> Cada vez que llegue un tanque de EE.UU., haz clic en <strong>+ Ingresar Nuevo Tanque</strong>. Puedes ingresar los costos en dólares (USD) y el sistema los convertirá automáticamente a pesos dominicanos (RD$) a la tasa vigente, sumando todas las unidades al inventario en un solo paso.
+          </div>
+        </div>
+
+        <div id="receptionsList" class="space-y-4"></div>
+      </section>
+
+      <!-- =====================================================================
+           TAB 5: REPORTES
+           ===================================================================== -->
+      <section id="view-reportes" class="tab-view hidden space-y-6">
+        <div>
+          <h2 class="font-brand text-2xl font-bold text-slate-100">Reportes Financieros</h2>
+          <p class="text-xs text-slate-400 mt-0.5">Resumen de ventas, costo de mercancía y ganancia neta en RD$.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bento-card p-4 space-y-1">
+            <span class="text-xs text-slate-400 block font-medium">Ingresos Totales por Ventas</span>
+            <p id="repTotalIngresos" class="text-xl sm:text-2xl font-bold text-slate-100">RD$ 0</p>
+            <span class="text-[10px] text-emerald-400 font-semibold">Ventas realizadas</span>
+          </div>
+
+          <div class="bento-card p-4 space-y-1">
+            <span class="text-xs text-slate-400 block font-medium">Costo de Artículos Vendidos</span>
+            <p id="repTotalCostos" class="text-xl sm:text-2xl font-bold text-amber-300">RD$ 0</p>
+            <span class="text-[10px] text-slate-400">Inversión en mercancía</span>
+          </div>
+
+          <div class="bento-card p-4 space-y-1">
+            <span class="text-xs text-slate-400 block font-medium">Ganancia Neta</span>
+            <p id="repTotalGanancia" class="text-xl sm:text-2xl font-bold text-emerald-400">RD$ 0</p>
+            <span class="text-[10px] text-emerald-300 font-semibold">Beneficio en mano</span>
+          </div>
+
+          <div class="bento-card p-4 space-y-1">
+            <span class="text-xs text-slate-400 block font-medium">Margen General de Beneficio</span>
+            <p id="repMargenGeneral" class="text-xl sm:text-2xl font-bold text-amber-400">0%</p>
+            <span class="text-[10px] text-slate-400">Rentabilidad media</span>
+          </div>
+        </div>
+
+        <div class="bento-card p-5 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div>
+              <h3 class="font-bold text-sm text-slate-100">Top 5 Productos Más Vendidos</h3>
+              <p class="text-xs text-slate-400">Artículos con mayor rotación en Thor Essence</p>
+            </div>
+            <button onclick="ThorApp.exportInventoryToExcel()" class="btn-tactile btn-outline-gold text-xs py-1.5 px-3">
+              Descargar Reporte Excel
+            </button>
+          </div>
+          <div id="repTopProductsList" class="divide-y divide-slate-800"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- =========================================================================
+       BARRA DE NAVEGACIÓN INFERIOR MÓVIL (ESTILO EMIL KOWALSKI)
+       ========================================================================= -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#080E24]/95 backdrop-blur-xl border-t border-amber-500/25 px-2 py-1.5 flex items-center justify-around shadow-2xl">
+    <button data-tab="dashboard" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-amber-300 transition">
+      <span class="text-lg">📊</span>
+      <span class="text-[10px] font-semibold">Inicio</span>
+    </button>
+    <button data-tab="inventario" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-slate-400 transition">
+      <span class="text-lg">📦</span>
+      <span class="text-[10px] font-semibold">Inventario</span>
+    </button>
+    <button onclick="ThorApp.openSaleModal()" class="btn-tactile flex flex-col items-center -mt-5 bg-gradient-to-tr from-amber-400 to-amber-200 text-slate-950 w-12 h-12 rounded-full shadow-lg font-bold justify-center active:scale-95 transition">
+      <span class="text-xl">💰</span>
+    </button>
+    <button data-tab="tanques" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-slate-400 transition">
+      <span class="text-lg">🚢</span>
+      <span class="text-[10px] font-semibold">Tanques</span>
+    </button>
+    <button data-tab="reportes" class="mobile-nav-btn flex flex-col items-center gap-0.5 p-1.5 text-slate-400 transition">
+      <span class="text-lg">📈</span>
+      <span class="text-[10px] font-semibold">Reportes</span>
+    </button>
+  </nav>
+
+  <!-- =========================================================================
+       MODAL 1: NUEVO / EDITAR PRODUCTO (VAUL DRAWER STYLE)
+       ========================================================================= -->
+  <div id="modalProduct" class="modal-container fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="modal-backdrop fixed inset-0 bg-slate-950/80 backdrop-blur-md"></div>
+    <div class="vaul-drawer relative w-full max-w-lg bg-[#0E172E] border border-amber-500/30 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4">
+      <div class="vaul-handle sm:hidden"></div>
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 id="modalProductTitle" class="font-brand font-bold text-lg text-slate-100">Nuevo Producto</h3>
+        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-200 text-lg">✕</button>
+      </div>
+
+      <form id="formProduct" class="space-y-4">
+        <input type="hidden" id="prodId">
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Nombre del Producto *</label>
+          <input type="text" id="prodNombre" placeholder="Ej: Perfume Thor Gold Luxury 100ml" class="form-input text-xs sm:text-sm" required>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Categoría</label>
+            <select id="prodCategoria" class="form-input text-xs sm:text-sm">
+              <option value="Perfumes">Perfumes</option>
+              <option value="Splash">Splash</option>
+              <option value="Cremas">Cremas</option>
+              <option value="Body Wash">Body Wash</option>
+              <option value="Accesorios">Accesorios</option>
+              <option value="Maquillaje">Maquillaje</option>
+              <option value="Variedades">Variedades</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Ubicación / Tanque</label>
+            <input type="text" id="prodUbicacion" placeholder="Ej: Tanque #2 / Estante A" class="form-input text-xs sm:text-sm">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Stock Disponible *</label>
+            <input type="number" id="prodCantidad" min="0" value="1" class="form-input text-xs sm:text-sm font-bold" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Alerta Stock Mínimo</label>
+            <input type="number" id="prodStockMin" min="1" value="3" class="form-input text-xs sm:text-sm">
+          </div>
+        </div>
+
+        <!-- Selector de Moneda de Costo (USD vs RD$) -->
+        <div class="p-3.5 rounded-2xl bg-slate-900/90 border border-amber-500/25 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span id="prodCurrencyLabel" class="text-xs font-bold text-amber-300">Costo en Dólares (USD)</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="prodCurrencyToggle" checked class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+            </label>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div id="prodUsdGroup">
+              <label class="block text-[11px] text-slate-400 mb-1">Costo Dólares (USD $)</label>
+              <input type="number" step="0.01" min="0" id="prodCostoUsd" placeholder="0.00" class="form-input text-xs sm:text-sm font-mono">
+            </div>
+            <div id="prodDopGroup">
+              <label class="block text-[11px] text-slate-400 mb-1">Costo Pesos (RD$)</label>
+              <input type="number" step="0.01" min="0" id="prodCostoDop" placeholder="0.00" class="form-input text-xs sm:text-sm font-mono" required>
+            </div>
+          </div>
+
+          <div id="prodConvertedCostPreview" class="text-[11px] font-mono text-amber-400/90 text-right"></div>
+        </div>
+
+        <!-- Precio de Venta en RD$ -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Precio de Venta al Público (RD$) *</label>
+          <input type="number" step="1" min="0" id="prodPrecioVenta" placeholder="Ej: 1500" class="form-input text-sm font-bold text-emerald-400" required>
+          <div id="prodMarginPreview" class="text-xs mt-1 text-right"></div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Descripción / Notas</label>
+          <textarea id="prodDescripcion" rows="2" placeholder="Fragancia, detalles o tamaño..." class="form-input text-xs"></textarea>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+          <button type="button" class="close-modal-btn btn-tactile btn-outline-gold text-xs py-2 px-3.5">Cancelar</button>
+          <button type="submit" class="btn-tactile btn-gold text-xs py-2 px-5">Guardar Producto</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL 2: REGISTRAR VENTA (VAUL DRAWER STYLE)
+       ========================================================================= -->
+  <div id="modalSale" class="modal-container fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="modal-backdrop fixed inset-0 bg-slate-950/80 backdrop-blur-md"></div>
+    <div class="vaul-drawer relative w-full max-w-md bg-[#0E172E] border border-amber-500/30 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 space-y-4">
+      <div class="vaul-handle sm:hidden"></div>
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">💰</span>
+          <h3 class="font-brand font-bold text-lg text-slate-100">Registrar Venta</h3>
+        </div>
+        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-200 text-lg">✕</button>
+      </div>
+
+      <form id="formSale" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Seleccionar Producto *</label>
+          <select id="saleProductSelect" class="form-input text-xs sm:text-sm" required></select>
+          <div id="saleStockBadge" class="text-[11px] mt-1 text-slate-400"></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Cantidad a Vender *</label>
+            <input type="number" id="saleQtyInput" min="1" value="1" class="form-input text-sm font-bold" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Precio Unitario (RD$) *</label>
+            <input type="number" step="1" id="salePriceInput" class="form-input text-sm font-bold text-emerald-400" required>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-2xl bg-slate-900/90 border border-emerald-500/30 flex items-center justify-between">
+          <span class="text-xs font-semibold text-slate-300">Total a Cobrar:</span>
+          <span id="saleTotalPreview" class="text-lg font-bold text-emerald-400">RD$ 0</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Nombre del Cliente</label>
+            <input type="text" id="saleCliente" placeholder="Ej: Pamela / Laura" class="form-input text-xs">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Método de Pago</label>
+            <select id="saleMetodoPago" class="form-input text-xs">
+              <option value="Efectivo">Efectivo</option>
+              <option value="Transferencia">Transferencia / Depósito</option>
+              <option value="Tarjeta">Tarjeta</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Notas (Opcional)</label>
+          <input type="text" id="saleNotas" placeholder="Detalles de entrega o abono..." class="form-input text-xs">
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+          <button type="button" class="close-modal-btn btn-tactile btn-outline-gold text-xs py-2 px-3.5">Cancelar</button>
+          <button type="submit" class="btn-tactile btn-gold text-xs py-2 px-5">Confirmar Venta</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL 3: INGRESO DE TANQUE DE EE.UU. (VAUL DRAWER STYLE)
+       ========================================================================= -->
+  <div id="modalTank" class="modal-container fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="modal-backdrop fixed inset-0 bg-slate-950/80 backdrop-blur-md"></div>
+    <div class="vaul-drawer relative w-full max-w-2xl bg-[#0E172E] border border-amber-500/30 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4">
+      <div class="vaul-handle sm:hidden"></div>
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">🚢</span>
+          <div>
+            <h3 class="font-brand font-bold text-lg text-slate-100 leading-tight">Ingreso de Tanque de EE.UU.</h3>
+            <p class="text-[11px] text-slate-400">Registra el envío y los artículos de una sola vez</p>
+          </div>
+        </div>
+        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-200 text-lg">✕</button>
+      </div>
+
+      <form id="formTank" class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800">
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Nombre o Número de Tanque *</label>
+            <input type="text" id="tankName" placeholder="Ej: Tanque #4 Miami - Septiembre" class="form-input text-xs sm:text-sm" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Fecha de Recepción</label>
+            <input type="date" id="tankDate" class="form-input text-xs">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Origen</label>
+            <input type="text" id="tankOrigin" value="EE.UU." class="form-input text-xs">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Flete / Envío (USD $)</label>
+            <input type="number" step="0.01" id="tankFreight" placeholder="0.00" class="form-input text-xs font-mono">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Tasa de Conversión (RD$ por USD)</label>
+            <input type="number" step="0.01" id="tankRate" value="60.50" class="form-input text-xs font-bold text-amber-300">
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h4 class="font-bold text-xs sm:text-sm text-slate-200">Artículos en este Tanque</h4>
+              <span id="tankTotalDraftUnits" class="badge-gold">0 piezas</span>
+            </div>
+            <button type="button" onclick="ThorApp.addTankDraftItem()" class="btn-tactile btn-outline-gold text-xs py-1 px-2.5 flex items-center gap-1">
+              <span>+</span>
+              <span>Agregar Artículo</span>
+            </button>
+          </div>
+
+          <div id="tankDraftItemsContainer" class="space-y-2 max-h-72 overflow-y-auto pr-1"></div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Notas u Observaciones del Lote</label>
+          <input type="text" id="tankNotes" placeholder="Condición del tanque, detalles de aduana, etc." class="form-input text-xs">
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+          <button type="button" class="close-modal-btn btn-tactile btn-outline-gold text-xs py-2 px-3.5">Cancelar</button>
+          <button type="submit" class="btn-tactile btn-gold text-xs py-2 px-5">📦 Ingresar Tanque al Inventario</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL 4: AJUSTES TÉCNICOS DESARROLLADOR (OCULTO PARA PAMELA)
+       ========================================================================= -->
+  <div id="modalDevSettings" class="modal-container fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="modal-backdrop fixed inset-0 bg-slate-950/85 backdrop-blur-md"></div>
+    <div class="relative w-full max-w-md bg-[#090E24] border border-amber-500/30 rounded-2xl shadow-2xl p-5 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span>⚡</span>
+          <h3 class="font-bold text-sm text-slate-100">Ajustes de Conexión (jesusx26x)</h3>
+        </div>
+        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-slate-200">✕</button>
+      </div>
+
+      <div class="text-xs text-slate-300 space-y-2">
+        <p>Esta ventana es exclusiva para el desarrollador. Pamela tiene todo pre-configurado de forma automática.</p>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-400 mb-1">URL de Google Apps Script</label>
+          <input type="url" id="cfgGasUrl" placeholder="https://script.google.com/macros/s/.../exec" class="form-input text-xs font-mono">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-400 mb-1">Token de Seguridad</label>
+          <input type="text" id="cfgSecurityToken" value="THOR_SECURE_2026" class="form-input text-xs font-mono">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-400 mb-1">Tasa Fija USD</label>
+          <input type="number" step="0.01" id="cfgUsdRate" value="60.50" class="form-input text-xs font-mono w-32">
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between pt-2 border-t border-slate-800">
+        <button type="button" onclick="ThorApp.sincronizarConNube()" class="btn-tactile btn-outline-gold text-xs py-1.5 px-3">
+          ☁️ Probar Conexión
+        </button>
+        <button type="button" onclick="ThorApp.closeAllModals()" class="btn-tactile btn-gold text-xs py-1.5 px-4">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts del Sistema en orden de dependencia -->
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

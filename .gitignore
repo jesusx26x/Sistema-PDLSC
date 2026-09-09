@@ -1,0 +1,4 @@
+# Logs y archivos temporales del sistema
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,18 @@
+{
+  "name": "Thor Essence — Inventario & Ventas",
+  "short_name": "Thor Essence",
+  "description": "Sistema de gestión de inventario, recepciones de tanques y ventas para Thor Essence",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#070D1E",
+  "theme_color": "#D4AF37",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "assets/logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

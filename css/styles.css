@@ -1,0 +1,386 @@
+/* ==========================================================================
+   THOR ESSENCE — ESTILOS ULTRA-PULIDOS (EMIL KOWALSKI & UX-UI-PRO-MAX)
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap');
+
+:root {
+  --bg-abyss: #040714;
+  --bg-surface: #090e24;
+  --bg-surface-raised: #101738;
+  --bg-card: rgba(14, 23, 46, 0.75);
+  --bg-card-hover: rgba(20, 32, 62, 0.85);
+  --bg-input: #0b122b;
+  
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-gold: rgba(212, 175, 55, 0.22);
+  --border-gold-strong: rgba(212, 175, 55, 0.55);
+  
+  --gold-primary: #d4af37;
+  --gold-light: #f5df88;
+  --gold-gradient: linear-gradient(135deg, #f7e089 0%, #d4af37 50%, #9e751d 100%);
+  --gold-gradient-hover: linear-gradient(135deg, #fff0aa 0%, #e5c04a 50%, #b38827 100%);
+  
+  --rose-accent: #f472b6;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+  
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+
+  /* Emil Kowalski Spring Physics Easing */
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --duration-fast: 140ms;
+  --duration-normal: 220ms;
+  --duration-drawer: 280ms;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-abyss);
+  color: var(--text-main);
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  letter-spacing: -0.01em;
+}
+
+/* Tipografía de Lujo */
+.font-brand {
+  font-family: 'Playfair Display', serif;
+  letter-spacing: 0.03em;
+}
+
+/* ==========================================================================
+   CONTENEDORES & TARJETAS (UX-UI-PRO-MAX BENTO GRID & GLASSMORPHISM)
+   ========================================================================== */
+
+.bento-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-gold);
+  border-radius: 1.25rem;
+  box-shadow: 
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 25px -5px rgba(0, 0, 0, 0.5),
+    0 0 15px -3px rgba(212, 175, 55, 0.04);
+  transition: transform var(--duration-normal) var(--ease-spring),
+              border-color var(--duration-normal) var(--ease-spring),
+              box-shadow var(--duration-normal) var(--ease-spring);
+}
+
+.bento-card:hover {
+  border-color: var(--border-gold-strong);
+  box-shadow: 
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.12),
+    0 16px 32px -6px rgba(0, 0, 0, 0.65),
+    0 0 25px 0 rgba(212, 175, 55, 0.14);
+}
+
+/* ==========================================================================
+   BOTONES Y MICRO-INTERACCIONES (EMIL KOWALSKI STYLE)
+   ========================================================================== */
+
+.btn-tactile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  border-radius: 0.875rem;
+  cursor: pointer;
+  user-select: none;
+  transition: transform var(--duration-fast) var(--ease-spring),
+              filter var(--duration-fast) var(--ease-spring),
+              background var(--duration-fast) var(--ease-spring);
+}
+
+.btn-tactile:active {
+  transform: scale(0.96);
+}
+
+.btn-gold {
+  background: var(--gold-gradient);
+  color: #040714;
+  font-weight: 700;
+  border: none;
+  box-shadow: 0 4px 16px rgba(212, 175, 55, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.btn-gold:hover {
+  background: var(--gold-gradient-hover);
+  box-shadow: 0 6px 22px rgba(212, 175, 55, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transform: translateY(-1px);
+}
+
+.btn-gold:active {
+  transform: translateY(1px) scale(0.97);
+}
+
+.btn-outline-gold {
+  background: rgba(212, 175, 55, 0.06);
+  color: var(--gold-light);
+  border: 1px solid var(--border-gold);
+}
+
+.btn-outline-gold:hover {
+  background: rgba(212, 175, 55, 0.15);
+  border-color: var(--gold-primary);
+  color: #fff;
+}
+
+.btn-subtle {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+.btn-subtle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+}
+
+/* ==========================================================================
+   BADGES & PILLS
+   ========================================================================== */
+
+.badge-gold {
+  background: rgba(212, 175, 55, 0.14);
+  color: #f7e089;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.badge-success {
+  background: rgba(16, 185, 129, 0.14);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.badge-warning {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.badge-danger {
+  background: rgba(239, 68, 68, 0.14);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* ==========================================================================
+   INPUTS & FORMULARIOS
+   ========================================================================== */
+
+.form-input {
+  background-color: var(--bg-input);
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  color: #fff;
+  border-radius: 0.875rem;
+  padding: 0.7rem 0.95rem;
+  width: 100%;
+  font-size: 0.925rem;
+  transition: border-color var(--duration-normal) var(--ease-spring),
+              box-shadow var(--duration-normal) var(--ease-spring);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.25);
+}
+
+.form-input::placeholder {
+  color: var(--text-dim);
+}
+
+/* ==========================================================================
+   SONNER-STYLE TOAST NOTIFICATION SYSTEM (EMIL KOWALSKI)
+   ========================================================================== */
+
+#sonner-container {
+  position: fixed;
+  bottom: 5.5rem; /* por encima de la barra móvil */
+  right: 1.25rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.5rem;
+  pointer-events: none;
+  max-width: 92vw;
+  width: 380px;
+}
+
+@media (min-width: 768px) {
+  #sonner-container {
+    bottom: 1.5rem;
+  }
+}
+
+.sonner-toast {
+  pointer-events: auto;
+  background: rgba(14, 23, 46, 0.95);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  border-radius: 1rem;
+  padding: 0.85rem 1.15rem;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 16px 36px -4px rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  animation: sonnerEnter var(--duration-drawer) var(--ease-spring) forwards;
+  transition: opacity var(--duration-fast), transform var(--duration-fast);
+}
+
+.sonner-toast.sonner-exit {
+  animation: sonnerExit 180ms ease-in forwards;
+}
+
+@keyframes sonnerEnter {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sonnerExit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.94);
+  }
+}
+
+/* ==========================================================================
+   VAUL-STYLE MOBILE DRAWER & MODAL (EMIL KOWALSKI)
+   ========================================================================== */
+
+.vaul-drawer {
+  transition: transform var(--duration-drawer) var(--ease-spring),
+              opacity var(--duration-drawer) var(--ease-spring);
+}
+
+.vaul-handle {
+  width: 40px;
+  height: 5px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.25);
+  margin: 0.5rem auto 1rem auto;
+}
+
+/* ==========================================================================
+   ANIMACIONES FLUIDAS & ELEMENTOS DECORATIVOS
+   ========================================================================== */
+
+.tab-view {
+  animation: viewFadeIn var(--duration-drawer) var(--ease-spring) forwards;
+}
+
+@keyframes viewFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.brand-logo-frame {
+  position: relative;
+  display: inline-block;
+  border-radius: 50%;
+  padding: 2px;
+  background: var(--gold-gradient);
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.35);
+}
+
+.brand-logo-frame img {
+  border-radius: 50%;
+  display: block;
+  object-fit: cover;
+}
+
+.pulse-dot-green {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulseGreen 2.2s infinite;
+}
+
+@keyframes pulseGreen {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 7px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* Scrollbar estilizada */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-abyss);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-primary);
+}
