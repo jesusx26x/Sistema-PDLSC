@@ -76,11 +76,7 @@
 Solo quedan 2 sencillos pasos para dejarlo publicado en internet:
 
 1. **Subir los cambios a GitHub**:
-   ```bash
-   git add .
-   git commit -m "feat: conectar backend Google Sheets y configurar Thor Essence"
-   git push origin main
-   ```
+   - [x] Ejecutado exitosamente: `git push -u origin main` completado con éxito. Todo el código, configuración y assets están en [jesusx26x/Sistema-PDLSC](https://github.com/jesusx26x/Sistema-PDLSC).
 2. **Activar GitHub Pages en el repositorio**:
    - En tu navegador, ve a: `https://github.com/jesusx26x/Sistema-PDLSC/settings/pages`
    - En **Build and deployment > Branch**, selecciona `main` y carpeta `/(root)`.
