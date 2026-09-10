@@ -1038,24 +1038,73 @@ function registrarRecepcionTanque(rec) {
     totalUnidades += (parseInt(art.cantidad) || 0);
   });
 
-  // Guardar cada artículo en Inventario (actualizando existencia o creando nuevo)
+  // Guardar cada artículo en Inventario (sumando existencia a productos existentes o creando nuevos)
+  const invSheet = getSheet(SHEETS.INVENTARIO);
+  const invData = invSheet.getDataRange().getValues();
+
   rec.articulos.forEach(art => {
+    const cant = parseInt(art.cantidad) || 0;
+    if (cant <= 0) return;
+
     const costoUsd = parseFloat(art.costo_usd) || 0;
     const costoDop = parseFloat(art.costo_dop) || (costoUsd * tasaCambio);
     const precioVentaDop = parseFloat(art.precio_venta_dop) || 0;
+    const artId = String(art.id || '').trim();
+    const artNom = String(art.nombre || '').trim().toLowerCase();
 
-    guardarOActualizarProducto({
-      id: art.id || '',
-      nombre: art.nombre,
-      categoria: art.categoria || 'Variedades',
-      descripcion: (art.descripcion || '') + (art.descripcion ? ' | ' : '') + 'Tanque: ' + nombreTanque,
-      cantidad: parseInt(art.cantidad) || 0,
-      stock_minimo: parseInt(art.stock_minimo) || 3,
-      costo_usd: costoUsd,
-      costo_dop: costoDop,
-      precio_venta_dop: precioVentaDop,
-      ubicacion: nombreTanque
-    });
+    let filaEncontrada = -1;
+    for (let i = 1; i < invData.length; i++) {
+      const rowId = String(invData[i][0] || '').trim();
+      const rowNom = String(invData[i][1] || '').trim().toLowerCase();
+      if ((artId && rowId === artId) || (artNom && rowNom === artNom)) {
+        filaEncontrada = i + 1; // Fila 1-indexed en Google Sheets
+        break;
+      }
+    }
+
+    if (filaEncontrada > 0) {
+      const rowIdx = filaEncontrada - 1;
+      const stockAnterior = parseInt(invData[rowIdx][4]) || 0;
+      const nuevoStock = stockAnterior + cant;
+      const stockMin = parseInt(invData[rowIdx][5]) || 3;
+      const nuevoEstado = nuevoStock === 0 ? 'Agotado' : (nuevoStock <= stockMin ? 'Stock Bajo' : 'En Stock');
+      const prodId = invData[rowIdx][0];
+      const prodNom = invData[rowIdx][1] || art.nombre;
+      const prodCat = art.categoria || invData[rowIdx][2] || 'Variedades';
+      const prodDesc = (invData[rowIdx][3] ? invData[rowIdx][3] + ' | ' : '') + 'Tanque: ' + nombreTanque;
+      const finalCostoUsd = costoUsd > 0 ? costoUsd : (parseFloat(invData[rowIdx][6]) || 0);
+      const finalCostoDop = costoDop > 0 ? costoDop : (parseFloat(invData[rowIdx][7]) || 0);
+      const finalPrecioVenta = precioVentaDop > 0 ? precioVentaDop : (parseFloat(invData[rowIdx][8]) || 0);
+      const fechaIngresoOriginal = invData[rowIdx][11] || ahora;
+
+      invSheet.getRange(filaEncontrada, 1, 1, 13).setValues([[
+        prodId, prodNom, prodCat, prodDesc, nuevoStock, stockMin,
+        finalCostoUsd, finalCostoDop, finalPrecioVenta, nombreTanque, nuevoEstado,
+        fechaIngresoOriginal, ahora
+      ]]);
+
+      invData[rowIdx][4] = nuevoStock;
+      invData[rowIdx][6] = finalCostoUsd;
+      invData[rowIdx][7] = finalCostoDop;
+      invData[rowIdx][8] = finalPrecioVenta;
+      invData[rowIdx][9] = nombreTanque;
+      invData[rowIdx][10] = nuevoEstado;
+    } else {
+      const nuevoId = artId || ('PROD-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss') + Math.floor(Math.random() * 100));
+      const estado = cant === 0 ? 'Agotado' : (cant <= 3 ? 'Stock Bajo' : 'En Stock');
+      invSheet.appendRow([
+        nuevoId, art.nombre, art.categoria || 'Variedades',
+        'Tanque: ' + nombreTanque, cant, 3,
+        costoUsd, costoDop, precioVentaDop, nombreTanque, estado,
+        ahora, ahora
+      ]);
+      invData.push([
+        nuevoId, art.nombre, art.categoria || 'Variedades',
+        'Tanque: ' + nombreTanque, cant, 3,
+        costoUsd, costoDop, precioVentaDop, nombreTanque, estado,
+        ahora, ahora
+      ]);
+    }
   });
 
   // Registrar en hoja Recepciones

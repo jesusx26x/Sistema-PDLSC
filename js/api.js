@@ -681,8 +681,10 @@ return { status: 'error', message: 'Venta no encontrada o ya cancelada' };
           if (costoUsd > 0) existing.costo_usd = costoUsd;
           if (costoDop > 0) existing.costo_dop = costoDop;
           if (precioVentaDop > 0) existing.precio_venta_dop = precioVentaDop;
+          if (item.categoria) existing.categoria = item.categoria;
           existing.estado = 'En Stock';
           existing.ubicacion = rec.nombre_tanque;
+          existing.fecha_actualizacion = new Date().toLocaleString();
         } else {
           current.inventario.unshift({
             id: 'PROD-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100),

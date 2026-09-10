@@ -671,7 +671,28 @@ const ThorApp = (function() {
     list.innerHTML = html;
   }
 
+  function updateInventoryDatalist() {
+    const datalist = document.getElementById('inventoryProductDatalist');
+    if (!datalist) return;
+    const seen = new Set();
+    let optionsHtml = '';
+    (state.inventory || []).forEach(p => {
+      if (p && p.nombre && p.nombre.trim()) {
+        const nom = p.nombre.trim();
+        const key = nom.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          const safeNom = nom.replace(/"/g, '&quot;');
+          const stock = p.cantidad || 0;
+          optionsHtml += `<option value="${safeNom}">Categoría: ${p.categoria || 'Variedades'} | Stock: ${stock} uds | Venta: RD$ ${Math.round(p.precio_venta_dop || 0).toLocaleString()}</option>`;
+        }
+      }
+    });
+    datalist.innerHTML = optionsHtml;
+  }
+
   function renderInventory() {
+    updateInventoryDatalist();
     renderStockFilterPills();
     renderCategoryFilters();
 
@@ -1778,6 +1799,7 @@ const ThorApp = (function() {
   }
 
   function openTankModal(forceNew = false) {
+    updateInventoryDatalist();
     const draft = !forceNew ? getTankDraftBackup() : null;
 
     if (draft && ((draft.articulos && draft.articulos.length > 0) || (draft.nombre_tanque && draft.nombre_tanque.trim()))) {
@@ -1867,16 +1889,32 @@ const ThorApp = (function() {
 
     state.tankDraftItems.forEach((item, idx) => {
       const safeNombre = (item.nombre || '').replace(/"/g, '&quot;');
+      const cleanNom = (item.nombre || '').trim().toLowerCase();
+      const existingMatch = (state.inventory || []).find(p =>
+        (item.id && p.id === item.id) ||
+        (cleanNom && p.nombre && p.nombre.trim().toLowerCase() === cleanNom)
+      );
+
+      let badgeHtml = '<span class="tank-item-match-badge"></span>';
+      if (existingMatch) {
+        badgeHtml = `<span class="tank-item-match-badge inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-semibold border border-emerald-500/25">📦 Producto existente (Stock actual: ${existingMatch.cantidad || 0} uds)</span>`;
+      } else if (cleanNom) {
+        badgeHtml = `<span class="tank-item-match-badge inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 font-semibold border border-amber-500/25">✨ Nuevo producto</span>`;
+      }
+
       html += `
         <div class="tank-draft-item p-3.5 rounded-2xl bg-[#0D131F] border border-white/10 hover:border-amber-500/30 shadow-sm space-y-2.5 transition" data-temp-id="${item.tempId}">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-amber-400">Artículo #${idx + 1}</span>
+          <div class="flex items-center justify-between flex-wrap gap-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-bold text-amber-400">Artículo #${idx + 1}</span>
+              ${badgeHtml}
+            </div>
             <button type="button" onclick="ThorApp.removeTankDraftItem(${item.tempId})" class="btn-tactile text-rose-400 text-xs font-semibold hover:text-rose-300">✕ Quitar</button>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
-              <label class="block text-[10px] font-semibold text-slate-300">Nombre del Producto *</label>
-              <input type="text" data-field="nombre" value="${safeNombre}" oninput="ThorApp.updateTankDraftItem(${item.tempId}, 'nombre', this.value)" placeholder="Ej: Perfume 100ml..." class="form-input bg-[#111827] border-white/10 text-slate-100 text-xs py-1.5" required>
+              <label class="block text-[10px] font-semibold text-slate-300">Nombre del Producto * <span class="text-[9px] text-slate-400 font-normal">(o escribe para buscar existente)</span></label>
+              <input type="text" data-field="nombre" list="inventoryProductDatalist" value="${safeNombre}" oninput="ThorApp.updateTankDraftItem(${item.tempId}, 'nombre', this.value)" placeholder="Escribe o selecciona producto..." class="form-input bg-[#111827] border-white/10 text-slate-100 text-xs py-1.5" autocomplete="off" required>
             </div>
             <div>
               <label class="block text-[10px] font-semibold text-slate-300">Categoría</label>
@@ -1913,7 +1951,64 @@ const ThorApp = (function() {
     const item = state.tankDraftItems.find(i => i.tempId === tempId);
     if (!item) return;
 
-    if (field === 'cantidad') {
+    if (field === 'nombre') {
+      item.nombre = value;
+      const cleanVal = (value || '').trim().toLowerCase();
+      const match = cleanVal ? (state.inventory || []).find(p => p.nombre && p.nombre.trim().toLowerCase() === cleanVal) : null;
+      const container = document.getElementById('tankDraftItemsContainer');
+      const card = container ? container.querySelector(`[data-temp-id="${tempId}"]`) : null;
+
+      if (match) {
+        item.id = match.id;
+        const tasa = parseFloat(document.getElementById('tankRate')?.value) || state.exchangeRate;
+
+        // Auto-llenar campos que no hayan sido editados manualmente por Pamela
+        if (!item.customCategory && match.categoria) {
+          item.categoria = match.categoria;
+        }
+        if (!item.customCost) {
+          item.costo_usd = match.costo_usd || 0;
+          item.costo_dop = item.costo_usd * tasa;
+        }
+        if (!item.customPrice) {
+          item.precio_venta_dop = match.precio_venta_dop || 0;
+        }
+
+        if (card) {
+          const catSelect = card.querySelector('[data-field="categoria"]');
+          const costoInput = card.querySelector('[data-field="costo_usd"]');
+          const precioInput = card.querySelector('[data-field="precio_venta_dop"]');
+          const costElem = card.querySelector('.tank-converted-cost');
+          const badgeElem = card.querySelector('.tank-item-match-badge');
+
+          if (catSelect && !item.customCategory) catSelect.value = item.categoria;
+          if (costoInput && !item.customCost) costoInput.value = item.costo_usd;
+          if (precioInput && !item.customPrice) precioInput.value = Math.round(item.precio_venta_dop);
+          if (costElem) costElem.textContent = `RD$ ${Math.round(item.costo_dop).toLocaleString()}`;
+          if (badgeElem) {
+            badgeElem.className = 'tank-item-match-badge inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-semibold border border-emerald-500/25';
+            badgeElem.textContent = `📦 Producto existente (Stock actual: ${match.cantidad || 0} uds)`;
+          }
+        }
+      } else {
+        item.id = '';
+        if (card) {
+          const badgeElem = card.querySelector('.tank-item-match-badge');
+          if (badgeElem) {
+            if (cleanVal) {
+              badgeElem.className = 'tank-item-match-badge inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 font-semibold border border-amber-500/25';
+              badgeElem.textContent = '✨ Nuevo producto';
+            } else {
+              badgeElem.className = 'tank-item-match-badge';
+              badgeElem.textContent = '';
+            }
+          }
+        }
+      }
+    } else if (field === 'categoria') {
+      item.categoria = value;
+      item.customCategory = true;
+    } else if (field === 'cantidad') {
       item.cantidad = Math.max(1, parseInt(value) || 1);
       const totalCountBadge = document.getElementById('tankTotalDraftUnits');
       if (totalCountBadge) {
@@ -1923,6 +2018,7 @@ const ThorApp = (function() {
       }
     } else if (field === 'costo_usd') {
       item.costo_usd = Math.max(0, parseFloat(value) || 0);
+      item.customCost = true; // Permite colocar un costo nuevo para este tanque
       const tasa = parseFloat(document.getElementById('tankRate')?.value) || state.exchangeRate;
       item.costo_dop = item.costo_usd * tasa;
       const container = document.getElementById('tankDraftItemsContainer');
@@ -1935,6 +2031,7 @@ const ThorApp = (function() {
       }
     } else if (field === 'precio_venta_dop') {
       item.precio_venta_dop = Math.max(0, parseFloat(value) || 0);
+      item.customPrice = true; // Permite colocar un precio de venta nuevo para este tanque
     } else {
       item[field] = value;
     }
@@ -1964,6 +2061,12 @@ const ThorApp = (function() {
 
       const tasa = parseFloat(document.getElementById('tankRate')?.value) || state.exchangeRate;
       item.costo_dop = item.costo_usd * tasa;
+
+      const cleanNom = (item.nombre || '').trim().toLowerCase();
+      const match = cleanNom ? (state.inventory || []).find(p => p.nombre && p.nombre.trim().toLowerCase() === cleanNom) : null;
+      if (match) {
+        item.id = match.id;
+      }
     });
   }
 
@@ -2870,6 +2973,7 @@ const ThorApp = (function() {
     addTankDraftItem,
     removeTankDraftItem,
     updateTankDraftItem,
+    updateInventoryDatalist,
     saveTankDraftToLocalStorage,
     discardTankDraft,
     quickAdjustStock,
