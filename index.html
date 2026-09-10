@@ -874,7 +874,7 @@
             </div>
           </div>
 
-          <p class="text-[11px] text-slate-400">Tasa de cambio actual: <span id="prodExchangeRateText" class="font-bold text-amber-400 font-mono">RD$ 60.50</span> por 1 USD</p>
+          <p class="text-[11px] text-slate-400">Tasa de cambio actual: <span id="prodExchangeRateText" class="font-bold text-amber-400 font-mono">RD$ 60.50</span> por 1 USD <span id="prodConvertedCostPreview" class="ml-2 font-mono text-amber-300 font-semibold"></span></p>
         </div>
 
         <div>
@@ -1172,37 +1172,46 @@
     <div class="vaul-drawer relative w-full max-w-2xl bg-[#111827] border border-white/10 rounded-t-[28px] sm:rounded-2xl shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto space-y-4 text-slate-100">
       <div class="vaul-handle sm:hidden"></div>
       <div class="flex items-center justify-between border-b border-white/10 pb-3">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2.5">
           <svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-          <h3 class="font-brand font-bold text-lg text-slate-100">Ingreso de Tanque desde EE.UU.</h3>
+          <div>
+            <h3 class="font-brand font-bold text-lg text-slate-100">Ingreso de Tanque desde EE.UU.</h3>
+            <span id="tankDraftAutoSaveIndicator" class="text-[10px] text-emerald-400 hidden font-semibold flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
+              <span>Borrador protegido y guardado automáticamente</span>
+            </span>
+          </div>
         </div>
-        <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-white p-1 rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+        <div class="flex items-center gap-2">
+          <button type="button" id="btnDiscardTankDraft" onclick="ThorApp.discardTankDraft()" class="hidden text-xs text-rose-400 hover:text-rose-300 font-semibold px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 transition" title="Limpiar y empezar nuevo tanque">Limpiar borrador</button>
+          <button type="button" class="close-modal-btn btn-tactile text-slate-400 hover:text-white p-1 rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+        </div>
       </div>
 
       <form id="formTank" class="space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-semibold text-slate-300 mb-1">Nombre o Número de Tanque / Lote *</label>
-            <input type="text" id="tankName" placeholder="Ej: Tanque #4 Miami - Septiembre" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm" required>
+            <input type="text" id="tankName" oninput="ThorApp.saveTankDraftToLocalStorage()" placeholder="Ej: Tanque #4 Miami - Septiembre" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm" required>
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate-300 mb-1">Origen / Ciudad</label>
-            <input type="text" id="tankOrigin" value="Miami, FL - EE.UU." class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm">
+            <input type="text" id="tankOrigin" oninput="ThorApp.saveTankDraftToLocalStorage()" value="Miami, FL - EE.UU." class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm">
           </div>
         </div>
 
         <div class="grid grid-cols-3 gap-3">
           <div>
             <label class="block text-xs font-semibold text-slate-300 mb-1">Fecha de Recepción</label>
-            <input type="date" id="tankDate" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono">
+            <input type="date" id="tankDate" oninput="ThorApp.saveTankDraftToLocalStorage()" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono">
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate-300 mb-1">Flete Total (USD $)</label>
-            <input type="number" step="0.01" id="tankFreightUsd" placeholder="0.00" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono">
+            <input type="number" step="0.01" id="tankFreightUsd" oninput="ThorApp.saveTankDraftToLocalStorage()" placeholder="0.00" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono">
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate-300 mb-1">Tasa Cambio (USD a DOP)</label>
-            <input type="number" step="0.01" id="tankRate" value="60.50" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono font-bold">
+            <input type="number" step="0.01" id="tankRate" oninput="ThorApp.saveTankDraftToLocalStorage()" value="60.50" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm font-mono font-bold">
           </div>
         </div>
 
@@ -1224,7 +1233,7 @@
 
         <div>
           <label class="block text-xs font-semibold text-slate-300 mb-1">Notas u Observaciones del Lote</label>
-          <input type="text" id="tankNotes" placeholder="Condición del tanque, detalles de aduana, etc." class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs">
+          <input type="text" id="tankNotes" oninput="ThorApp.saveTankDraftToLocalStorage()" placeholder="Condición del tanque, detalles de aduana, etc." class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs">
         </div>
 
         <div class="flex items-center justify-end gap-2 pt-3 border-t border-white/10">

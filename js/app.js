@@ -45,6 +45,11 @@ const ThorApp = (function() {
       showLoginView();
     });
 
+    // Auto-salvaguarda de seguridad al cerrar pestaña o recargar
+    window.addEventListener('beforeunload', () => {
+      saveTankDraftToLocalStorage();
+    });
+
     // Validar estado de autenticación (RLS)
     if (checkAuthStatus()) {
       // Cargar datos locales de inmediato
@@ -1259,42 +1264,76 @@ const ThorApp = (function() {
   }
 
   async function handleSaveProduct(e) {
-    e.preventDefault();
-    const id = document.getElementById('prodId').value;
-    const nombre = document.getElementById('prodNombre').value.trim();
-    if (!nombre) return;
+    if (e && e.preventDefault) e.preventDefault();
+    const id = document.getElementById('prodId')?.value;
+    const nameInput = document.getElementById('prodNombre');
+    const nombre = nameInput ? nameInput.value.trim() : '';
+    if (!nombre) {
+      Sonner.warning('Por favor ingresa el nombre del producto');
+      if (nameInput) nameInput.focus();
+      return;
+    }
 
     const origenSelect = document.getElementById('prodOrigen');
-    const origen = origenSelect ? origenSelect.value : 'local';
-    const costoUsd = parseFloat(document.getElementById('prodCostoUsd').value) || 0;
-    const costoDop = parseFloat(document.getElementById('prodCostoDop').value) || (costoUsd * state.exchangeRate);
-    const precioVenta = parseFloat(document.getElementById('prodPrecioVenta').value) || 0;
-    const cantidad = parseInt(document.getElementById('prodCantidad').value) || 0;
-    const stockMin = parseInt(document.getElementById('prodStockMin').value) || 3;
+    const origen = origenSelect ? origenSelect.value : 'Compra Local';
+    const costoUsd = parseFloat(document.getElementById('prodCostoUsd')?.value) || 0;
+    const costoDop = parseFloat(document.getElementById('prodCostoDop')?.value) || (costoUsd * state.exchangeRate);
+    const precioVenta = parseFloat(document.getElementById('prodPrecioVenta')?.value) || 0;
+    const cantidad = parseInt(document.getElementById('prodCantidad')?.value) || 0;
+    const stockMin = parseInt(document.getElementById('prodStockMin')?.value) || 3;
+
+    if (precioVenta <= 0) {
+      Sonner.warning('Por favor ingresa un precio de venta válido (mayor a 0)');
+      document.getElementById('prodPrecioVenta')?.focus();
+      return;
+    }
 
     const prodData = {
       id: id || undefined,
       nombre: nombre,
       origen: origen,
-      categoria: document.getElementById('prodCategoria').value,
-      descripcion: document.getElementById('prodDescripcion').value.trim(),
+      categoria: document.getElementById('prodCategoria')?.value || 'Variedades',
+      descripcion: document.getElementById('prodDescripcion')?.value?.trim() || '',
       cantidad: cantidad,
       stock_minimo: stockMin,
       costo_usd: costoUsd,
       costo_dop: costoDop,
       precio_venta_dop: precioVenta,
-      ubicacion: document.getElementById('prodUbicacion').value.trim() || (origen === 'local' ? 'Compra Local' : 'Almacén Principal')
+      ubicacion: document.getElementById('prodUbicacion')?.value?.trim() || (origen === 'Compra Local' ? 'Tienda / Local' : 'Almacén Principal')
     };
 
-    closeAllModals();
+    const submitBtn = document.querySelector('#formProduct button[type="submit"]');
+    const origBtnHtml = submitBtn ? submitBtn.innerHTML : 'Guardar Producto';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `
+        <svg class="w-4 h-4 inline animate-spin mr-1.5" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+        <span>Guardando...</span>
+      `;
+    }
 
-    const res = await ThorAPI.saveProduct(prodData);
-    if (res && res.status === 'success') {
-      Sonner.success(`Producto guardado correctamente (${origen === 'local' ? 'Compra Local' : 'Tanque EE.UU.'})`);
-      await sincronizarConNube(false);
-      renderAll();
-    } else {
-      Sonner.error(res.message || 'No se pudo guardar el producto');
+    try {
+      const res = await ThorAPI.saveProduct(prodData);
+      if (res && res.status === 'success') {
+        const origenLabel = (origen === 'Compra Local' || origen === 'local') ? 'Compra Local' : 'Tanque EE.UU.';
+        Sonner.success(`Producto guardado correctamente (${origenLabel})`);
+        closeAllModals();
+        await sincronizarConNube(false);
+        renderAll();
+      } else {
+        Sonner.error(res?.message || 'No se pudo guardar el producto');
+      }
+    } catch (err) {
+      console.error('Error guardando producto:', err);
+      Sonner.error('Ocurrió un error inesperado al guardar el producto');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origBtnHtml;
+      }
     }
   }
 
@@ -1693,17 +1732,98 @@ const ThorApp = (function() {
     });
   }
 
-  function openTankModal() {
+  const TANK_DRAFT_KEY = 'thor_tank_draft_backup_v1';
+
+  function saveTankDraftToLocalStorage() {
+    try {
+      syncTankDraftItemsFromDOM();
+      const draft = {
+        nombre_tanque: document.getElementById('tankName')?.value || '',
+        origen: document.getElementById('tankOrigin')?.value || 'Miami, FL - EE.UU.',
+        fecha: document.getElementById('tankDate')?.value || '',
+        flete_usd: document.getElementById('tankFreightUsd')?.value || document.getElementById('tankFreight')?.value || '',
+        tasa_cambio: document.getElementById('tankRate')?.value || '',
+        notas: document.getElementById('tankNotes')?.value || '',
+        articulos: state.tankDraftItems || [],
+        timestamp: Date.now()
+      };
+      if ((draft.nombre_tanque && draft.nombre_tanque.trim()) || draft.articulos.length > 0) {
+        localStorage.setItem(TANK_DRAFT_KEY, JSON.stringify(draft));
+        const indicator = document.getElementById('tankDraftAutoSaveIndicator');
+        const discardBtn = document.getElementById('btnDiscardTankDraft');
+        if (indicator) indicator.classList.remove('hidden');
+        if (discardBtn) discardBtn.classList.remove('hidden');
+      }
+    } catch (e) {
+      console.warn('No se pudo guardar borrador de tanque:', e);
+    }
+  }
+
+  function clearTankDraftBackup() {
+    try {
+      localStorage.removeItem(TANK_DRAFT_KEY);
+      const indicator = document.getElementById('tankDraftAutoSaveIndicator');
+      const discardBtn = document.getElementById('btnDiscardTankDraft');
+      if (indicator) indicator.classList.add('hidden');
+      if (discardBtn) discardBtn.classList.add('hidden');
+    } catch (e) {}
+  }
+
+  function getTankDraftBackup() {
+    try {
+      const raw = localStorage.getItem(TANK_DRAFT_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return null;
+  }
+
+  function openTankModal(forceNew = false) {
+    const draft = !forceNew ? getTankDraftBackup() : null;
+
+    if (draft && ((draft.articulos && draft.articulos.length > 0) || (draft.nombre_tanque && draft.nombre_tanque.trim()))) {
+      state.tankDraftItems = draft.articulos || [];
+      if (document.getElementById('tankName')) document.getElementById('tankName').value = draft.nombre_tanque || '';
+      if (document.getElementById('tankOrigin')) document.getElementById('tankOrigin').value = draft.origen || 'Miami, FL - EE.UU.';
+      if (document.getElementById('tankDate')) document.getElementById('tankDate').value = draft.fecha || new Date().toISOString().substring(0, 10);
+      const freightInput = document.getElementById('tankFreightUsd') || document.getElementById('tankFreight');
+      if (freightInput) freightInput.value = draft.flete_usd || '';
+      if (document.getElementById('tankRate')) document.getElementById('tankRate').value = draft.tasa_cambio || state.exchangeRate.toFixed(2);
+      if (document.getElementById('tankNotes')) document.getElementById('tankNotes').value = draft.notas || '';
+
+      renderTankDraftItems();
+      const indicator = document.getElementById('tankDraftAutoSaveIndicator');
+      const discardBtn = document.getElementById('btnDiscardTankDraft');
+      if (indicator) indicator.classList.remove('hidden');
+      if (discardBtn) discardBtn.classList.remove('hidden');
+
+      document.getElementById('modalTank').classList.remove('hidden');
+      Sonner.info(`Se restauró tu borrador con ${state.tankDraftItems.length} artículos guardados automáticamente.`, 5000);
+      return;
+    }
+
     state.tankDraftItems = [];
     document.getElementById('formTank').reset();
     document.getElementById('tankDate').value = new Date().toISOString().substring(0, 10);
     document.getElementById('tankRate').value = state.exchangeRate.toFixed(2);
+    const indicator = document.getElementById('tankDraftAutoSaveIndicator');
+    const discardBtn = document.getElementById('btnDiscardTankDraft');
+    if (indicator) indicator.classList.add('hidden');
+    if (discardBtn) discardBtn.classList.add('hidden');
+
     renderTankDraftItems();
     document.getElementById('modalTank').classList.remove('hidden');
   }
 
+  function discardTankDraft() {
+    if (confirm('¿Deseas descartar este borrador y limpiar el formulario para comenzar desde cero?')) {
+      clearTankDraftBackup();
+      openTankModal(true);
+      Sonner.info('Borrador descartado. Formulario limpio.');
+    }
+  }
+
   function addTankDraftItem() {
-    const tasa = parseFloat(document.getElementById('tankRate').value) || state.exchangeRate;
+    const tasa = parseFloat(document.getElementById('tankRate')?.value) || state.exchangeRate;
     state.tankDraftItems.push({
       tempId: Date.now() + Math.random(),
       nombre: '',
@@ -1714,11 +1834,13 @@ const ThorApp = (function() {
       precio_venta_dop: Math.round((5.00 * tasa) * 1.6)
     });
     renderTankDraftItems();
+    saveTankDraftToLocalStorage();
   }
 
   function removeTankDraftItem(tempId) {
     state.tankDraftItems = state.tankDraftItems.filter(i => i.tempId !== tempId);
     renderTankDraftItems();
+    saveTankDraftToLocalStorage();
   }
 
   function renderTankDraftItems() {
@@ -1740,44 +1862,45 @@ const ThorApp = (function() {
       return;
     }
 
-    const tasa = parseFloat(document.getElementById('tankRate').value) || state.exchangeRate;
+    const tasa = parseFloat(document.getElementById('tankRate')?.value) || state.exchangeRate;
     let html = '';
 
     state.tankDraftItems.forEach((item, idx) => {
+      const safeNombre = (item.nombre || '').replace(/"/g, '&quot;');
       html += `
-        <div class="p-3.5 rounded-2xl bg-[#0D131F] border border-white/10 hover:border-amber-500/30 shadow-sm space-y-2.5 transition">
+        <div class="tank-draft-item p-3.5 rounded-2xl bg-[#0D131F] border border-white/10 hover:border-amber-500/30 shadow-sm space-y-2.5 transition" data-temp-id="${item.tempId}">
           <div class="flex items-center justify-between">
             <span class="text-xs font-bold text-amber-400">Artículo #${idx + 1}</span>
             <button type="button" onclick="ThorApp.removeTankDraftItem(${item.tempId})" class="btn-tactile text-rose-400 text-xs font-semibold hover:text-rose-300">✕ Quitar</button>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
-              <label class="block text-[10px] font-semibold text-slate-300">Nombre del Producto</label>
-              <input type="text" value="${item.nombre}" onchange="ThorApp.updateTankDraftItem(${item.tempId}, 'nombre', this.value)" placeholder="Ej: Perfume 100ml..." class="form-input bg-[#111827] border-white/10 text-slate-100 text-xs py-1.5" required>
+              <label class="block text-[10px] font-semibold text-slate-300">Nombre del Producto *</label>
+              <input type="text" data-field="nombre" value="${safeNombre}" oninput="ThorApp.updateTankDraftItem(${item.tempId}, 'nombre', this.value)" placeholder="Ej: Perfume 100ml..." class="form-input bg-[#111827] border-white/10 text-slate-100 text-xs py-1.5" required>
             </div>
             <div>
               <label class="block text-[10px] font-semibold text-slate-300">Categoría</label>
-              <select onchange="ThorApp.updateTankDraftItem(${item.tempId}, 'categoria', this.value)" class="form-input bg-[#111827] border-white/10 text-slate-100 text-xs py-1.5">
+              <select data-field="categoria" onchange="ThorApp.updateTankDraftItem(${item.tempId}, 'categoria', this.value)" class="form-input bg-[#111827] border-white/10 text-slate-100 text-xs py-1.5">
                 ${ThorAPI.DEFAULT_CATEGORIES.map(c => `<option value="${c}" ${item.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}
               </select>
             </div>
           </div>
           <div class="grid grid-cols-3 gap-2">
             <div>
-              <label class="block text-[10px] font-semibold text-slate-300">Cantidad</label>
-              <input type="number" min="1" value="${item.cantidad}" onchange="ThorApp.updateTankDraftItem(${item.tempId}, 'cantidad', this.value)" class="form-input bg-[#111827] border-white/10 text-slate-100 text-xs py-1.5 font-bold" required>
+              <label class="block text-[10px] font-semibold text-slate-300">Cantidad *</label>
+              <input type="number" min="1" data-field="cantidad" value="${item.cantidad}" oninput="ThorApp.updateTankDraftItem(${item.tempId}, 'cantidad', this.value)" class="form-input bg-[#111827] border-white/10 text-slate-100 text-xs py-1.5 font-bold" required>
             </div>
             <div>
               <label class="block text-[10px] font-semibold text-slate-300">Costo USD ($)</label>
-              <input type="number" step="0.01" min="0" value="${item.costo_usd}" onchange="ThorApp.updateTankDraftItem(${item.tempId}, 'costo_usd', this.value)" class="form-input bg-[#111827] border-white/10 text-slate-100 text-xs py-1.5 font-mono" required>
+              <input type="number" step="0.01" min="0" data-field="costo_usd" value="${item.costo_usd}" oninput="ThorApp.updateTankDraftItem(${item.tempId}, 'costo_usd', this.value)" class="form-input bg-[#111827] border-white/10 text-slate-100 text-xs py-1.5 font-mono" required>
             </div>
             <div>
-              <label class="block text-[10px] font-semibold text-slate-300">Precio Venta (RD$)</label>
-              <input type="number" step="1" min="0" value="${Math.round(item.precio_venta_dop)}" onchange="ThorApp.updateTankDraftItem(${item.tempId}, 'precio_venta_dop', this.value)" class="form-input bg-[#111827] border-white/10 text-slate-100 text-xs py-1.5 font-bold text-emerald-400 font-mono" required>
+              <label class="block text-[10px] font-semibold text-slate-300">Precio Venta (RD$) *</label>
+              <input type="number" step="1" min="0" data-field="precio_venta_dop" value="${Math.round(item.precio_venta_dop)}" oninput="ThorApp.updateTankDraftItem(${item.tempId}, 'precio_venta_dop', this.value)" class="form-input bg-[#111827] border-white/10 text-slate-100 text-xs py-1.5 font-bold text-emerald-400 font-mono" required>
             </div>
           </div>
           <div class="text-[10px] text-slate-400 text-right">
-            Costo convertido: <strong class="text-amber-300 font-mono">RD$ ${Math.round(item.costo_usd * tasa).toLocaleString()}</strong>
+            Costo convertido: <strong class="tank-converted-cost text-amber-300 font-mono">RD$ ${Math.round(item.costo_usd * tasa).toLocaleString()}</strong>
           </div>
         </div>
       `;
@@ -1790,52 +1913,135 @@ const ThorApp = (function() {
     const item = state.tankDraftItems.find(i => i.tempId === tempId);
     if (!item) return;
 
-    if (field === 'cantidad') item.cantidad = parseInt(value) || 1;
-    else if (field === 'costo_usd') {
-      item.costo_usd = parseFloat(value) || 0;
-      const tasa = parseFloat(document.getElementById('tankRate').value) || state.exchangeRate;
-      item.costo_dop = item.costo_usd * tasa;
-      if (!item.precio_venta_dop || item.precio_venta_dop === 0) {
-        item.precio_venta_dop = Math.round(item.costo_dop * 1.6);
+    if (field === 'cantidad') {
+      item.cantidad = Math.max(1, parseInt(value) || 1);
+      const totalCountBadge = document.getElementById('tankTotalDraftUnits');
+      if (totalCountBadge) {
+        let totalUnits = 0;
+        state.tankDraftItems.forEach(i => totalUnits += (parseInt(i.cantidad) || 0));
+        totalCountBadge.textContent = `${totalUnits} piezas`;
       }
-    } else if (field === 'precio_venta_dop') item.precio_venta_dop = parseFloat(value) || 0;
-    else item[field] = value;
+    } else if (field === 'costo_usd') {
+      item.costo_usd = Math.max(0, parseFloat(value) || 0);
+      const tasa = parseFloat(document.getElementById('tankRate')?.value) || state.exchangeRate;
+      item.costo_dop = item.costo_usd * tasa;
+      const container = document.getElementById('tankDraftItemsContainer');
+      if (container) {
+        const card = container.querySelector(`[data-temp-id="${tempId}"]`);
+        if (card) {
+          const costElem = card.querySelector('.tank-converted-cost');
+          if (costElem) costElem.textContent = `RD$ ${Math.round(item.costo_usd * tasa).toLocaleString()}`;
+        }
+      }
+    } else if (field === 'precio_venta_dop') {
+      item.precio_venta_dop = Math.max(0, parseFloat(value) || 0);
+    } else {
+      item[field] = value;
+    }
 
-    renderTankDraftItems();
+    saveTankDraftToLocalStorage();
+  }
+
+  function syncTankDraftItemsFromDOM() {
+    const container = document.getElementById('tankDraftItemsContainer');
+    if (!container) return;
+    const cards = container.querySelectorAll('.tank-draft-item');
+    cards.forEach(card => {
+      const tempId = parseFloat(card.getAttribute('data-temp-id'));
+      const item = state.tankDraftItems.find(i => i.tempId === tempId);
+      if (!item) return;
+      const nombreInput = card.querySelector('[data-field="nombre"]');
+      const catSelect = card.querySelector('[data-field="categoria"]');
+      const cantInput = card.querySelector('[data-field="cantidad"]');
+      const costoInput = card.querySelector('[data-field="costo_usd"]');
+      const precioInput = card.querySelector('[data-field="precio_venta_dop"]');
+
+      if (nombreInput) item.nombre = nombreInput.value.trim();
+      if (catSelect) item.categoria = catSelect.value;
+      if (cantInput) item.cantidad = Math.max(1, parseInt(cantInput.value) || 1);
+      if (costoInput) item.costo_usd = Math.max(0, parseFloat(costoInput.value) || 0);
+      if (precioInput) item.precio_venta_dop = Math.max(0, parseFloat(precioInput.value) || 0);
+
+      const tasa = parseFloat(document.getElementById('tankRate')?.value) || state.exchangeRate;
+      item.costo_dop = item.costo_usd * tasa;
+    });
   }
 
   async function handleSaveTank(e) {
-    e.preventDefault();
-    const nombreTanque = document.getElementById('tankName').value.trim();
-    if (!nombreTanque) return;
+    if (e && e.preventDefault) e.preventDefault();
+
+    const nameInput = document.getElementById('tankName');
+    const nombreTanque = nameInput ? nameInput.value.trim() : '';
+    if (!nombreTanque) {
+      Sonner.warning('Por favor ingresa el nombre o número de lote del tanque');
+      if (nameInput) {
+        nameInput.focus();
+        nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
+    // Sincronizar cualquier valor pendiente de los inputs del DOM
+    syncTankDraftItemsFromDOM();
 
     if (state.tankDraftItems.length === 0) {
       Sonner.warning('Debes agregar al menos un artículo en este tanque');
       return;
     }
 
-    const tasa = parseFloat(document.getElementById('tankRate').value) || state.exchangeRate;
-    const flete = parseFloat(document.getElementById('tankFreight').value) || 0;
+    const sinNombre = state.tankDraftItems.find(i => !i.nombre || !i.nombre.trim());
+    if (sinNombre) {
+      Sonner.warning('Por favor completa el nombre de todos los artículos del tanque');
+      return;
+    }
+
+    const tasa = parseFloat(document.getElementById('tankRate')?.value) || state.exchangeRate;
+    const freightInput = document.getElementById('tankFreightUsd') || document.getElementById('tankFreight');
+    const flete = freightInput ? (parseFloat(freightInput.value) || 0) : 0;
 
     const payload = {
       nombre_tanque: nombreTanque,
-      fecha: document.getElementById('tankDate').value,
-      origen: document.getElementById('tankOrigin').value.trim() || 'EE.UU.',
+      fecha: document.getElementById('tankDate')?.value || new Date().toISOString().substring(0, 10),
+      origen: document.getElementById('tankOrigin')?.value?.trim() || 'Miami, FL - EE.UU.',
       flete_usd: flete,
       tasa_cambio: tasa,
-      notas: document.getElementById('tankNotes').value.trim(),
+      notas: document.getElementById('tankNotes')?.value?.trim() || '',
       articulos: state.tankDraftItems
     };
 
-    closeAllModals();
+    const submitBtn = document.querySelector('#formTank button[type="submit"]');
+    const origBtnHtml = submitBtn ? submitBtn.innerHTML : 'Ingresar Tanque al Inventario';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `
+        <svg class="w-4 h-4 inline animate-spin mr-1.5" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+        <span>Ingresando al Inventario...</span>
+      `;
+    }
 
-    const res = await ThorAPI.registerReception(payload);
-    if (res && res.status === 'success') {
-      Sonner.success(`Tanque ingresado: ${res.total_unidades} unidades añadidas al inventario`);
-      await sincronizarConNube(false);
-      renderAll();
-    } else {
-      Sonner.error(res.message || 'Error al registrar tanque');
+    try {
+      const res = await ThorAPI.registerReception(payload);
+      if (res && res.status === 'success') {
+        const totalUnidades = res.total_unidades ?? res.totalUnidades ?? 0;
+        Sonner.success(`Tanque ingresado: ${totalUnidades} unidades añadidas al inventario`);
+        clearTankDraftBackup();
+        closeAllModals();
+        await sincronizarConNube(false);
+        renderAll();
+      } else {
+        Sonner.error(res?.message || 'Error al registrar tanque');
+      }
+    } catch (err) {
+      console.error('Error registrando tanque:', err);
+      Sonner.error('Ocurrió un error inesperado al procesar el tanque');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origBtnHtml;
+      }
     }
   }
 
@@ -1920,7 +2126,16 @@ const ThorApp = (function() {
 
     let csv = 'ID,Nombre,Categoria,Cantidad,Costo USD,Costo DOP,Precio Venta DOP,Ubicacion,Estado\n';
     state.inventory.forEach(p => {
-      csv += `"${p.id}","${p.nombre.replace(/"/g, '""')}","${p.categoria}","${p.cantidad}","${p.costo_usd}","${p.costo_dop}","${p.precio_venta_dop}","${p.ubicacion}","${p.estado}"\n`;
+      const safeId = p.id || '';
+      const safeNom = (p.nombre || '').replace(/"/g, '""');
+      const safeCat = p.categoria || 'Variedades';
+      const safeCant = p.cantidad || 0;
+      const safeCostoUsd = p.costo_usd || 0;
+      const safeCostoDop = p.costo_dop || 0;
+      const safePrecio = p.precio_venta_dop || 0;
+      const safeUbic = (p.ubicacion || '').replace(/"/g, '""');
+      const safeEstado = p.estado || 'En Stock';
+      csv += `"${safeId}","${safeNom}","${safeCat}","${safeCant}","${safeCostoUsd}","${safeCostoDop}","${safePrecio}","${safeUbic}","${safeEstado}"\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -2655,6 +2870,8 @@ const ThorApp = (function() {
     addTankDraftItem,
     removeTankDraftItem,
     updateTankDraftItem,
+    saveTankDraftToLocalStorage,
+    discardTankDraft,
     quickAdjustStock,
     confirmDeleteProduct,
     confirmCancelSale,

@@ -384,17 +384,25 @@ function doPost(e) {
       case 'saveProduct':
         return jsonResponse(guardarOActualizarProducto(payload.data));
 
-      case 'deleteProduct':
-        return jsonResponse(eliminarProducto(payload.id));
+      case 'deleteProduct': {
+        const delId = payload.id || (payload.data && (payload.data.id || payload.data));
+        return jsonResponse(eliminarProducto(delId));
+      }
 
-      case 'adjustStock':
-        return jsonResponse(ajustarStockProducto(payload.id, payload.delta, payload.motivo));
+      case 'adjustStock': {
+        const adjId = payload.id || (payload.data && payload.data.id);
+        const adjDelta = payload.delta !== undefined ? payload.delta : (payload.data && payload.data.delta);
+        const adjMotivo = payload.motivo || (payload.data && payload.data.motivo);
+        return jsonResponse(ajustarStockProducto(adjId, adjDelta, adjMotivo));
+      }
 
       case 'registerSale':
         return jsonResponse(registrarVenta(payload.data));
 
-      case 'cancelSale':
-        return jsonResponse(cancelarVenta(payload.id_venta));
+      case 'cancelSale': {
+        const cancelId = payload.id_venta || (payload.data && (payload.data.id_venta || payload.data));
+        return jsonResponse(cancelarVenta(cancelId));
+      }
 
       case 'registerReception':
         return jsonResponse(registrarRecepcionTanque(payload.data));
@@ -1068,7 +1076,8 @@ function registrarRecepcionTanque(rec) {
     status: 'success',
     message: 'Tanque registrado exitosamente con ' + totalUnidades + ' unidades ingresadas al inventario.',
     id_recepcion: idRecepcion,
-    totalUnidades: totalUnidades
+    totalUnidades: totalUnidades,
+    total_unidades: totalUnidades
   };
 }
 
