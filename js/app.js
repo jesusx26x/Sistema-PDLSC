@@ -1195,9 +1195,18 @@ const ThorApp = (function() {
   }
 
   function openNewProductModal(preselectedOrigen = 'local') {
+    updateInventoryDatalist();
     document.getElementById('modalProductTitle').textContent = preselectedOrigen === 'local' ? 'Nuevo Producto (Compra Local / Sin Tanque)' : 'Nuevo Producto';
     document.getElementById('formProduct').reset();
     document.getElementById('prodId').value = '';
+    const form = document.getElementById('formProduct');
+    if (form) {
+      delete form.dataset.matchedExistingId;
+      delete form.dataset.previousStock;
+    }
+    const badge = document.getElementById('prodMatchBadge');
+    if (badge) badge.classList.add('hidden');
+
     const origenSelect = document.getElementById('prodOrigen');
     if (origenSelect) origenSelect.value = preselectedOrigen;
     document.getElementById('prodCurrencyToggle').checked = true;
@@ -1208,6 +1217,14 @@ const ThorApp = (function() {
   function openEditProductModal(id) {
     const prod = state.inventory.find(p => p.id === id);
     if (!prod) return;
+
+    const form = document.getElementById('formProduct');
+    if (form) {
+      delete form.dataset.matchedExistingId;
+      delete form.dataset.previousStock;
+    }
+    const badge = document.getElementById('prodMatchBadge');
+    if (badge) badge.classList.add('hidden');
 
     document.getElementById('modalProductTitle').textContent = 'Editar Producto';
     document.getElementById('prodId').value = prod.id;
@@ -1229,6 +1246,47 @@ const ThorApp = (function() {
     calcularMargenProducto();
 
     document.getElementById('modalProduct').classList.remove('hidden');
+  }
+
+  function onProductNombreInput(value) {
+    const editId = document.getElementById('prodId')?.value;
+    if (editId) return; // En modo edición no alterar
+
+    const badge = document.getElementById('prodMatchBadge');
+    const form = document.getElementById('formProduct');
+    const cleanVal = (value || '').trim().toLowerCase();
+    const match = cleanVal ? (state.inventory || []).find(p => p.nombre && p.nombre.trim().toLowerCase() === cleanVal) : null;
+
+    if (match) {
+      if (badge) {
+        badge.classList.remove('hidden');
+        badge.innerHTML = `
+          <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          <span><strong>Producto existente detectado:</strong> Stock actual de ${match.cantidad} piezas. La cantidad que ingreses se <strong>sumará</strong> a las existencias actuales.</span>
+        `;
+      }
+      if (document.getElementById('prodCategoria')) document.getElementById('prodCategoria').value = match.categoria || 'Variedades';
+      if (document.getElementById('prodCostoUsd') && match.costo_usd) document.getElementById('prodCostoUsd').value = match.costo_usd;
+      if (document.getElementById('prodCostoDop') && match.costo_dop) document.getElementById('prodCostoDop').value = match.costo_dop;
+      if (document.getElementById('prodPrecioVenta') && match.precio_venta_dop) document.getElementById('prodPrecioVenta').value = match.precio_venta_dop;
+      if (document.getElementById('prodUbicacion') && match.ubicacion) document.getElementById('prodUbicacion').value = match.ubicacion;
+
+      const isUsd = (match.costo_usd > 0);
+      document.getElementById('prodCurrencyToggle').checked = isUsd;
+      toggleProductCurrency(isUsd);
+      calcularMargenProducto();
+
+      if (form) {
+        form.dataset.matchedExistingId = match.id;
+        form.dataset.previousStock = match.cantidad;
+      }
+    } else {
+      if (badge) badge.classList.add('hidden');
+      if (form) {
+        delete form.dataset.matchedExistingId;
+        delete form.dataset.previousStock;
+      }
+    }
   }
 
   function toggleProductCurrency(isUsd) {
@@ -1309,13 +1367,25 @@ const ThorApp = (function() {
       return;
     }
 
+    const form = document.getElementById('formProduct');
+    const matchedExistingId = form?.dataset?.matchedExistingId;
+    const previousStock = parseInt(form?.dataset?.previousStock) || 0;
+
+    let finalId = id || undefined;
+    let finalCantidad = cantidad;
+
+    if (matchedExistingId && !id) {
+      finalId = matchedExistingId;
+      finalCantidad = previousStock + cantidad;
+    }
+
     const prodData = {
-      id: id || undefined,
+      id: finalId,
       nombre: nombre,
       origen: origen,
       categoria: document.getElementById('prodCategoria')?.value || 'Variedades',
       descripcion: document.getElementById('prodDescripcion')?.value?.trim() || '',
-      cantidad: cantidad,
+      cantidad: finalCantidad,
       stock_minimo: stockMin,
       costo_usd: costoUsd,
       costo_dop: costoDop,
@@ -1339,8 +1409,12 @@ const ThorApp = (function() {
     try {
       const res = await ThorAPI.saveProduct(prodData);
       if (res && res.status === 'success') {
-        const origenLabel = (origen === 'Compra Local' || origen === 'local') ? 'Compra Local' : 'Tanque EE.UU.';
-        Sonner.success(`Producto guardado correctamente (${origenLabel})`);
+        if (matchedExistingId && !id) {
+          Sonner.success(`Stock actualizado: Se sumaron ${cantidad} unidades a ${nombre} (Total: ${finalCantidad} piezas)`);
+        } else {
+          const origenLabel = (origen === 'Compra Local' || origen === 'local') ? 'Compra Local' : 'Tanque EE.UU.';
+          Sonner.success(id ? 'Producto actualizado' : `Producto guardado correctamente (${origenLabel})`);
+        }
         closeAllModals();
         await sincronizarConNube(false);
         renderAll();
@@ -3058,6 +3132,7 @@ const ThorApp = (function() {
     switchTab,
     openNewProductModal,
     openEditProductModal,
+    onProductNombreInput,
     openSaleModal,
     openSaleModalFor: (id) => openSaleModal(id),
     openSaleModalCredit,

@@ -808,8 +808,9 @@
         <input type="hidden" id="prodId">
 
         <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Nombre del Producto *</label>
-          <input type="text" id="prodNombre" placeholder="Ej: Perfume Carolina Herrera 100ml / Thor Gold" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm" required>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Nombre del Producto * <span class="text-[10px] text-slate-400 font-normal">(o selecciona existente para sumar existencias)</span></label>
+          <input type="text" id="prodNombre" list="inventoryProductDatalist" oninput="ThorApp.onProductNombreInput(this.value)" placeholder="Ej: Perfume Carolina Herrera 100ml / Thor Gold" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs sm:text-sm" autocomplete="off" required>
+          <div id="prodMatchBadge" class="hidden mt-1.5 p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 flex items-center gap-2"></div>
         </div>
 
         <!-- Selector de Procedencia / Vía de Entrada -->
