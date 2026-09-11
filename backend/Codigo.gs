@@ -1107,19 +1107,46 @@ function registrarRecepcionTanque(rec) {
     }
   });
 
-  // Registrar en hoja Recepciones
+  // Registrar o consolidar en hoja Recepciones
   const recSheet = getSheet(SHEETS.RECEPCIONES);
-  recSheet.appendRow([
-    idRecepcion,
-    ahora,
-    nombreTanque,
-    origen,
-    totalUnidades,
-    fleteUsd,
-    tasaCambio,
-    notas,
-    JSON.stringify(rec.articulos)
-  ]);
+  const recRows = recSheet.getDataRange().getValues();
+  let filaRecExistente = -1;
+
+  for (let r = 1; r < recRows.length; r++) {
+    if (String(recRows[r][2] || '').trim().toLowerCase() === nombreTanque.toLowerCase()) {
+      filaRecExistente = r + 1;
+      break;
+    }
+  }
+
+  if (filaRecExistente > 0) {
+    const rIdx = filaRecExistente - 1;
+    const prevUnidades = parseInt(recRows[rIdx][4]) || 0;
+    const prevFlete = parseFloat(recRows[rIdx][5]) || 0;
+    const consolidatedUnidades = prevUnidades + totalUnidades;
+    const consolidatedFlete = prevFlete + fleteUsd;
+    let prevArticulos = [];
+    try {
+      if (recRows[rIdx][8]) prevArticulos = JSON.parse(recRows[rIdx][8]);
+    } catch(e) {}
+    const consolidatedArticulos = prevArticulos.concat(rec.articulos);
+
+    recSheet.getRange(filaRecExistente, 5).setValue(consolidatedUnidades);
+    recSheet.getRange(filaRecExistente, 6).setValue(consolidatedFlete);
+    recSheet.getRange(filaRecExistente, 9).setValue(JSON.stringify(consolidatedArticulos));
+  } else {
+    recSheet.appendRow([
+      idRecepcion,
+      ahora,
+      nombreTanque,
+      origen,
+      totalUnidades,
+      fleteUsd,
+      tasaCambio,
+      notas,
+      JSON.stringify(rec.articulos)
+    ]);
+  }
 
   return {
     status: 'success',

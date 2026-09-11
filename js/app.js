@@ -1798,12 +1798,91 @@ const ThorApp = (function() {
     return null;
   }
 
+  function populateExistingTanksDropdown(selectedTankName = null) {
+    const selector = document.getElementById('tankExistingSelector');
+    if (!selector) return;
+
+    const tankMap = new Map();
+
+    (state.receptions || []).forEach(r => {
+      const name = (r.nombre_tanque || '').trim();
+      if (name) {
+        const current = tankMap.get(name) || { totalUnits: 0, origen: r.origen || 'Miami, FL - EE.UU.', tasa: r.tasa_cambio || state.exchangeRate };
+        current.totalUnits += (parseInt(r.total_unidades) || 0);
+        tankMap.set(name, current);
+      }
+    });
+
+    (state.inventory || []).forEach(p => {
+      const u = (p.ubicacion || '').trim();
+      if (u && (u.toLowerCase().startsWith('tanque') || u.toLowerCase().includes('lote'))) {
+        if (!tankMap.has(u)) {
+          tankMap.set(u, { totalUnits: 0, origen: 'Miami, FL - EE.UU.', tasa: state.exchangeRate });
+        }
+        const current = tankMap.get(u);
+        current.totalUnits += (parseInt(p.cantidad) || 0);
+      }
+    });
+
+    let html = '<option value="__NEW__">✨ + Registrar un Tanque Nuevo</option>';
+    tankMap.forEach((info, name) => {
+      const safeName = name.replace(/"/g, '&quot;');
+      const isSelected = selectedTankName && selectedTankName.trim().toLowerCase() === name.toLowerCase();
+      html += `<option value="${safeName}" ${isSelected ? 'selected' : ''}>📦 Continuar: ${safeName} (${info.totalUnits} piezas)</option>`;
+    });
+
+    selector.innerHTML = html;
+  }
+
+  function onSelectExistingTank(tankName) {
+    const nameInput = document.getElementById('tankName');
+    const banner = document.getElementById('tankContinuationBanner');
+    const freightInput = document.getElementById('tankFreightUsd');
+    const freightHelp = document.getElementById('tankFreightHelp');
+    const originInput = document.getElementById('tankOrigin');
+    const rateInput = document.getElementById('tankRate');
+
+    if (tankName === '__NEW__' || !tankName) {
+      if (banner) banner.classList.add('hidden');
+      if (nameInput) {
+        nameInput.readOnly = false;
+        nameInput.classList.remove('bg-slate-800/80', 'text-slate-300');
+        nameInput.placeholder = 'Ej: Tanque #4 Miami - Septiembre';
+      }
+      if (freightHelp) freightHelp.textContent = 'Costo de flete/envío de este nuevo lote';
+    } else {
+      if (banner) banner.classList.remove('hidden');
+      if (nameInput) {
+        nameInput.value = tankName;
+        nameInput.readOnly = true;
+        nameInput.classList.add('bg-slate-800/80', 'text-slate-300');
+      }
+
+      // Buscar si tenemos datos previos de ese tanque para heredar origen y tasa
+      const rec = (state.receptions || []).find(r => (r.nombre_tanque || '').trim().toLowerCase() === tankName.toLowerCase());
+      if (rec) {
+        if (originInput && rec.origen) originInput.value = rec.origen;
+        if (rateInput && rec.tasa_cambio) rateInput.value = parseFloat(rec.tasa_cambio) || state.exchangeRate.toFixed(2);
+      }
+
+      // En modo continuación, flete por defecto en 0 para no cobrar doble flete
+      if (freightInput && (!freightInput.value || parseFloat(freightInput.value) === 0)) {
+        freightInput.value = '0.00';
+      }
+      if (freightHelp) freightHelp.textContent = 'Flete en $0.00 (ya registrado en la primera parte. Modifícalo si hubo cargo extra)';
+    }
+
+    saveTankDraftToLocalStorage();
+  }
+
   function openTankModal(forceNew = false) {
     updateInventoryDatalist();
     const draft = !forceNew ? getTankDraftBackup() : null;
 
     if (draft && ((draft.articulos && draft.articulos.length > 0) || (draft.nombre_tanque && draft.nombre_tanque.trim()))) {
       state.tankDraftItems = draft.articulos || [];
+      populateExistingTanksDropdown(draft.nombre_tanque || null);
+
       if (document.getElementById('tankName')) document.getElementById('tankName').value = draft.nombre_tanque || '';
       if (document.getElementById('tankOrigin')) document.getElementById('tankOrigin').value = draft.origen || 'Miami, FL - EE.UU.';
       if (document.getElementById('tankDate')) document.getElementById('tankDate').value = draft.fecha || new Date().toISOString().substring(0, 10);
@@ -1811,6 +1890,18 @@ const ThorApp = (function() {
       if (freightInput) freightInput.value = draft.flete_usd || '';
       if (document.getElementById('tankRate')) document.getElementById('tankRate').value = draft.tasa_cambio || state.exchangeRate.toFixed(2);
       if (document.getElementById('tankNotes')) document.getElementById('tankNotes').value = draft.notas || '';
+
+      const selector = document.getElementById('tankExistingSelector');
+      if (selector && draft.nombre_tanque) {
+        const option = Array.from(selector.options).find(o => o.value.toLowerCase() === draft.nombre_tanque.trim().toLowerCase());
+        if (option) {
+          selector.value = option.value;
+          onSelectExistingTank(option.value);
+        } else {
+          selector.value = '__NEW__';
+          onSelectExistingTank('__NEW__');
+        }
+      }
 
       renderTankDraftItems();
       const indicator = document.getElementById('tankDraftAutoSaveIndicator');
@@ -1825,6 +1916,9 @@ const ThorApp = (function() {
 
     state.tankDraftItems = [];
     document.getElementById('formTank').reset();
+    populateExistingTanksDropdown();
+    onSelectExistingTank('__NEW__');
+
     document.getElementById('tankDate').value = new Date().toISOString().substring(0, 10);
     document.getElementById('tankRate').value = state.exchangeRate.toFixed(2);
     const indicator = document.getElementById('tankDraftAutoSaveIndicator');
@@ -2974,6 +3068,8 @@ const ThorApp = (function() {
     removeTankDraftItem,
     updateTankDraftItem,
     updateInventoryDatalist,
+    populateExistingTanksDropdown,
+    onSelectExistingTank,
     saveTankDraftToLocalStorage,
     discardTankDraft,
     quickAdjustStock,

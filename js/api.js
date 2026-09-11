@@ -704,19 +704,26 @@ return { status: 'error', message: 'Venta no encontrada o ya cancelada' };
         }
       });
 
-      const nuevaRec = {
-        id_recepcion: 'TANQ-' + Date.now().toString().slice(-6),
-        fecha: rec.fecha || new Date().toISOString().substring(0, 10),
-        nombre_tanque: rec.nombre_tanque,
-        origen: rec.origen || 'EE.UU.',
-        total_unidades: totalUnidades,
-        flete_usd: parseFloat(rec.flete_usd) || 0,
-        tasa_cambio: tasa,
-        notas: rec.notas || '',
-        articulos: items
-      };
-
-      current.recepciones.unshift(nuevaRec);
+      let existingRec = current.recepciones.find(r => (r.nombre_tanque || '').trim().toLowerCase() === (rec.nombre_tanque || '').trim().toLowerCase());
+      if (existingRec) {
+        existingRec.total_unidades = (existingRec.total_unidades || 0) + totalUnidades;
+        existingRec.flete_usd = (existingRec.flete_usd || 0) + (parseFloat(rec.flete_usd) || 0);
+        existingRec.articulos = (existingRec.articulos || []).concat(items);
+        if (rec.notas) existingRec.notas = (existingRec.notas ? existingRec.notas + ' | ' : '') + rec.notas;
+      } else {
+        const nuevaRec = {
+          id_recepcion: 'TANQ-' + Date.now().toString().slice(-6),
+          fecha: rec.fecha || new Date().toISOString().substring(0, 10),
+          nombre_tanque: rec.nombre_tanque,
+          origen: rec.origen || 'EE.UU.',
+          total_unidades: totalUnidades,
+          flete_usd: parseFloat(rec.flete_usd) || 0,
+          tasa_cambio: tasa,
+          notas: rec.notas || '',
+          articulos: items
+        };
+        current.recepciones.unshift(nuevaRec);
+      }
       recalcularMetricasLocales(current);
       setCachedData(current);
 
