@@ -206,7 +206,9 @@ const ThorApp = (function() {
         if (syncText) syncText.textContent = 'Nube Activa (Sheets)';
 
         if (mostrarToast) {
-          Sonner.success('Base de datos sincronizada con Google Sheets');
+          const numProds = state.inventory.length;
+          const numTanqs = state.receptions.length;
+          Sonner.success(`Base de datos sincronizada: ${numProds} productos y ${numTanqs} recepciones verificadas en Google Sheets`);
         }
       } else {
         throw new Error(res.message || 'Error al obtener datos');
@@ -296,7 +298,14 @@ const ThorApp = (function() {
     });
 
     if (tabName === 'dashboard') renderDashboard();
-    if (tabName === 'inventario') renderInventory();
+    if (tabName === 'inventario') {
+      state.selectedStockFilter = 'all';
+      state.selectedCategory = 'all';
+      state.searchQuery = '';
+      const searchInput = document.getElementById('inventorySearchInput');
+      if (searchInput) searchInput.value = '';
+      renderInventory();
+    }
     if (tabName === 'ventas') renderSales();
     if (tabName === 'cobros') renderCobros();
     if (tabName === 'tanques') renderReceptions();
@@ -719,13 +728,19 @@ const ThorApp = (function() {
       } else if (state.selectedStockFilter === 'out') {
         matchStock = item.cantidad === 0;
       } else if (state.selectedStockFilter === 'in') {
-        matchStock = item.cantidad > (item.stock_minimo || 3);
+        matchStock = item.cantidad > 0;
       }
 
       return matchQuery && matchCat && matchStock;
     });
 
-    if (countBadge) countBadge.textContent = `${filtered.length} productos`;
+    if (countBadge) {
+      if (filtered.length === state.inventory.length) {
+        countBadge.textContent = `${filtered.length} productos`;
+      } else {
+        countBadge.innerHTML = `${filtered.length} de ${state.inventory.length} productos <button type="button" onclick="ThorApp.filterInventoryStock('all')" class="ml-1.5 underline hover:text-amber-300 font-bold" title="Ver todos los productos">Ver todos</button>`;
+      }
+    }
 
     if (filtered.length === 0) {
       const emptyMsg = `
@@ -900,9 +915,12 @@ const ThorApp = (function() {
     state.inventory.forEach(p => {
       const q = parseInt(p.cantidad) || 0;
       const m = parseInt(p.stock_minimo) || 3;
-      if (q === 0) outCount++;
-      else if (q <= m) lowCount++;
-      else inCount++;
+      if (q === 0) {
+        outCount++;
+      } else {
+        inCount++;
+        if (q <= m) lowCount++;
+      }
     });
 
     const pills = [

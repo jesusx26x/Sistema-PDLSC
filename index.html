@@ -499,13 +499,13 @@
         </div>
 
         <!-- Filtros Rápidos de Stock -->
-        <div class="p-3 rounded-2xl bg-[#111827] border border-white/10 shadow-xs space-y-2.5">
-          <div class="flex items-center justify-between flex-wrap gap-2">
-            <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-              
+        <div class="p-3 rounded-2xl bg-[#111827] border border-white/10 shadow-xs">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5 shrink-0">
+              <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
               <span>Filtrar por Estado:</span>
             </span>
-            <div id="stockFilterPillsContainer" class="flex items-center gap-1.5 flex-wrap"></div>
+            <div id="stockFilterPillsContainer" class="flex items-center gap-1.5 flex-wrap overflow-x-auto pb-1 sm:pb-0"></div>
           </div>
         </div>
 
@@ -520,8 +520,8 @@
             <div class="sm:hidden w-full">
               <select id="inventoryStockSelect" onchange="ThorApp.filterInventoryStock(this.value)" class="form-input bg-[#0D131F] border-white/10 text-slate-100 placeholder-slate-500 text-xs font-semibold">
                 <option value="all">Todos los Estados</option>
+                <option value="in">En Stock (Con Existencia)</option>
                 <option value="low">Stock Bajo</option>
-                <option value="in">En Stock</option>
                 <option value="out">Agotados</option>
               </select>
             </div>
