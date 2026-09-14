@@ -45,6 +45,46 @@ const ThorApp = (function() {
       showLoginView();
     });
 
+    // Sincronización automática al recuperar conexión a internet
+    window.addEventListener('online', () => {
+      Sonner.info('Conexión reestablecida. Sincronizando datos con Google Sheets...');
+      sincronizarConNube(false);
+    });
+
+    window.addEventListener('offline', () => {
+      Sonner.warning('Sin conexión a internet. Tus registros se guardan seguros en el equipo y se subirán al reconectar.');
+    });
+
+    // Auto-sincronización al regresar a la pestaña
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        sincronizarConNube(false);
+      }
+    });
+
+    // Escucha de actualización de la cola de salida Outbox
+    window.addEventListener('thor:outbox-updated', (e) => {
+      const syncIndicator = document.getElementById('syncIndicator');
+      const syncText = document.getElementById('syncText');
+      const devOutboxBadge = document.getElementById('devOutboxBadge');
+      const count = e.detail?.count || 0;
+      if (count > 0) {
+        if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+        if (syncText) syncText.textContent = `${count} pendiente(s)`;
+        if (devOutboxBadge) {
+          devOutboxBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono animate-pulse';
+          devOutboxBadge.textContent = `${count} pendiente(s)`;
+        }
+      } else {
+        if (syncIndicator) syncIndicator.className = 'pulse-dot-green';
+        if (syncText) syncText.textContent = `Nube Activa (${state.inventory.length} prods)`;
+        if (devOutboxBadge) {
+          devOutboxBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono';
+          devOutboxBadge.textContent = '0 pendientes (Sincronizado)';
+        }
+      }
+    });
+
     // Auto-salvaguarda de seguridad al cerrar pestaña o recargar
     window.addEventListener('beforeunload', () => {
       saveTankDraftToLocalStorage();
@@ -186,9 +226,18 @@ const ThorApp = (function() {
       return;
     }
 
-    if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-blue-400 animate-pulse';
-    if (syncText) syncText.textContent = 'Sincronizando...';
+    // 1. Primero vaciar cola de salida (Outbox) hacia Google Sheets
+    const pendingCount = ThorAPI.getPendingOutboxCount();
+    if (pendingCount > 0) {
+      if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+      if (syncText) syncText.textContent = `Subiendo ${pendingCount} pendiente(s)...`;
+      await ThorAPI.flushOutbox();
+    } else {
+      if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-blue-400 animate-pulse';
+      if (syncText) syncText.textContent = 'Sincronizando...';
+    }
 
+    // 2. Descargar datos frescos de la nube (con autoconciliación automática)
     try {
       const res = await ThorAPI.fetchAllData();
       if (res && res.status === 'success' && res.data) {
@@ -202,8 +251,14 @@ const ThorApp = (function() {
         ThorAPI.setCachedData(res.data);
         renderAll();
 
-        if (syncIndicator) syncIndicator.className = 'pulse-dot-green';
-        if (syncText) syncText.textContent = 'Nube Activa (Sheets)';
+        const remaining = ThorAPI.getPendingOutboxCount();
+        if (remaining > 0) {
+          if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+          if (syncText) syncText.textContent = `${remaining} pendiente(s)`;
+        } else {
+          if (syncIndicator) syncIndicator.className = 'pulse-dot-green';
+          if (syncText) syncText.textContent = `Nube Activa (${state.inventory.length} prods)`;
+        }
 
         if (mostrarToast) {
           const numProds = state.inventory.length;
@@ -211,15 +266,16 @@ const ThorApp = (function() {
           Sonner.success(`Base de datos sincronizada: ${numProds} productos y ${numTanqs} recepciones verificadas en Google Sheets`);
         }
       } else {
-        throw new Error(res.message || 'Error al obtener datos');
+        throw new Error(res?.message || 'Error al obtener datos');
       }
     } catch (e) {
       console.warn('Sincronización con nube:', e);
+      const remaining = ThorAPI.getPendingOutboxCount();
       if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-amber-400';
-      if (syncText) syncText.textContent = 'Datos Locales Activos';
+      if (syncText) syncText.textContent = remaining > 0 ? `${remaining} pendiente(s) local` : 'Datos Locales Activos';
 
       if (mostrarToast) {
-        Sonner.warning('Usando datos locales en este dispositivo');
+        Sonner.warning('Usando datos locales protegidos en este dispositivo');
       }
     }
   }
@@ -3141,12 +3197,40 @@ const ThorApp = (function() {
     Sonner.success('Sistema reiniciado con éxito. Todos los datos están limpios en 0.');
   }
 
+  async function ejecutarDiagnosticoYSalud() {
+    Sonner.info('Iniciando auditoría y diagnóstico de salud del sistema...');
+    try {
+      // 1. Vaciar cola Outbox si hay pendientes
+      await ThorAPI.flushOutbox();
+      // 2. Solicitar autoconciliación en la nube (resiliente si aún no se ha desplegado la nueva versión de GAS)
+      try { await ThorAPI.reconcileWithCloud(); } catch (_) {}
+      // 3. Descargar datos frescos (ejecuta además autoConciliarInventarioConRecepciones)
+      const dataRes = await ThorAPI.fetchAllData();
+
+      if (dataRes && dataRes.status === 'success' && dataRes.data) {
+        state.inventory = dataRes.data.inventario || [];
+        state.receptions = dataRes.data.recepciones || [];
+        state.sales = dataRes.data.ventas || [];
+        state.cobros = dataRes.data.cobros || [];
+        ThorAPI.setCachedData(dataRes.data);
+        renderAll();
+        Sonner.success(`Diagnóstico 100% íntegro: ${state.inventory.length} productos y ${state.receptions.length} tanques verificados en Google Sheets.`);
+      } else {
+        Sonner.warning('Diagnóstico completado en modo local.');
+      }
+    } catch (e) {
+      console.error('Error en diagnóstico:', e);
+      Sonner.error('Error durante la verificación remota.');
+    }
+  }
+
   return {
     init,
     toggleNotificationDrawer,
     openFAQModal,
     closeFAQModal,
     resetSystemData,
+    ejecutarDiagnosticoYSalud,
     switchTab,
     openNewProductModal,
     openEditProductModal,

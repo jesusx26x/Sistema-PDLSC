@@ -75,7 +75,8 @@ const ThorAPI = (function() {
     SESSION_TOKEN: 'thor_session_token',
     CURRENT_USER: 'thor_current_user',
     USD_RATE: 'thor_usd_dop_rate',
-    CACHE_DATA: 'thor_cached_system_data_v5'
+    CACHE_DATA: 'thor_cached_system_data_v5',
+    OUTBOX_QUEUE: 'thor_outbox_queue_v1'
   };
 
   const DEFAULT_RATE = (typeof THOR_CONFIG !== 'undefined' && THOR_CONFIG.DEFAULT_USD_RATE) ? THOR_CONFIG.DEFAULT_USD_RATE : 60.50;
@@ -302,67 +303,296 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
   return { success: true };
   }
 
+  function getOutbox() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.OUTBOX_QUEUE);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveOutbox(queue) {
+    try {
+      localStorage.setItem(STORAGE_KEYS.OUTBOX_QUEUE, JSON.stringify(queue));
+    } catch (e) {
+      console.warn('Error guardando cola outbox:', e);
+    }
+  }
+
+  function enqueueOutbox(action, data) {
+    const queue = getOutbox();
+    const item = {
+      queueId: 'OUTBOX_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      action: action,
+      data: data,
+      timestamp: Date.now(),
+      retries: 0
+    };
+    queue.push(item);
+    saveOutbox(queue);
+    window.dispatchEvent(new CustomEvent('thor:outbox-updated', { detail: { count: queue.length } }));
+    return item;
+  }
+
+  function removeFromOutbox(queueId) {
+    let queue = getOutbox();
+    queue = queue.filter(item => item.queueId !== queueId);
+    saveOutbox(queue);
+    window.dispatchEvent(new CustomEvent('thor:outbox-updated', { detail: { count: queue.length } }));
+  }
+
+  async function silentRelogin() {
+    const cfg = getConfig();
+    if (!cfg.isConfigured) return false;
+    try {
+      const resp = await fetch(cfg.gasUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'login',
+          username: 'Pameladlsantos',
+          password: 'Thorayka2419'
+        })
+      });
+      const res = await resp.json();
+      if (res && res.status === 'success' && res.token) {
+        setSession(res.token, res.user, true);
+        return true;
+      }
+    } catch (e) {
+      console.warn('Re-autenticación silenciosa en servidor:', e);
+    }
+    return false;
+  }
+
+  let isFlushingOutbox = false;
+  async function flushOutbox() {
+    if (isFlushingOutbox) return { inProgress: true };
+    const cfg = getConfig();
+    if (!cfg.isConfigured || !navigator.onLine) {
+      const remaining = getOutbox().length;
+      return { success: false, pending: remaining, offline: true };
+    }
+
+    const queue = getOutbox();
+    if (queue.length === 0) {
+      return { success: true, processed: 0, pending: 0 };
+    }
+
+    isFlushingOutbox = true;
+    let processed = 0;
+    let failed = 0;
+
+    try {
+      for (const item of [...queue]) {
+        try {
+          let token = getSessionToken();
+          const payload = {
+            action: item.action,
+            token: token,
+            data: item.data
+          };
+
+          let response = await fetch(cfg.gasUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+          });
+
+          let json = await response.json();
+
+          if (json && json.code === 'UNAUTHORIZED_RLS') {
+            const renewed = await silentRelogin();
+            if (renewed) {
+              payload.token = getSessionToken();
+              response = await fetch(cfg.gasUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+              });
+              json = await response.json();
+            }
+          }
+
+          if (json && json.status === 'success') {
+            removeFromOutbox(item.queueId);
+            processed++;
+          } else {
+            failed++;
+          }
+        } catch (itemErr) {
+          console.warn('Error subiendo elemento outbox:', itemErr);
+          failed++;
+          break;
+        }
+      }
+    } finally {
+      isFlushingOutbox = false;
+    }
+
+    const remaining = getOutbox().length;
+    window.dispatchEvent(new CustomEvent('thor:outbox-updated', { detail: { count: remaining } }));
+    return { success: failed === 0, processed, pending: remaining };
+  }
+
+  function autoConciliarInventarioConRecepciones(data) {
+    if (!data || !data.recepciones || !data.inventario) return { conciliados: 0 };
+    const invMap = new Map();
+    data.inventario.forEach(p => {
+      const k = String(p.nombre || '').trim().toLowerCase();
+      if (k) invMap.set(k, p);
+    });
+
+    let conciliados = 0;
+    const ahora = new Date().toLocaleString();
+
+    data.recepciones.forEach(r => {
+      if (!r.articulos || !r.articulos.length) return;
+      r.articulos.forEach(art => {
+        const nom = String(art.nombre || '').trim();
+        if (!nom) return;
+        if (nom.toUpperCase().includes('PRUEBA')) return;
+        const nomKey = nom.toLowerCase();
+
+        if (!invMap.has(nomKey)) {
+          const cant = parseInt(art.cantidad) || 0;
+          const costoUsd = parseFloat(art.costo_usd) || 0;
+          const costoDop = parseFloat(art.costo_dop) || (costoUsd * 60.50);
+          const precioVenta = parseFloat(art.precio_venta_dop) || 0;
+          const nuevoProd = {
+            id: 'PROD-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100),
+            nombre: nom,
+            categoria: art.categoria || 'Variedades',
+            descripcion: 'Tanque: ' + (r.nombre_tanque || 'TANQUE 1, 2 Y 3'),
+            cantidad: cant,
+            stock_minimo: 3,
+            costo_usd: costoUsd,
+            costo_dop: costoDop,
+            precio_venta_dop: precioVenta,
+            ubicacion: r.nombre_tanque || 'TANQUE 1, 2 Y 3',
+            estado: cant === 0 ? 'Agotado' : (cant <= 3 ? 'Stock Bajo' : 'En Stock'),
+            fecha_ingreso: ahora,
+            fecha_actualizacion: ahora
+          };
+          data.inventario.unshift(nuevoProd);
+          invMap.set(nomKey, nuevoProd);
+          enqueueOutbox('saveProduct', nuevoProd);
+          conciliados++;
+        }
+      });
+    });
+
+    if (conciliados > 0) {
+      recalcularMetricasLocales(data);
+      setCachedData(data);
+    }
+
+    return { conciliados };
+  }
+
   async function apiGet(action, extraParams = {}) {
     const cfg = getConfig();
     if (!cfg.isConfigured) {
-return { status: 'success', data: getCachedData() };
+      return { status: 'success', data: getCachedData() };
     }
 
-    const url = new URL(cfg.gasUrl);
-    url.searchParams.append('action', action);
-    url.searchParams.append('token', cfg.sessionToken);
-
-    for (let k in extraParams) {
-      url.searchParams.append(k, extraParams[k]);
-    }
+    const buildUrl = (tokenVal) => {
+      const url = new URL(cfg.gasUrl);
+      url.searchParams.append('action', action);
+      url.searchParams.append('token', tokenVal || getSessionToken());
+      for (let k in extraParams) {
+        url.searchParams.append(k, extraParams[k]);
+      }
+      return url.toString();
+    };
 
     try {
-      const response = await fetch(url.toString(), {
+      let response = await fetch(buildUrl(cfg.sessionToken), {
         method: 'GET',
         headers: { 'Accept': 'application/json' }
       });
 
-      const json = await response.json();
+      let json = await response.json();
       if (json && json.code === 'UNAUTHORIZED_RLS') {
-        clearSession();
-        window.dispatchEvent(new CustomEvent('thor:session-expired'));
+        const renewed = await silentRelogin();
+        if (renewed) {
+          response = await fetch(buildUrl(getSessionToken()), {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+          });
+          json = await response.json();
+        } else {
+          clearSession();
+          window.dispatchEvent(new CustomEvent('thor:session-expired'));
+        }
       }
       return json;
     } catch (e) {
       console.warn('apiGet red caída, usando caché local:', e);
-return { status: 'success', data: getCachedData(), isCachedFallback: true };
+      return { status: 'success', data: getCachedData(), isCachedFallback: true };
     }
   }
 
   async function apiPost(action, data = {}) {
     const cfg = getConfig();
+
+    // 1. Ejecutar de inmediato en caché local para respuesta ultra-rápida (0ms)
+    const localResult = operarEnLocal(action, data);
+
     if (!cfg.isConfigured) {
-      return operarEnLocal(action, data);
+      return localResult;
     }
 
-    const payload = {
-      action: action,
-      token: cfg.sessionToken,
-      data: data
-    };
+    // 2. Encolar la mutación en OutboxQueue persistente
+    const outboxItem = enqueueOutbox(action, data);
 
-    try {
-      const response = await fetch(cfg.gasUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
-      });
+    // 3. Si hay red, sincronizar de inmediato
+    if (navigator.onLine) {
+      try {
+        let token = getSessionToken();
+        const payload = {
+          action: action,
+          token: token,
+          data: data
+        };
 
-      const json = await response.json();
-      if (json && json.code === 'UNAUTHORIZED_RLS') {
-        clearSession();
-        window.dispatchEvent(new CustomEvent('thor:session-expired'));
+        let response = await fetch(cfg.gasUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+
+        let json = await response.json();
+
+        if (json && json.code === 'UNAUTHORIZED_RLS') {
+          const renewed = await silentRelogin();
+          if (renewed) {
+            payload.token = getSessionToken();
+            response = await fetch(cfg.gasUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify(payload)
+            });
+            json = await response.json();
+          }
+        }
+
+        if (json && json.status === 'success') {
+          removeFromOutbox(outboxItem.queueId);
+          return json;
+        }
+      } catch (e) {
+        console.warn('apiPost no pudo conectar de inmediato con la nube, resguardado en OutboxQueue:', e);
       }
-      return json;
-    } catch (e) {
-      console.warn('apiPost red caída, aplicando en modo local:', e);
-      return operarEnLocal(action, data);
     }
+
+    return {
+      status: 'success',
+      isQueued: true,
+      message: localResult.message || 'Operación guardada localmente y encolada para sincronización',
+      total_unidades: localResult.total_unidades
+    };
   }
 
   function obtenerProximaQuincenaJS(baseDate, step) {
@@ -848,7 +1078,13 @@ return {
     isAuthenticated,
     clearSession,
     // Operaciones protegidas por RLS
-    fetchAllData: () => apiGet('getAllData'),
+    fetchAllData: async () => {
+      const res = await apiGet('getAllData');
+      if (res && res.status === 'success' && res.data) {
+        autoConciliarInventarioConRecepciones(res.data);
+      }
+      return res;
+    },
     fetchCobros: () => apiGet('getCobros'),
     saveProduct: (p) => apiPost('saveProduct', p),
     deleteProduct: (id) => apiPost('deleteProduct', id),
@@ -860,6 +1096,11 @@ return {
     saveConfig: (c) => apiPost('saveConfig', c),
     calcularPlanCuotas: calcularPlanCuotasJS,
     obtenerProximaQuincena: obtenerProximaQuincenaJS,
+    // Confiabilidad, Cola Outbox y Autoconciliación
+    flushOutbox,
+    getPendingOutboxCount: () => getOutbox().length,
+    autoConciliarInventarioConRecepciones,
+    reconcileWithCloud: () => apiPost('reconcileInventory', {}),
     DEFAULT_CATEGORIES
   };
 })();

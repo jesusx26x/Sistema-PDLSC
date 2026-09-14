@@ -420,6 +420,9 @@ function doPost(e) {
       case 'resetAllData':
         return jsonResponse(purgarTodasLasHojas());
 
+      case 'reconcileInventory':
+        return jsonResponse(conciliarInventarioConRecepciones());
+
       default:
         return jsonResponse({ status: 'error', message: 'Acción POST no reconocida: ' + action }, 400);
     }
@@ -1038,9 +1041,10 @@ function registrarRecepcionTanque(rec) {
     totalUnidades += (parseInt(art.cantidad) || 0);
   });
 
-  // Guardar cada artículo en Inventario (sumando existencia a productos existentes o creando nuevos)
+  // Guardar cada artículo en Inventario (sumando existencia a productos existentes o creando nuevos en lote)
   const invSheet = getSheet(SHEETS.INVENTARIO);
   const invData = invSheet.getDataRange().getValues();
+  const nuevosProductos = [];
 
   rec.articulos.forEach(art => {
     const cant = parseInt(art.cantidad) || 0;
@@ -1092,20 +1096,22 @@ function registrarRecepcionTanque(rec) {
     } else {
       const nuevoId = artId || ('PROD-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss') + Math.floor(Math.random() * 100));
       const estado = cant === 0 ? 'Agotado' : (cant <= 3 ? 'Stock Bajo' : 'En Stock');
-      invSheet.appendRow([
+      const rowData = [
         nuevoId, art.nombre, art.categoria || 'Variedades',
         'Tanque: ' + nombreTanque, cant, 3,
         costoUsd, costoDop, precioVentaDop, nombreTanque, estado,
         ahora, ahora
-      ]);
-      invData.push([
-        nuevoId, art.nombre, art.categoria || 'Variedades',
-        'Tanque: ' + nombreTanque, cant, 3,
-        costoUsd, costoDop, precioVentaDop, nombreTanque, estado,
-        ahora, ahora
-      ]);
+      ];
+      nuevosProductos.push(rowData);
+      invData.push(rowData);
     }
   });
+
+  // Escritura atómica en lote para nuevos productos (evita timeouts y fallos parciales)
+  if (nuevosProductos.length > 0) {
+    const lastRow = invSheet.getLastRow();
+    invSheet.getRange(lastRow + 1, 1, nuevosProductos.length, 13).setValues(nuevosProductos);
+  }
 
   // Registrar o consolidar en hoja Recepciones
   const recSheet = getSheet(SHEETS.RECEPCIONES);
@@ -1424,3 +1430,75 @@ function purgarTodasLasHojas() {
   });
   return { status: 'success', message: 'Todas las tablas de datos han sido limpiadas a 0 en Google Sheets.' };
 }
+
+/**
+ * Autoconciliación de Inventario:
+ * Compara todas las recepciones históricas contra el inventario actual.
+ * Si encuentra algún artículo huérfano que no esté en inventario, lo regenera e inserta automáticamente.
+ */
+function conciliarInventarioConRecepciones() {
+  const invSheet = getSheet(SHEETS.INVENTARIO);
+  const invData = invSheet.getDataRange().getValues();
+  const invMap = new Map();
+
+  for (let i = 1; i < invData.length; i++) {
+    const rowNom = String(invData[i][1] || '').trim().toLowerCase();
+    if (rowNom) invMap.set(rowNom, true);
+  }
+
+  const recSheet = getSheet(SHEETS.RECEPCIONES);
+  const recData = recSheet.getDataRange().getValues();
+  const nuevosProductos = [];
+  const ahora = new Date();
+
+  for (let r = 1; r < recData.length; r++) {
+    const rawArticulos = recData[r][8];
+    const nombreTanque = String(recData[r][2] || 'Tanque Importado').trim();
+    if (!rawArticulos) continue;
+
+    let items = [];
+    try {
+      items = JSON.parse(rawArticulos);
+    } catch(e) {
+      continue;
+    }
+
+    items.forEach(item => {
+      const nom = String(item.nombre || '').trim();
+      if (!nom) return;
+      if (nom.toUpperCase().includes('PRUEBA')) return;
+      const nomKey = nom.toLowerCase();
+
+      if (!invMap.has(nomKey)) {
+        const cant = parseInt(item.cantidad) || 0;
+        const costoUsd = parseFloat(item.costo_usd) || 0;
+        const costoDop = parseFloat(item.costo_dop) || (costoUsd * 60.50);
+        const precioVenta = parseFloat(item.precio_venta_dop) || 0;
+        const estado = cant === 0 ? 'Agotado' : (cant <= 3 ? 'Stock Bajo' : 'En Stock');
+        const nuevoId = 'PROD-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss') + Math.floor(Math.random() * 100);
+
+        nuevosProductos.push([
+          nuevoId, nom, item.categoria || 'Variedades',
+          'Tanque: ' + nombreTanque, cant, 3,
+          costoUsd, costoDop, precioVenta, nombreTanque, estado,
+          ahora, ahora
+        ]);
+        invMap.set(nomKey, true);
+      }
+    });
+  }
+
+  if (nuevosProductos.length > 0) {
+    const lastRow = invSheet.getLastRow();
+    invSheet.getRange(lastRow + 1, 1, nuevosProductos.length, 13).setValues(nuevosProductos);
+  }
+
+  return {
+    status: 'success',
+    restaurados: nuevosProductos.length,
+    message: nuevosProductos.length > 0
+      ? 'Se conciliaron e ingresaron ' + nuevosProductos.length + ' productos faltantes al inventario.'
+      : 'Inventario 100% íntegro. No se encontraron discrepancias.'
+  };
+}
+

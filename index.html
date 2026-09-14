@@ -237,14 +237,21 @@
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           </button>
         </div>
-        <button onclick="ThorApp.sincronizarConNube()" class="btn-tactile px-3 py-1.5 rounded-xl bg-[#0D131F] hover:bg-white/5 border border-white/10 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition shadow-sm">
+        <button onclick="ThorApp.sincronizarConNube()" class="btn-tactile px-3 py-1.5 rounded-xl bg-[#0D131F] hover:bg-white/5 border border-white/10 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition shadow-sm" title="Sincronizar datos con Google Sheets">
           <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
           <span>Sincronizar</span>
+        </button>
+        <button onclick="ThorApp.ejecutarDiagnosticoYSalud()" class="btn-tactile px-2.5 py-1.5 rounded-xl bg-[#0D131F] hover:bg-emerald-500/10 border border-emerald-500/30 text-xs font-semibold text-emerald-400 flex items-center gap-1.5 transition shadow-sm" title="Diagnóstico y Auto-Reparación de Base de Datos">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          <span class="hidden lg:inline">Salud BD</span>
         </button>
       </div>
 
       <!-- Botones de Acción Rápida, Buzón de Alertas y Usuario -->
       <div class="flex items-center gap-2">
+        <button onclick="ThorApp.sincronizarConNube()" class="md:hidden btn-tactile p-2 rounded-xl bg-[#0D131F] hover:bg-white/10 text-slate-300 hover:text-sky-400 border border-white/10 transition" title="Sincronizar con la nube">
+          <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
+        </button>
         <button onclick="ThorApp.openSaleModal()" class="btn-tactile btn-gold text-xs py-2 px-3 sm:px-4 shadow-sm flex items-center gap-1.5 text-slate-950 font-bold">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
           <span class="hidden sm:inline">Nueva</span> <span>Venta</span>
@@ -1287,6 +1294,23 @@
         </div>
       </div>
 
+      <div class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            Diagnóstico & Salud Base de Datos
+          </span>
+          <span id="devOutboxBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono">0 pendientes</span>
+        </div>
+        <p class="text-[11px] text-slate-300 leading-normal">
+          Envía operaciones pendientes de la cola local (Outbox), verifica la conexión con Google Sheets y auto-concilia cualquier producto huérfano entre tanques e inventario.
+        </p>
+        <button type="button" onclick="ThorApp.ejecutarDiagnosticoYSalud()" class="w-full btn-tactile py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md flex items-center justify-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <span>Ejecutar Diagnóstico & Auto-Reparación (1 Clic)</span>
+        </button>
+      </div>
+
       <div class="flex items-center justify-between pt-2 border-t border-white/10">
         <button type="button" onclick="ThorApp.sincronizarConNube()" class="btn-tactile btn-outline-gold text-xs py-1.5 px-3 shadow-xs">
           Probar Conexión
@@ -1392,6 +1416,20 @@
             En iPhone (Safari): Toca el botón de <em>Compartir</em> abajo y presiona <strong>'Agregar a pantalla de inicio'</strong>.<br/>
             En Android (Chrome): Toca los tres puntos arriba a la derecha y selecciona <strong>'Instalar aplicación'</strong> o <strong>'Agregar a pantalla principal'</strong>.
           </p>
+        </div>
+
+        <!-- FAQ 6: Auto-Reparación y Sincronización Inmediata -->
+        <div class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
+          <h5 class="font-bold text-slate-100 text-sm flex items-center gap-2 text-emerald-400">
+            <span>🛡️</span> ¿Qué hago si registré un tanque o producto y no lo veo de inmediato?
+          </h5>
+          <p class="text-slate-300 leading-relaxed">
+            Thor Essence cuenta con auto-sincronización y protección contra caídas de internet. Si deseas forzar una sincronización inmediata y verificar que ningún artículo haya quedado pendiente entre tus tanques y el inventario, pulsa el siguiente botón:
+          </p>
+          <button type="button" onclick="ThorApp.ejecutarDiagnosticoYSalud(); ThorApp.closeFAQModal();" class="btn-tactile py-2 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span>Verificar y Reparar Sincronización Ahora</span>
+          </button>
         </div>
       </div>
 
