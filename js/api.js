@@ -375,9 +375,21 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       return { success: false, pending: remaining, offline: true };
     }
 
-    const queue = getOutbox();
+    let queue = getOutbox();
     if (queue.length === 0) {
       return { success: true, processed: 0, pending: 0 };
+    }
+
+    // Sanitizar cola si se acumuló en exceso por reconciliaciones previas
+    if (queue.length > 30) {
+      const seen = new Set();
+      queue = queue.filter(item => {
+        const k = item.action + '_' + (item.data?.id || item.data?.id_venta || item.data?.nombre || item.queueId);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      saveOutbox(queue);
     }
 
     isFlushingOutbox = true;
@@ -385,9 +397,15 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     let failed = 0;
 
     try {
-      for (const item of [...queue]) {
+      const batch = queue.slice(0, 10);
+      for (const item of batch) {
         try {
           let token = getSessionToken();
+          if (!token || token.startsWith('OFFLINE_') || token.startsWith('LOCAL_')) {
+            await silentRelogin();
+            token = getSessionToken();
+          }
+
           const payload = {
             action: item.action,
             token: token,
@@ -419,6 +437,10 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
             removeFromOutbox(item.queueId);
             processed++;
           } else {
+            item.retries = (item.retries || 0) + 1;
+            if (item.retries >= 3) {
+              removeFromOutbox(item.queueId);
+            }
             failed++;
           }
         } catch (itemErr) {
@@ -436,8 +458,10 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     return { success: failed === 0, processed, pending: remaining };
   }
 
-  function autoConciliarInventarioConRecepciones(data) {
-    if (!data || !data.recepciones || !data.inventario) return { conciliados: 0 };
+  function autoConciliarInventarioConRecepciones(data, shouldEnqueue = false) {
+    if (!data || !data.recepciones || !data.inventario || !Array.isArray(data.inventario) || data.inventario.length === 0) {
+      return { conciliados: 0 };
+    }
     const invMap = new Map();
     data.inventario.forEach(p => {
       const k = String(p.nombre || '').trim().toLowerCase();
@@ -448,7 +472,7 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     const ahora = new Date().toLocaleString();
 
     data.recepciones.forEach(r => {
-      if (!r.articulos || !r.articulos.length) return;
+      if (!r.articulos || !Array.isArray(r.articulos) || !r.articulos.length) return;
       r.articulos.forEach(art => {
         const nom = String(art.nombre || '').trim();
         if (!nom) return;
@@ -477,7 +501,9 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
           };
           data.inventario.unshift(nuevoProd);
           invMap.set(nomKey, nuevoProd);
-          enqueueOutbox('saveProduct', nuevoProd);
+          if (shouldEnqueue) {
+            enqueueOutbox('saveProduct', nuevoProd);
+          }
           conciliados++;
         }
       });
@@ -497,6 +523,12 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       return { status: 'success', data: getCachedData() };
     }
 
+    let token = getSessionToken();
+    if (!token || token.startsWith('OFFLINE_') || token.startsWith('LOCAL_')) {
+      await silentRelogin();
+      token = getSessionToken();
+    }
+
     const buildUrl = (tokenVal) => {
       const url = new URL(cfg.gasUrl);
       url.searchParams.append('action', action);
@@ -508,7 +540,7 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     };
 
     try {
-      let response = await fetch(buildUrl(cfg.sessionToken), {
+      let response = await fetch(buildUrl(token), {
         method: 'GET',
         headers: { 'Accept': 'application/json' }
       });
@@ -530,7 +562,7 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       return json;
     } catch (e) {
       console.warn('apiGet red caída, usando caché local:', e);
-      return { status: 'success', data: getCachedData(), isCachedFallback: true };
+      return { status: 'error', isCachedFallback: true, data: getCachedData(), message: e.message };
     }
   }
 
@@ -1073,6 +1105,7 @@ return {
     // Autenticación & Sesiones en Servidor (RLS)
     login,
     logout,
+    silentRelogin,
     getSessionToken,
     getCurrentUser,
     isAuthenticated,

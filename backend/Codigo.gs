@@ -126,7 +126,7 @@ function verificarCredenciales(user, pass) {
 
 function crearSesionEnServidor(username) {
   const token = 'THOR_SES_' + Utilities.getUuid().replace(/-/g, '') + '_' + Date.now();
-  const duracionMs = 24 * 60 * 60 * 1000; // 24 horas de validez
+  const duracionMs = 30 * 24 * 60 * 60 * 1000; // 30 días de validez para comodidad de Pamela
   const sessionData = {
     username: username,
     creadoEn: Date.now(),

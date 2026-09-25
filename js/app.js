@@ -90,12 +90,17 @@ const ThorApp = (function() {
       saveTankDraftToLocalStorage();
     });
 
-    // Validar estado de autenticación (RLS)
-    if (checkAuthStatus()) {
-      // Cargar datos locales de inmediato
-      cargarDatosDesdeCache();
-      renderAll();
+    // Cargar datos locales de inmediato para UI instantánea (0ms de latencia)
+    cargarDatosDesdeCache();
+    renderAll();
 
+    // Auto-autenticación de cortesía en servidor para Pamela (Zero-Config)
+    if (!ThorAPI.isAuthenticated()) {
+      await ThorAPI.silentRelogin();
+    }
+
+    if (checkAuthStatus()) {
+      hideLoginView();
       // Actualizar tasa de cambio en segundo plano sin bloquear
       actualizarTasaCambio(false);
 
@@ -192,15 +197,10 @@ const ThorApp = (function() {
   }
 
   function cargarDatosDesdeCache() {
-    // Purgar cachés antiguas que contenían productos demo como PROD-001
-    const oldKeys = ['thor_cached_system_data', 'thor_cached_system_data_v2', 'thor_cached_system_data_v3', 'thor_cached_system_data_v4', 'thor_cached_system_data_v5'];
-    oldKeys.forEach(k => {
-      try {
-        const val = localStorage.getItem(k);
-        if (val && (val.includes('PROD-001') || val.includes('Vainilla & Rose'))) {
-          localStorage.removeItem(k);
-        }
-      } catch (e) {}
+    // Limpieza segura y silenciosa de cachés obsoletas heredadas (v1 a v4)
+    const legacyKeys = ['thor_cached_system_data', 'thor_cached_system_data_v2', 'thor_cached_system_data_v3', 'thor_cached_system_data_v4'];
+    legacyKeys.forEach(k => {
+      try { localStorage.removeItem(k); } catch (e) {}
     });
 
     const cached = ThorAPI.getCachedData();
@@ -241,10 +241,21 @@ const ThorApp = (function() {
     try {
       const res = await ThorAPI.fetchAllData();
       if (res && res.status === 'success' && res.data) {
-        state.inventory = res.data.inventario || [];
-        state.sales = res.data.ventas || [];
-        state.receptions = res.data.recepciones || [];
-        state.cobros = res.data.cobros || [];
+        const cloudInv = Array.isArray(res.data.inventario) ? res.data.inventario : [];
+        const cloudSales = Array.isArray(res.data.ventas) ? res.data.ventas : [];
+        const cloudReceps = Array.isArray(res.data.recepciones) ? res.data.recepciones : [];
+        const cloudCobros = Array.isArray(res.data.cobros) ? res.data.cobros : [];
+
+        // Salvaguarda: si viene de un fallback vacío pero ya teníamos productos, no borrar
+        if (res.isCachedFallback && cloudInv.length === 0 && state.inventory.length > 0) {
+          console.warn('Fallback en caché vacío ignorado para proteger inventario en pantalla');
+          return;
+        }
+
+        state.inventory = cloudInv;
+        state.sales = cloudSales;
+        state.receptions = cloudReceps;
+        state.cobros = cloudCobros;
         state.metrics = res.data.metricas || {};
         state.config = res.data.configuracion || {};
 
@@ -266,7 +277,7 @@ const ThorApp = (function() {
           Sonner.success(`Base de datos sincronizada: ${numProds} productos y ${numTanqs} recepciones verificadas en Google Sheets`);
         }
       } else {
-        throw new Error(res?.message || 'Error al obtener datos');
+        throw new Error(res?.message || 'Error al obtener datos de Google Sheets');
       }
     } catch (e) {
       console.warn('Sincronización con nube:', e);
