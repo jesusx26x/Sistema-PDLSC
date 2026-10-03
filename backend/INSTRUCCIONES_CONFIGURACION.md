@@ -64,10 +64,25 @@ Para ingresar al sistema Thor Essence:
 
 ---
 
-## 🌐 Paso 3: Actualizar el Despliegue en Apps Script (Si ya tenías uno)
+## 🌐 Paso 3: Actualizar el Despliegue en Apps Script (¡Crucial para sincronización de Tanques!)
 
-Cada vez que actualices `Codigo.gs`:
-1. En Apps Script, haz clic en **Implementar** > **Gestionar implementaciones**.
-2. Selecciona tu implementación activa y pulsa el lápiz ✏️ (**Editar**).
-3. En **Versión**, selecciona **Nueva versión**.
-4. Haz clic en **Implementar**. La URL permanece igual y adoptará inmediatamente los cambios de RLS y autenticación.
+Para que los cambios de suma acumulativa atómica y autoconciliación queden 100% activos en la nube de Google Sheets:
+
+1. Abre tu proyecto en **Google Apps Script** (desde Google Sheets: *Extensiones > Apps Script* o en [script.google.com](https://script.google.com)).
+2. Abre el archivo de código (`Código.gs` o `Codigo.gs`) y **reemplaza todo su contenido** con el nuevo contenido de `backend/Codigo.gs`.
+3. Haz clic en el disquete 💾 (**Guardar**).
+4. Arriba a la derecha, haz clic en **Implementar** > **Gestionar implementaciones**.
+5. Selecciona la implementación de tipo Aplicación web y pulsa el lápiz ✏️ (**Editar**).
+6. En el selector **Versión**, haz clic y selecciona **Nueva versión**.
+7. Haz clic en el botón azul **Implementar**.
+8. ¡Listo! La URL permanece exactamente igual y Pamela disfrutará de suma acumulativa instantánea en todos sus tanques.
+
+---
+
+## 🔄 Menú de Conciliación en Google Sheets (En caso de dudas de stock)
+
+Si en algún momento Pamela desea verificar o auditar su inventario:
+1. Abre la hoja de cálculo de Google Sheets.
+2. En la barra superior, haz clic en:  
+   👉 **`🌸 Thor Essence Admin`** > **`🔄 Reconciliar y Reparar Stock de Inventario`**.
+3. El sistema auditará automáticamente todas las recepciones históricas contra las ventas registradas y corregirá cualquier discrepancia al instante sin perder ni una sola unidad.

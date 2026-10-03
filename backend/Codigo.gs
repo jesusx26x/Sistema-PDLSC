@@ -42,6 +42,7 @@ function onOpen() {
     const ui = SpreadsheetApp.getUi();
     ui.createMenu('🌸 Thor Essence Admin')
       .addItem('🚀 Inicializar / Verificar Estructura', 'menuInicializar')
+      .addItem('🔄 Reconciliar y Reparar Stock de Inventario', 'menuConciliarInventario')
       .addItem('💾 Crear Copia de Respaldo en Drive', 'crearRespaldoEnDrive')
       .addItem('⏰ Configurar Respaldo Automático Diario', 'configurarDisparadorRespaldo')
       .addSeparator()
@@ -55,6 +56,11 @@ function onOpen() {
 function menuInicializar() {
   inicializarHojasSiNoExisten(true);
   SpreadsheetApp.getUi().alert('✅ Estructura de Thor Essence verificada y lista para operar con RLS activo.');
+}
+
+function menuConciliarInventario() {
+  const res = conciliarInventarioConRecepciones();
+  SpreadsheetApp.getUi().alert('🔄 Conciliación y Reparación de Inventario:\n\n' + res.message);
 }
 
 function menuRestablecerCredenciales() {
@@ -422,6 +428,11 @@ function doPost(e) {
 
       case 'reconcileInventory':
         return jsonResponse(conciliarInventarioConRecepciones());
+
+      case 'deleteReception': {
+        const delRecId = payload.id_recepcion || (payload.data && (payload.data.id_recepcion || payload.data));
+        return jsonResponse(eliminarRecepcion(delRecId));
+      }
 
       default:
         return jsonResponse({ status: 'error', message: 'Acción POST no reconocida: ' + action }, 400);
@@ -1030,7 +1041,7 @@ function registrarRecepcionTanque(rec) {
 
   const ahora = new Date();
   const idRecepcion = rec.id_recepcion || ('TANQ-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss'));
-  const nombreTanque = String(rec.nombre_tanque || 'Tanque Importado de EE.UU.').trim();
+  const nombreTanque = String(rec.nombre_tanque || 'Tanque Importado de EE.UU.').replace(/\s+/g, ' ').trim();
   const origen = String(rec.origen || 'Miami, FL - EE.UU.').trim();
   const fleteUsd = parseFloat(rec.flete_usd) || 0;
   const tasaCambio = parseFloat(rec.tasa_cambio) || 60.50;
@@ -1041,10 +1052,22 @@ function registrarRecepcionTanque(rec) {
     totalUnidades += (parseInt(art.cantidad) || 0);
   });
 
-  // Guardar cada artículo en Inventario (sumando existencia a productos existentes o creando nuevos en lote)
+  const norm = str => String(str || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+  // Guardar cada artículo en Inventario (sumando acumulativamente al stock existente)
   const invSheet = getSheet(SHEETS.INVENTARIO);
   const invData = invSheet.getDataRange().getValues();
-  const nuevosProductos = [];
+
+  // Mapa de búsqueda rápida por ID y nombre normalizado
+  const idMap = new Map();
+  const nomMap = new Map();
+
+  for (let i = 1; i < invData.length; i++) {
+    const rowId = String(invData[i][0] || '').trim();
+    const rowNom = norm(invData[i][1]);
+    if (rowId) idMap.set(rowId, i);
+    if (rowNom && !nomMap.has(rowNom)) nomMap.set(rowNom, i);
+  }
 
   rec.articulos.forEach(art => {
     const cant = parseInt(art.cantidad) || 0;
@@ -1054,109 +1077,77 @@ function registrarRecepcionTanque(rec) {
     const costoDop = parseFloat(art.costo_dop) || (costoUsd * tasaCambio);
     const precioVentaDop = parseFloat(art.precio_venta_dop) || 0;
     const artId = String(art.id || '').trim();
-    const artNom = String(art.nombre || '').trim().toLowerCase();
+    const artNom = norm(art.nombre);
 
-    let filaEncontrada = -1;
-    for (let i = 1; i < invData.length; i++) {
-      const rowId = String(invData[i][0] || '').trim();
-      const rowNom = String(invData[i][1] || '').trim().toLowerCase();
-      if ((artId && rowId === artId) || (artNom && rowNom === artNom)) {
-        filaEncontrada = i + 1; // Fila 1-indexed en Google Sheets
-        break;
-      }
+    let rowIdx = -1;
+    if (artId && idMap.has(artId)) {
+      rowIdx = idMap.get(artId);
+    } else if (artNom && nomMap.has(artNom)) {
+      rowIdx = nomMap.get(artNom);
     }
 
-    if (filaEncontrada > 0) {
-      const rowIdx = filaEncontrada - 1;
+    if (rowIdx > 0) {
+      // PRODUCTO EXISTENTE: SUMAR EXISTENCIA ACUMULATIVAMENTE (NUNCA SOBREESCRIBIR)
       const stockAnterior = parseInt(invData[rowIdx][4]) || 0;
       const nuevoStock = stockAnterior + cant;
       const stockMin = parseInt(invData[rowIdx][5]) || 3;
       const nuevoEstado = nuevoStock === 0 ? 'Agotado' : (nuevoStock <= stockMin ? 'Stock Bajo' : 'En Stock');
-      const prodId = invData[rowIdx][0];
-      const prodNom = invData[rowIdx][1] || art.nombre;
-      const prodCat = art.categoria || invData[rowIdx][2] || 'Variedades';
-      const prodDesc = (invData[rowIdx][3] ? invData[rowIdx][3] + ' | ' : '') + 'Tanque: ' + nombreTanque;
-      const finalCostoUsd = costoUsd > 0 ? costoUsd : (parseFloat(invData[rowIdx][6]) || 0);
-      const finalCostoDop = costoDop > 0 ? costoDop : (parseFloat(invData[rowIdx][7]) || 0);
-      const finalPrecioVenta = precioVentaDop > 0 ? precioVentaDop : (parseFloat(invData[rowIdx][8]) || 0);
-      const fechaIngresoOriginal = invData[rowIdx][11] || ahora;
-
-      invSheet.getRange(filaEncontrada, 1, 1, 13).setValues([[
-        prodId, prodNom, prodCat, prodDesc, nuevoStock, stockMin,
-        finalCostoUsd, finalCostoDop, finalPrecioVenta, nombreTanque, nuevoEstado,
-        fechaIngresoOriginal, ahora
-      ]]);
 
       invData[rowIdx][4] = nuevoStock;
-      invData[rowIdx][6] = finalCostoUsd;
-      invData[rowIdx][7] = finalCostoDop;
-      invData[rowIdx][8] = finalPrecioVenta;
+      invData[rowIdx][5] = stockMin;
+      if (costoUsd > 0) invData[rowIdx][6] = costoUsd;
+      if (costoDop > 0) invData[rowIdx][7] = costoDop;
+      if (precioVentaDop > 0) invData[rowIdx][8] = precioVentaDop;
       invData[rowIdx][9] = nombreTanque;
       invData[rowIdx][10] = nuevoEstado;
+      invData[rowIdx][12] = ahora;
     } else {
+      // PRODUCTO NUEVO: REGISTRAR EN INVENTARIO
       const nuevoId = artId || ('PROD-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss') + Math.floor(Math.random() * 100));
       const estado = cant === 0 ? 'Agotado' : (cant <= 3 ? 'Stock Bajo' : 'En Stock');
-      const rowData = [
-        nuevoId, art.nombre, art.categoria || 'Variedades',
-        'Tanque: ' + nombreTanque, cant, 3,
-        costoUsd, costoDop, precioVentaDop, nombreTanque, estado,
-        ahora, ahora
-      ];
-      nuevosProductos.push(rowData);
-      invData.push(rowData);
+      const newRowIdx = invData.length;
+      invData.push([
+        nuevoId,
+        String(art.nombre || '').trim(),
+        art.categoria || 'Variedades',
+        'Tanque: ' + nombreTanque,
+        cant,
+        3,
+        costoUsd,
+        costoDop,
+        precioVentaDop,
+        nombreTanque,
+        estado,
+        ahora,
+        ahora
+      ]);
+      idMap.set(nuevoId, newRowIdx);
+      if (artNom) nomMap.set(artNom, newRowIdx);
     }
   });
 
-  // Escritura atómica en lote para nuevos productos (evita timeouts y fallos parciales)
-  if (nuevosProductos.length > 0) {
-    const lastRow = invSheet.getLastRow();
-    invSheet.getRange(lastRow + 1, 1, nuevosProductos.length, 13).setValues(nuevosProductos);
-  }
+  // ESCRITURA EN UN SOLO BLOQUE ATÓMICO (ultra rápido y sin timeouts)
+  invSheet.getRange(1, 1, invData.length, 13).setValues(invData);
+  estilarCabecera(invSheet, 13, '#0B132B', '#D4AF37');
+  invSheet.setFrozenRows(1);
 
-  // Registrar o consolidar en hoja Recepciones
+  // Registrar en hoja Recepciones
   const recSheet = getSheet(SHEETS.RECEPCIONES);
-  const recRows = recSheet.getDataRange().getValues();
-  let filaRecExistente = -1;
-
-  for (let r = 1; r < recRows.length; r++) {
-    if (String(recRows[r][2] || '').trim().toLowerCase() === nombreTanque.toLowerCase()) {
-      filaRecExistente = r + 1;
-      break;
-    }
-  }
-
-  if (filaRecExistente > 0) {
-    const rIdx = filaRecExistente - 1;
-    const prevUnidades = parseInt(recRows[rIdx][4]) || 0;
-    const prevFlete = parseFloat(recRows[rIdx][5]) || 0;
-    const consolidatedUnidades = prevUnidades + totalUnidades;
-    const consolidatedFlete = prevFlete + fleteUsd;
-    let prevArticulos = [];
-    try {
-      if (recRows[rIdx][8]) prevArticulos = JSON.parse(recRows[rIdx][8]);
-    } catch(e) {}
-    const consolidatedArticulos = prevArticulos.concat(rec.articulos);
-
-    recSheet.getRange(filaRecExistente, 5).setValue(consolidatedUnidades);
-    recSheet.getRange(filaRecExistente, 6).setValue(consolidatedFlete);
-    recSheet.getRange(filaRecExistente, 9).setValue(JSON.stringify(consolidatedArticulos));
-  } else {
-    recSheet.appendRow([
-      idRecepcion,
-      ahora,
-      nombreTanque,
-      origen,
-      totalUnidades,
-      fleteUsd,
-      tasaCambio,
-      notas,
-      JSON.stringify(rec.articulos)
-    ]);
-  }
+  recSheet.appendRow([
+    idRecepcion,
+    ahora,
+    nombreTanque,
+    origen,
+    totalUnidades,
+    fleteUsd,
+    tasaCambio,
+    notas,
+    JSON.stringify(rec.articulos)
+  ]);
 
   return {
     status: 'success',
-    message: 'Tanque registrado exitosamente con ' + totalUnidades + ' unidades ingresadas al inventario.',
+    message: 'Tanque registrado exitosamente: ' + totalUnidades + ' unidades ingresadas y acumuladas al inventario.',
     id_recepcion: idRecepcion,
     totalUnidades: totalUnidades,
     total_unidades: totalUnidades
@@ -1432,28 +1423,44 @@ function purgarTodasLasHojas() {
 }
 
 /**
- * Autoconciliación de Inventario:
- * Compara todas las recepciones históricas contra el inventario actual.
- * Si encuentra algún artículo huérfano que no esté en inventario, lo regenera e inserta automáticamente.
+ * Autoconciliación y Reparación Integral de Inventario:
+ * 1. Calcula la sumatoria histórica de unidades recibidas en todas las recepciones válidas.
+ * 2. Descuenta las ventas completadas o pendientes (no canceladas) para cada producto.
+ * 3. Corrige cualquier stock que haya sido disminuido o sobreescrito accidentalmente.
+ * 4. Inserta productos faltantes que existan en recepciones pero falten en Inventario.
+ * 5. Fusiona registros duplicados en el inventario.
  */
 function conciliarInventarioConRecepciones() {
   const invSheet = getSheet(SHEETS.INVENTARIO);
   const invData = invSheet.getDataRange().getValues();
-  const invMap = new Map();
-
-  for (let i = 1; i < invData.length; i++) {
-    const rowNom = String(invData[i][1] || '').trim().toLowerCase();
-    if (rowNom) invMap.set(rowNom, true);
-  }
-
   const recSheet = getSheet(SHEETS.RECEPCIONES);
   const recData = recSheet.getDataRange().getValues();
-  const nuevosProductos = [];
+  const venSheet = getSheet(SHEETS.VENTAS);
+  const venData = venSheet.getDataRange().getValues();
   const ahora = new Date();
+
+  const norm = str => String(str || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+  // 1. Calcular total vendido por producto
+  const ventasMap = new Map();
+  for (let v = 1; v < venData.length; v++) {
+    const estado = String(venData[v][13] || '').trim();
+    if (estado !== 'Cancelada') {
+      const artNom = norm(venData[v][3]);
+      const cant = parseInt(venData[v][5]) || 0;
+      if (artNom) {
+        ventasMap.set(artNom, (ventasMap.get(artNom) || 0) + cant);
+      }
+    }
+  }
+
+  // 2. Calcular total recibido por producto
+  const recepcionesMap = new Map();
+  const metaMap = new Map();
 
   for (let r = 1; r < recData.length; r++) {
     const rawArticulos = recData[r][8];
-    const nombreTanque = String(recData[r][2] || 'Tanque Importado').trim();
+    const nombreTanque = String(recData[r][2] || 'Tanque Importado').replace(/\s+/g, ' ').trim();
     if (!rawArticulos) continue;
 
     let items = [];
@@ -1465,40 +1472,118 @@ function conciliarInventarioConRecepciones() {
 
     items.forEach(item => {
       const nom = String(item.nombre || '').trim();
-      if (!nom) return;
-      if (nom.toUpperCase().includes('PRUEBA')) return;
-      const nomKey = nom.toLowerCase();
+      if (!nom || nom.toUpperCase().includes('PRUEBA')) return;
+      const nomKey = norm(nom);
+      const cant = parseInt(item.cantidad) || 0;
 
-      if (!invMap.has(nomKey)) {
-        const cant = parseInt(item.cantidad) || 0;
-        const costoUsd = parseFloat(item.costo_usd) || 0;
-        const costoDop = parseFloat(item.costo_dop) || (costoUsd * 60.50);
-        const precioVenta = parseFloat(item.precio_venta_dop) || 0;
-        const estado = cant === 0 ? 'Agotado' : (cant <= 3 ? 'Stock Bajo' : 'En Stock');
-        const nuevoId = 'PROD-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss') + Math.floor(Math.random() * 100);
-
-        nuevosProductos.push([
-          nuevoId, nom, item.categoria || 'Variedades',
-          'Tanque: ' + nombreTanque, cant, 3,
-          costoUsd, costoDop, precioVenta, nombreTanque, estado,
-          ahora, ahora
-        ]);
-        invMap.set(nomKey, true);
+      recepcionesMap.set(nomKey, (recepcionesMap.get(nomKey) || 0) + cant);
+      if (!metaMap.has(nomKey)) {
+        metaMap.set(nomKey, {
+          nombre: nom,
+          categoria: item.categoria || 'Variedades',
+          costo_usd: parseFloat(item.costo_usd) || 0,
+          costo_dop: parseFloat(item.costo_dop) || ((parseFloat(item.costo_usd) || 0) * 60.50),
+          precio_venta_dop: parseFloat(item.precio_venta_dop) || 0,
+          ubicacion: nombreTanque
+        });
       }
     });
   }
 
-  if (nuevosProductos.length > 0) {
-    const lastRow = invSheet.getLastRow();
-    invSheet.getRange(lastRow + 1, 1, nuevosProductos.length, 13).setValues(nuevosProductos);
+  // 3. Mapear inventario existente y detectar duplicados
+  const invMap = new Map();
+  const filasUnicas = [invData[0]]; // Cabecera
+  let filasActualizadas = 0;
+  let nuevosAgregados = 0;
+
+  for (let i = 1; i < invData.length; i++) {
+    const rowNom = norm(invData[i][1]);
+    if (!rowNom) continue;
+
+    if (invMap.has(rowNom)) {
+      // Duplicado: sumar existencias al primer registro y no incluir fila duplicada
+      const primerIdx = invMap.get(rowNom);
+      filasUnicas[primerIdx][4] = (parseInt(filasUnicas[primerIdx][4]) || 0) + (parseInt(invData[i][4]) || 0);
+    } else {
+      invMap.set(rowNom, filasUnicas.length);
+      filasUnicas.push(invData[i].slice());
+    }
+  }
+
+  // 4. Actualizar o restaurar existencias
+  recepcionesMap.forEach((totalRecibido, nomKey) => {
+    const totalVendido = ventasMap.get(nomKey) || 0;
+    const stockCalculado = Math.max(0, totalRecibido - totalVendido);
+
+    if (invMap.has(nomKey)) {
+      const rowIdx = invMap.get(nomKey);
+      const stockActual = parseInt(filasUnicas[rowIdx][4]) || 0;
+
+      // Si el stock actual es menor al calculado (por sobreescritura previa), restaurar
+      if (stockActual < stockCalculado) {
+        filasUnicas[rowIdx][4] = stockCalculado;
+        const stockMin = parseInt(filasUnicas[rowIdx][5]) || 3;
+        filasUnicas[rowIdx][10] = stockCalculado === 0 ? 'Agotado' : (stockCalculado <= stockMin ? 'Stock Bajo' : 'En Stock');
+        filasUnicas[rowIdx][12] = ahora;
+        filasActualizadas++;
+      }
+    } else {
+      // Producto huérfano en recepciones: agregar a inventario
+      const meta = metaMap.get(nomKey) || {};
+      const stockMin = 3;
+      const estado = stockCalculado === 0 ? 'Agotado' : (stockCalculado <= stockMin ? 'Stock Bajo' : 'En Stock');
+      const nuevoId = 'PROD-REST-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss') + Math.floor(Math.random() * 100);
+
+      const nuevaFila = [
+        nuevoId,
+        meta.nombre || nomKey.toUpperCase(),
+        meta.categoria || 'Variedades',
+        'Tanque: ' + (meta.ubicacion || 'Tanque Importado'),
+        stockCalculado,
+        stockMin,
+        meta.costo_usd || 0,
+        meta.costo_dop || 0,
+        meta.precio_venta_dop || 0,
+        meta.ubicacion || 'Almacén Principal',
+        estado,
+        ahora,
+        ahora
+      ];
+      invMap.set(nomKey, filasUnicas.length);
+      filasUnicas.push(nuevaFila);
+      nuevosAgregados++;
+    }
+  });
+
+  // 5. Guardar inventario en lote atómico
+  if (filasActualizadas > 0 || nuevosAgregados > 0 || filasUnicas.length !== invData.length) {
+    invSheet.clearContents();
+    invSheet.getRange(1, 1, filasUnicas.length, 13).setValues(filasUnicas);
+    estilarCabecera(invSheet, 13, '#0B132B', '#D4AF37');
+    invSheet.setFrozenRows(1);
   }
 
   return {
     status: 'success',
-    restaurados: nuevosProductos.length,
-    message: nuevosProductos.length > 0
-      ? 'Se conciliaron e ingresaron ' + nuevosProductos.length + ' productos faltantes al inventario.'
-      : 'Inventario 100% íntegro. No se encontraron discrepancias.'
+    restaurados: filasActualizadas,
+    agregados: nuevosAgregados,
+    total_productos: filasUnicas.length - 1,
+    message: (filasActualizadas > 0 || nuevosAgregados > 0)
+      ? `Conciliación exitosa: se restauró el stock de ${filasActualizadas} productos y se añadieron ${nuevosAgregados} productos faltantes.`
+      : 'Inventario 100% íntegro y verificado contra recepciones y ventas.'
   };
+}
+
+function eliminarRecepcion(idRecepcion) {
+  if (!idRecepcion) return { status: 'error', message: 'ID de recepción requerido' };
+  const recSheet = getSheet(SHEETS.RECEPCIONES);
+  const rows = recSheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]).trim() === String(idRecepcion).trim()) {
+      recSheet.deleteRow(i + 1);
+      return { status: 'success', message: 'Recepción ' + idRecepcion + ' eliminada exitosamente' };
+    }
+  }
+  return { status: 'error', message: 'Recepción no encontrada: ' + idRecepcion };
 }
 

@@ -1517,15 +1517,27 @@ const ThorApp = (function() {
     }
   }
 
-  function openSaleModal(selectedProductId = null, initialMode = 'contado') {
+  function populateSaleProductSelect(selectedProductId = null, filterText = '') {
     const select = document.getElementById('saleProductSelect');
     if (!select) return;
 
+    const cleanFilter = (filterText || '').trim().toLowerCase();
+    const sorted = [...(state.inventory || [])].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
     select.innerHTML = '<option value="">-- Selecciona un producto a vender --</option>';
-    state.inventory.forEach(p => {
+    let matchCount = 0;
+    let singleMatchId = null;
+
+    sorted.forEach(p => {
+      const nom = (p.nombre || '').toLowerCase();
+      if (cleanFilter && !nom.includes(cleanFilter)) {
+        return;
+      }
+      matchCount++;
+      singleMatchId = p.id;
       const disabled = p.cantidad <= 0 ? 'disabled' : '';
       const stockTxt = p.cantidad <= 0 ? '(Agotado)' : `(${p.cantidad} disp.)`;
-      const origTxt = (p.origen === 'local' || p.origen === 'Compra Local') ? 'Local' : 'Tanque';
+      const origTxt = (p.origen === 'local' || p.origen === 'Compra Local') ? 'Local' : (p.ubicacion ? p.ubicacion : 'Tanque');
       select.innerHTML += `
         <option value="${p.id}" ${disabled} ${selectedProductId === p.id ? 'selected' : ''}>
           ${p.nombre} — RD$ ${Number(p.precio_venta_dop || 0).toLocaleString()} ${stockTxt} [${origTxt}]
@@ -1533,11 +1545,46 @@ const ThorApp = (function() {
       `;
     });
 
+    if (cleanFilter && matchCount === 1 && singleMatchId) {
+      select.value = singleMatchId;
+      handleSaleProductChange();
+    }
+  }
+
+  function clearSaleSearch() {
+    const searchInput = document.getElementById('saleProductSearch');
+    const clearBtn = document.getElementById('btnSaleClearSearch');
+    if (searchInput) searchInput.value = '';
+    if (clearBtn) clearBtn.classList.add('hidden');
+    populateSaleProductSelect();
+    handleSaleProductChange();
+  }
+
+  function onSaleSearchInput(value) {
+    const clearBtn = document.getElementById('btnSaleClearSearch');
+    if (clearBtn) {
+      if (value && value.trim()) clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+    }
+    const currentSelected = document.getElementById('saleProductSelect')?.value;
+    populateSaleProductSelect(currentSelected, value);
+    handleSaleProductChange();
+  }
+
+  function openSaleModal(selectedProductId = null, initialMode = 'contado') {
+    const searchInput = document.getElementById('saleProductSearch');
+    if (searchInput) searchInput.value = '';
+    const clearBtn = document.getElementById('btnSaleClearSearch');
+    if (clearBtn) clearBtn.classList.add('hidden');
+
+    populateSaleProductSelect(selectedProductId);
+
     const formSale = document.getElementById('formSale');
     if (formSale) formSale.reset();
     
     if (selectedProductId) {
-      select.value = selectedProductId;
+      const select = document.getElementById('saleProductSelect');
+      if (select) select.value = selectedProductId;
     }
     
     setSaleMode(initialMode);
@@ -2150,7 +2197,12 @@ const ThorApp = (function() {
 
       let badgeHtml = '<span class="tank-item-match-badge"></span>';
       if (existingMatch) {
-        badgeHtml = `<span class="tank-item-match-badge inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-semibold border border-emerald-500/25">📦 Producto existente (Stock actual: ${existingMatch.cantidad || 0} uds)</span>`;
+        const curStock = parseInt(existingMatch.cantidad) || 0;
+        const addStock = parseInt(item.cantidad) || 0;
+        const totStock = curStock + addStock;
+        badgeHtml = `<span class="tank-item-match-badge inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 font-semibold border border-emerald-500/30">
+          📦 <strong>Producto existente:</strong> Stock actual: ${curStock} uds + Entrada: ${addStock} uds ➔ Total: <strong class="text-emerald-300 font-bold">${totStock} uds</strong>
+        </span>`;
       } else if (cleanNom) {
         badgeHtml = `<span class="tank-item-match-badge inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 font-semibold border border-amber-500/25">✨ Nuevo producto</span>`;
       }
@@ -2239,8 +2291,11 @@ const ThorApp = (function() {
           if (precioInput && !item.customPrice) precioInput.value = Math.round(item.precio_venta_dop);
           if (costElem) costElem.textContent = `RD$ ${Math.round(item.costo_dop).toLocaleString()}`;
           if (badgeElem) {
-            badgeElem.className = 'tank-item-match-badge inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-semibold border border-emerald-500/25';
-            badgeElem.textContent = `📦 Producto existente (Stock actual: ${match.cantidad || 0} uds)`;
+            const curStock = parseInt(match.cantidad) || 0;
+            const addStock = parseInt(item.cantidad) || 0;
+            const totStock = curStock + addStock;
+            badgeElem.className = 'tank-item-match-badge inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 font-semibold border border-emerald-500/30';
+            badgeElem.innerHTML = `📦 <strong>Producto existente:</strong> Stock actual: ${curStock} uds + Entrada: ${addStock} uds ➔ Total: <strong class="text-emerald-300 font-bold">${totStock} uds</strong>`;
           }
         }
       } else {
@@ -2268,6 +2323,19 @@ const ThorApp = (function() {
         let totalUnits = 0;
         state.tankDraftItems.forEach(i => totalUnits += (parseInt(i.cantidad) || 0));
         totalCountBadge.textContent = `${totalUnits} piezas`;
+      }
+      // Actualizar badge de stock acumulado si es un producto coincidente
+      const container = document.getElementById('tankDraftItemsContainer');
+      const card = container ? container.querySelector(`[data-temp-id="${tempId}"]`) : null;
+      if (card && item.id) {
+        const match = (state.inventory || []).find(p => p.id === item.id);
+        const badgeElem = card.querySelector('.tank-item-match-badge');
+        if (match && badgeElem) {
+          const curStock = parseInt(match.cantidad) || 0;
+          const addStock = item.cantidad;
+          const totStock = curStock + addStock;
+          badgeElem.innerHTML = `📦 <strong>Producto existente:</strong> Stock actual: ${curStock} uds + Entrada: ${addStock} uds ➔ Total: <strong class="text-emerald-300 font-bold">${totStock} uds</strong>`;
+        }
       }
     } else if (field === 'costo_usd') {
       item.costo_usd = Math.max(0, parseFloat(value) || 0);
@@ -3152,6 +3220,9 @@ const ThorApp = (function() {
     const saleProdSelect = document.getElementById('saleProductSelect');
     if (saleProdSelect) saleProdSelect.addEventListener('change', handleSaleProductChange);
 
+    const saleSearch = document.getElementById('saleProductSearch');
+    if (saleSearch) saleSearch.addEventListener('input', (e) => onSaleSearchInput(e.target.value));
+
     const saleQty = document.getElementById('saleQtyInput');
     if (saleQty) saleQty.addEventListener('input', recalcularTotalVenta);
 
@@ -3249,6 +3320,7 @@ const ThorApp = (function() {
     openSaleModal,
     openSaleModalFor: (id) => openSaleModal(id),
     openSaleModalCredit,
+    clearSaleSearch,
     setSaleMode,
     recalcularCuotasVenta,
     openTankModal,
