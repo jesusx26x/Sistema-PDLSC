@@ -231,7 +231,15 @@ const ThorApp = (function() {
     if (pendingCount > 0) {
       if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
       if (syncText) syncText.textContent = `Subiendo ${pendingCount} pendiente(s)...`;
-      await ThorAPI.flushOutbox();
+      const flushResult = await ThorAPI.flushOutbox();
+      
+      // A6 FIX: Si la subida no pudo completarse (ej. red intermitente), no descargar para no sobreescribir datos locales
+      if (flushResult && flushResult.pending > 0) {
+        console.warn('Operaciones locales pendientes de subir. Pospuesto pull para no sobreescribir datos.');
+        if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-amber-400';
+        if (syncText) syncText.textContent = `${flushResult.pending} pendiente(s) local`;
+        return;
+      }
     } else {
       if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-blue-400 animate-pulse';
       if (syncText) syncText.textContent = 'Sincronizando...';
@@ -260,7 +268,16 @@ const ThorApp = (function() {
         state.config = res.data.configuracion || {};
 
         ThorAPI.setCachedData(res.data);
-        renderAll();
+
+        // A12 FIX: Si un modal está abierto o el usuario escribe activamente, diferir renderAll para no borrar inputs
+        const modalAbierto = document.querySelector('#modalSale:not(.hidden), #modalTank:not(.hidden), #modalProduct:not(.hidden), #modalPayment:not(.hidden), #modalQuickAdjust:not(.hidden)');
+        const inputEnUso = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+
+        if (!modalAbierto && !inputEnUso) {
+          renderAll();
+        } else {
+          console.log('[Sync] Re-render diferido: usuario operando en modal o formulario activo');
+        }
 
         const remaining = ThorAPI.getPendingOutboxCount();
         if (remaining > 0) {

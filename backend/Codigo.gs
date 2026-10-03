@@ -471,6 +471,8 @@ function obtenerInventario() {
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row[0]) continue;
+    const estadoProd = String(row[10] || 'En Stock');
+    if (estadoProd === 'Eliminado') continue; // A3 FIX: Omitir productos dados de baja
 
     items.push({
       id: String(row[0]),
@@ -483,7 +485,7 @@ function obtenerInventario() {
       costo_dop: Number(row[7]) || 0,
       precio_venta_dop: Number(row[8]) || 0,
       ubicacion: String(row[9] || ''),
-      estado: String(row[10] || 'En Stock'),
+      estado: estadoProd,
       fecha_ingreso: row[11] ? formatearFecha(row[11]) : '',
       fecha_actualizacion: row[12] ? formatearFecha(row[12]) : ''
     });
@@ -507,7 +509,8 @@ function guardarOActualizarProducto(prod) {
   const cantidad = parseInt(prod.cantidad) || 0;
   const stockMinimo = parseInt(prod.stock_minimo) || 3;
   const costoUsd = parseFloat(prod.costo_usd) || 0;
-  const costoDop = parseFloat(prod.costo_dop) || (costoUsd * 60.50);
+  const tasaConfig = (typeof obtenerConfiguracion === 'function') ? (parseFloat(obtenerConfiguracion().TASA_CAMBIO_USD_DOP) || 60.50) : 60.50;
+  const costoDop = parseFloat(prod.costo_dop) || (costoUsd * tasaConfig);
   const precioVentaDop = parseFloat(prod.precio_venta_dop) || 0;
   const ubicacion = String(prod.ubicacion || 'Almacén Principal').trim();
   const estado = cantidad === 0 ? 'Agotado' : (cantidad <= stockMinimo ? 'Stock Bajo' : 'En Stock');
@@ -545,8 +548,11 @@ function eliminarProducto(id) {
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
-      sheet.deleteRow(i + 1);
-      return { status: 'success', message: 'Producto eliminado del inventario' };
+      // A3 FIX: Soft-delete seguro para preservar historial y evitar zombis en reconciliación
+      sheet.getRange(i + 1, 5).setValue(0); // Cantidad a 0
+      sheet.getRange(i + 1, 11).setValue('Eliminado'); // Estado Eliminado
+      sheet.getRange(i + 1, 13).setValue(new Date()); // Fecha actualización
+      return { status: 'success', message: 'Producto dado de baja exitosamente' };
     }
   }
   return { status: 'error', message: 'Producto no encontrado' };
@@ -648,15 +654,6 @@ function registrarVenta(venta) {
   const costoUnitarioDop = parseFloat(producto[7]) || 0;
   const gananciaNetaDop = totalVentaDop - (costoUnitarioDop * cantidadVenta);
 
-  // Actualizar inventario (Deducción inmediata de stock)
-  const nuevoStock = stockActual - cantidadVenta;
-  const stockMin = parseInt(producto[5]) || 3;
-  const nuevoEstado = nuevoStock === 0 ? 'Agotado' : (nuevoStock <= stockMin ? 'Stock Bajo' : 'En Stock');
-
-  invSheet.getRange(filaProd, 5).setValue(nuevoStock);
-  invSheet.getRange(filaProd, 11).setValue(nuevoEstado);
-  invSheet.getRange(filaProd, 13).setValue(ahora);
-
   // Modalidad: Contado vs Crédito / Fiado
   const esCredito = (venta.tipo_venta === 'credito' || venta.metodo_pago === 'Crédito' || venta.metodo_pago === 'Fiado' || venta.es_credito === true);
   const estadoVenta = esCredito ? 'Pendiente de Cobro' : 'Completada';
@@ -664,7 +661,7 @@ function registrarVenta(venta) {
   const clienteNombre = String(venta.cliente || 'Consumidor Final').trim();
   const clienteTelefono = String(venta.telefono || '').trim();
 
-  // Registrar en hoja Ventas
+  // A1 FIX: Atomicidad. Registrar primero en hoja Ventas (y Cobros) antes de alterar el inventario
   const venSheet = getSheet(SHEETS.VENTAS);
   venSheet.appendRow([
     idVenta,
@@ -697,6 +694,15 @@ function registrarVenta(venta) {
       fecha_venta: ahora
     });
   }
+
+  // Solo tras asegurar el registro contable, deducir stock en Inventario
+  const nuevoStock = stockActual - cantidadVenta;
+  const stockMin = parseInt(producto[5]) || 3;
+  const nuevoEstado = nuevoStock === 0 ? 'Agotado' : (nuevoStock <= stockMin ? 'Stock Bajo' : 'En Stock');
+
+  invSheet.getRange(filaProd, 5).setValue(nuevoStock);
+  invSheet.getRange(filaProd, 11).setValue(nuevoEstado);
+  invSheet.getRange(filaProd, 13).setValue(ahora);
 
   return {
     status: 'success',
@@ -1024,10 +1030,25 @@ function cancelarVenta(idVenta) {
       // Restituir stock en inventario
       ajustarStockProducto(idProd, cantRestituir, 'Cancelación de venta ' + idVenta);
 
-      // Marcar estado cancelada
+      // Marcar estado cancelada en Ventas
       venSheet.getRange(i + 1, 14).setValue('Cancelada');
 
-      return { status: 'success', message: 'Venta ' + idVenta + ' cancelada y stock repuesto' };
+      // A2 FIX: Si la venta era a crédito, anular también la cuenta por cobrar en COBROS
+      try {
+        const cobSheet = getSheet(SHEETS.COBROS);
+        const cobData = cobSheet.getDataRange().getValues();
+        for (let c = 1; c < cobData.length; c++) {
+          if (String(cobData[c][1]) === String(idVenta)) {
+            cobSheet.getRange(c + 1, 10).setValue(0); // Saldo pendiente = 0
+            cobSheet.getRange(c + 1, 13).setValue('Cancelada'); // Estado = Cancelada
+            break;
+          }
+        }
+      } catch (cobErr) {
+        console.warn('Error cancelando cobro en COBROS:', cobErr);
+      }
+
+      return { status: 'success', message: 'Venta ' + idVenta + ' cancelada, stock repuesto y cuenta por cobrar anulada' };
     }
   }
 
@@ -1074,7 +1095,7 @@ function registrarRecepcionTanque(rec) {
   const nombreTanque = String(rec.nombre_tanque || 'Tanque Importado de EE.UU.').replace(/\s+/g, ' ').trim();
   const origen = String(rec.origen || 'Miami, FL - EE.UU.').trim();
   const fleteUsd = parseFloat(rec.flete_usd) || 0;
-  const tasaCambio = parseFloat(rec.tasa_cambio) || 60.50;
+  const tasaCambio = parseFloat(rec.tasa_cambio) || ((typeof obtenerConfiguracion === 'function') ? (parseFloat(obtenerConfiguracion().TASA_CAMBIO_USD_DOP) || 60.50) : 60.50);
   const notas = String(rec.notas || '').trim();
 
   let totalUnidades = 0;
@@ -1526,11 +1547,12 @@ function conciliarInventarioConRecepciones() {
 
       recepcionesMap.set(nomKey, (recepcionesMap.get(nomKey) || 0) + cant);
       if (!metaMap.has(nomKey)) {
+        const tasaConfig = (typeof obtenerConfiguracion === 'function') ? (parseFloat(obtenerConfiguracion().TASA_CAMBIO_USD_DOP) || 60.50) : 60.50;
         metaMap.set(nomKey, {
           nombre: nom,
           categoria: item.categoria || 'Variedades',
           costo_usd: parseFloat(item.costo_usd) || 0,
-          costo_dop: parseFloat(item.costo_dop) || ((parseFloat(item.costo_usd) || 0) * 60.50),
+          costo_dop: parseFloat(item.costo_dop) || ((parseFloat(item.costo_usd) || 0) * tasaConfig),
           precio_venta_dop: parseFloat(item.precio_venta_dop) || 0,
           ubicacion: nombreTanque
         });
@@ -1547,11 +1569,20 @@ function conciliarInventarioConRecepciones() {
   for (let i = 1; i < invData.length; i++) {
     const rowNom = norm(invData[i][1]);
     if (!rowNom) continue;
+    const rowEstado = String(invData[i][10] || '').trim();
+
+    if (rowEstado === 'Eliminado') {
+      invMap.set(rowNom, -1); // A3 FIX: Marcar expresamente como eliminado para no revivir
+      filasUnicas.push(invData[i].slice());
+      continue;
+    }
 
     if (invMap.has(rowNom)) {
       // Duplicado: sumar existencias al primer registro y no incluir fila duplicada
       const primerIdx = invMap.get(rowNom);
-      filasUnicas[primerIdx][4] = (parseInt(filasUnicas[primerIdx][4]) || 0) + (parseInt(invData[i][4]) || 0);
+      if (primerIdx > 0) {
+        filasUnicas[primerIdx][4] = (parseInt(filasUnicas[primerIdx][4]) || 0) + (parseInt(invData[i][4]) || 0);
+      }
     } else {
       invMap.set(rowNom, filasUnicas.length);
       filasUnicas.push(invData[i].slice());
@@ -1560,21 +1591,26 @@ function conciliarInventarioConRecepciones() {
 
   // 4. Actualizar o restaurar existencias
   recepcionesMap.forEach((totalRecibido, nomKey) => {
+    // Si el producto fue expresamente eliminado por el usuario, no recrearlo
+    if (invMap.get(nomKey) === -1) return;
+
     const totalVendido = ventasMap.get(nomKey) || 0;
     const ajuste = ajustesMap.get(nomKey) || 0;
     const stockCalculado = Math.max(0, totalRecibido - totalVendido + ajuste);
 
     if (invMap.has(nomKey)) {
       const rowIdx = invMap.get(nomKey);
-      const stockActual = parseInt(filasUnicas[rowIdx][4]) || 0;
+      if (rowIdx > 0) {
+        const stockActual = parseInt(filasUnicas[rowIdx][4]) || 0;
 
-      // Si el stock actual es menor al calculado (por sobreescritura previa), restaurar
-      if (stockActual < stockCalculado) {
-        filasUnicas[rowIdx][4] = stockCalculado;
-        const stockMin = parseInt(filasUnicas[rowIdx][5]) || 3;
-        filasUnicas[rowIdx][10] = stockCalculado === 0 ? 'Agotado' : (stockCalculado <= stockMin ? 'Stock Bajo' : 'En Stock');
-        filasUnicas[rowIdx][12] = ahora;
-        filasActualizadas++;
+        // Si el stock actual es menor al calculado (por sobreescritura previa), restaurar
+        if (stockActual < stockCalculado) {
+          filasUnicas[rowIdx][4] = stockCalculado;
+          const stockMin = parseInt(filasUnicas[rowIdx][5]) || 3;
+          filasUnicas[rowIdx][10] = stockCalculado === 0 ? 'Agotado' : (stockCalculado <= stockMin ? 'Stock Bajo' : 'En Stock');
+          filasUnicas[rowIdx][12] = ahora;
+          filasActualizadas++;
+        }
       }
     } else {
       // Producto huérfano en recepciones: agregar a inventario
@@ -1630,7 +1666,9 @@ function eliminarRecepcion(idRecepcion) {
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][0]).trim() === String(idRecepcion).trim()) {
       recSheet.deleteRow(i + 1);
-      return { status: 'success', message: 'Recepción ' + idRecepcion + ' eliminada exitosamente' };
+      // A4 FIX: Reconciliar inventario automáticamente para deducir el stock del tanque eliminado
+      conciliarInventarioConRecepciones();
+      return { status: 'success', message: 'Recepción ' + idRecepcion + ' eliminada y existencias de inventario recalculadas exitosamente' };
     }
   }
   return { status: 'error', message: 'Recepción no encontrada: ' + idRecepcion };

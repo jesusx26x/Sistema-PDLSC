@@ -226,6 +226,10 @@ const ThorAPI = (function() {
       localStorage.setItem(STORAGE_KEYS.CACHE_DATA, JSON.stringify(data));
     } catch (e) {
       console.error('Error guardando en caché:', e);
+      // A7 FIX: Captura y alerta preventiva ante límite de almacenamiento superado
+      if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
+        Sonner.error('Límite de almacenamiento del navegador alcanzado. Sincroniza con Google Sheets para asegurar los datos.', 6000);
+      }
     }
   }
 
