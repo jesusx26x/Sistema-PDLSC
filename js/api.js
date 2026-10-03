@@ -1223,6 +1223,10 @@ return {
     getPendingOutboxCount: () => getOutbox().length,
     autoConciliarInventarioConRecepciones,
     reconcileWithCloud: () => apiPost('reconcileInventory', {}),
+    resetSystemData: (confirmacion) => apiPost('resetAllData', { confirmacion: confirmacion || '' }),
+    getDeadLetterQueue,
+    clearDeadLetterQueue: () => localStorage.removeItem('thor_dead_letter_queue_v1'),
+    enqueueOutbox,
     DEFAULT_CATEGORIES
   };
 })();

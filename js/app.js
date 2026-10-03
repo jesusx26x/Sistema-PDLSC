@@ -47,11 +47,19 @@ const ThorApp = (function() {
 
     // Sincronización automática al recuperar conexión a internet
     window.addEventListener('online', () => {
+      const syncIndicator = document.getElementById('syncIndicator');
+      const syncText = document.getElementById('syncText');
+      if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-blue-400 animate-pulse';
+      if (syncText) syncText.textContent = 'Conectando...';
       Sonner.info('Conexión reestablecida. Sincronizando datos con Google Sheets...');
       sincronizarConNube(false);
     });
 
     window.addEventListener('offline', () => {
+      const syncIndicator = document.getElementById('syncIndicator');
+      const syncText = document.getElementById('syncText');
+      if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-amber-400';
+      if (syncText) syncText.textContent = 'Sin Conexión (Modo Local)';
       Sonner.warning('Sin conexión a internet. Tus registros se guardan seguros en el equipo y se subirán al reconectar.');
     });
 
@@ -61,6 +69,13 @@ const ThorApp = (function() {
         sincronizarConNube(false);
       }
     });
+
+    // B4 FIX: Sincronización periódica en segundo plano cada 90 segundos si hay red
+    setInterval(() => {
+      if (navigator.onLine && ThorAPI.isAuthenticated()) {
+        sincronizarConNube(false);
+      }
+    }, 90000);
 
     // Escucha de actualización de la cola de salida Outbox
     window.addEventListener('thor:outbox-updated', (e) => {
@@ -3262,12 +3277,14 @@ const ThorApp = (function() {
   }
 
   function resetSystemData(confirmPrompt = true) {
-    if (confirmPrompt) {
-      const ok = confirm('¿Estás segura de que deseas limpiar el sistema por completo? Se eliminarán todos los productos, ventas y cobros de prueba para que comiences desde 0.');
-      if (!ok) return;
+    // B2 FIX: Confirmación estricta por palabra clave antes de vaciar tablas
+    const confirmText = prompt('⚠️ ATENCIÓN: Esta acción limpiará todo el inventario, ventas, recepciones y cobros.\n\nPara confirmar, escribe exactamente: BORRAR TODO');
+    if (confirmText !== 'BORRAR TODO') {
+      Sonner.info('Acción cancelada. No se alteró ningún dato.');
+      return;
     }
 
-    ThorAPI.resetSystemData();
+    ThorAPI.resetSystemData('CONFIRMAR_PURGA_TOTAL_THOR');
     state.inventory = [];
     state.sales = [];
     state.receptions = [];
@@ -3281,12 +3298,18 @@ const ThorApp = (function() {
   async function ejecutarDiagnosticoYSalud() {
     Sonner.info('Iniciando auditoría y diagnóstico de salud del sistema...');
     try {
-      // 1. Vaciar cola Outbox si hay pendientes
+      // 1. Verificar si hay elementos en Dead-Letter Queue (cola de recuperación)
+      const dlq = ThorAPI.getDeadLetterQueue ? ThorAPI.getDeadLetterQueue() : [];
+      if (dlq && dlq.length > 0) {
+        Sonner.warning(`Atención: Hay ${dlq.length} operación(es) retenida(s) en la cola de recuperación. Usa "Reintentar Recuperación" si deseas re-procesarlas.`, 7000);
+      }
+
+      // 2. Vaciar cola Outbox si hay pendientes
       await ThorAPI.flushOutbox();
-      // 2. Solicitar autoconciliación en la nube (resiliente si aún no se ha desplegado la nueva versión de GAS)
+      // 3. Solicitar autoconciliación en la nube
       try { await ThorAPI.reconcileWithCloud(); } catch (_) {}
-      // 3. Descargar datos frescos (ejecuta además autoConciliarInventarioConRecepciones)
-      const dataRes = await ThorAPI.fetchAllData();
+      // 4. Descargar datos frescos
+      const dataRes = await ThorAPI.fetchAllData(true);
 
       if (dataRes && dataRes.status === 'success' && dataRes.data) {
         state.inventory = dataRes.data.inventario || [];
@@ -3305,6 +3328,23 @@ const ThorApp = (function() {
     }
   }
 
+  async function reintentarColaRecuperacion() {
+    const dlq = ThorAPI.getDeadLetterQueue ? ThorAPI.getDeadLetterQueue() : [];
+    if (!dlq || dlq.length === 0) {
+      Sonner.info('No hay operaciones pendientes en la cola de recuperación.');
+      return;
+    }
+    const count = dlq.length;
+    dlq.forEach(item => {
+      item.retries = 0;
+      if (ThorAPI.enqueueOutbox) ThorAPI.enqueueOutbox(item.action, item.data);
+    });
+    if (ThorAPI.clearDeadLetterQueue) ThorAPI.clearDeadLetterQueue();
+    Sonner.success(`Se re-encolaron ${count} operaciones para sincronizar con la nube.`);
+    await ThorAPI.flushOutbox();
+    await sincronizarConNube(false);
+  }
+
   return {
     init,
     toggleNotificationDrawer,
@@ -3312,6 +3352,7 @@ const ThorApp = (function() {
     closeFAQModal,
     resetSystemData,
     ejecutarDiagnosticoYSalud,
+    reintentarColaRecuperacion,
     switchTab,
     openNewProductModal,
     openEditProductModal,

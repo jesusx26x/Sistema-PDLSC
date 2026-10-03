@@ -423,8 +423,10 @@ function doPost(e) {
         inicializarHojasSiNoExisten(true);
         return jsonResponse({ status: 'success', message: 'Estructura de hojas inicializada con éxito' });
 
-      case 'resetAllData':
-        return jsonResponse(purgarTodasLasHojas());
+      case 'resetAllData': {
+        const conf = payload.confirmacion || (payload.data && payload.data.confirmacion);
+        return jsonResponse(purgarTodasLasHojas(conf));
+      }
 
       case 'reconcileInventory':
         return jsonResponse(conciliarInventarioConRecepciones());
@@ -1462,7 +1464,10 @@ function jsonResponse(data, statusCode) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function purgarTodasLasHojas() {
+function purgarTodasLasHojas(confirmacion) {
+  if (confirmacion !== 'CONFIRMAR_PURGA_TOTAL_THOR') {
+    return { status: 'error', message: 'Acción rechazada: código de confirmación requerido para purgar todas las hojas.' };
+  }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetsToPurge = [SHEETS.INVENTARIO, SHEETS.VENTAS, SHEETS.RECEPCIONES, SHEETS.COBROS];
   sheetsToPurge.forEach(name => {
