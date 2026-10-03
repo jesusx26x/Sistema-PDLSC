@@ -1100,7 +1100,8 @@ function registrarRecepcionTanque(rec) {
 
   let totalUnidades = 0;
   rec.articulos.forEach(art => {
-    totalUnidades += (parseInt(art.cantidad) || 0);
+    const c = parseInt(art.cantidad) || 0;
+    if (c > 0) totalUnidades += c;
   });
 
   const norm = str => String(str || '').replace(/\s+/g, ' ').trim().toLowerCase();

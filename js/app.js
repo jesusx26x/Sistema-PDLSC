@@ -1463,6 +1463,18 @@ const ThorApp = (function() {
     const cantidad = parseInt(document.getElementById('prodCantidad')?.value) || 0;
     const stockMin = parseInt(document.getElementById('prodStockMin')?.value) || 3;
 
+    // M4 FIX: Validar no negativos
+    if (isNaN(cantidad) || cantidad < 0) {
+      Sonner.warning('La cantidad de inventario debe ser 0 o un número positivo');
+      document.getElementById('prodCantidad')?.focus();
+      return;
+    }
+
+    if (costoUsd < 0 || costoDop < 0) {
+      Sonner.warning('El costo unitario no puede ser negativo');
+      return;
+    }
+
     if (precioVenta <= 0) {
       Sonner.warning('Por favor ingresa un precio de venta válido (mayor a 0)');
       document.getElementById('prodPrecioVenta')?.focus();
@@ -2443,15 +2455,32 @@ const ThorApp = (function() {
     const prod = state.inventory.find(p => p.id === id);
     if (!prod) return;
 
-    const nuevoStock = Math.max(0, prod.cantidad + delta);
+    const deltaN = parseInt(delta) || 0;
+    if (deltaN === 0) return;
+
+    const nuevoStock = Math.max(0, prod.cantidad + deltaN);
     prod.cantidad = nuevoStock;
-    prod.estado = nuevoStock > 0 ? 'En Stock' : 'Agotado';
+    const min = parseInt(prod.stock_minimo) || 3;
+    prod.estado = nuevoStock === 0 ? 'Agotado' : (nuevoStock <= min ? 'Stock Bajo' : 'En Stock');
+
+    // M1 FIX: Actualizar también en caché local
+    const cached = ThorAPI.getCachedData();
+    if (cached && cached.inventario) {
+      const cp = cached.inventario.find(p => p.id === id);
+      if (cp) {
+        cp.cantidad = nuevoStock;
+        cp.estado = prod.estado;
+      }
+      ThorAPI.setCachedData(cached);
+    }
+
     renderInventory();
     renderDashboard();
 
-    // Sincronizar en segundo plano
-    ThorAPI.adjustStock(id, delta, 'Ajuste rápido');
-    Sonner.info(`Stock de "${prod.nombre}": ${nuevoStock} un.`);
+    // M1 FIX: Motivo descriptivo para la hoja de auditoría AJUSTES
+    const motivoAudit = deltaN > 0 ? `Entrada manual rápida (+${deltaN})` : `Merma/Ajuste manual (${deltaN})`;
+    ThorAPI.adjustStock(id, deltaN, motivoAudit);
+    Sonner.info(`Stock de "${prod.nombre}": ${nuevoStock} un. (${motivoAudit})`);
   }
 
   function confirmDeleteProduct(id) {

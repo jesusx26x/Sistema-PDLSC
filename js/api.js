@@ -377,6 +377,8 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     return false;
   }
 
+  let inFlightFetchAll = null;
+  let lastFetchAllTimestamp = 0;
   let isFlushingOutbox = false;
   async function flushOutbox() {
     if (isFlushingOutbox) return { inProgress: true };
@@ -1179,12 +1181,31 @@ return {
     isAuthenticated,
     clearSession,
     // Operaciones protegidas por RLS
-    fetchAllData: async () => {
-      const res = await apiGet('getAllData');
-      if (res && res.status === 'success' && res.data) {
-        autoConciliarInventarioConRecepciones(res.data, true);
+    fetchAllData: async (force = false) => {
+      const now = Date.now();
+      // M6 FIX: Deduplicar peticiones simultáneas en vuelo
+      if (inFlightFetchAll) {
+        return inFlightFetchAll;
       }
-      return res;
+      // M6 FIX: Throttling inteligente ante clics continuos en sincronizar (< 2.5 seg)
+      if (!force && (now - lastFetchAllTimestamp < 2500)) {
+        return { status: 'success', data: getCachedData(), isThrottled: true };
+      }
+
+      lastFetchAllTimestamp = now;
+      inFlightFetchAll = (async () => {
+        try {
+          const res = await apiGet('getAllData');
+          if (res && res.status === 'success' && res.data) {
+            autoConciliarInventarioConRecepciones(res.data, true);
+          }
+          return res;
+        } finally {
+          inFlightFetchAll = null;
+        }
+      })();
+
+      return inFlightFetchAll;
     },
     fetchCobros: () => apiGet('getCobros'),
     saveProduct: (p) => apiPost('saveProduct', p),
