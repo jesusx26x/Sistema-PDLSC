@@ -1831,111 +1831,10 @@ const ThorApp = (function() {
     }
 
     // =========================================================================
-    // REDUCCIÓN AUTOMÁTICA DE STOCK INMEDIATA (0 LATENCIA VISUAL)
+    // C1 FIX: FUENTE ÚNICA DE VERDAD — Solo api.js (operarEnLocal) muta datos
+    // Antes: app.js mutaba state + localStorage Y api.js mutaba otra vez = doble deducción
+    // Ahora: api.js muta una sola vez, app.js recarga desde cache
     // =========================================================================
-    prod.cantidad = Math.max(0, prod.cantidad - cant);
-    const stockMin = parseInt(prod.stock_minimo) || 3;
-    prod.estado = prod.cantidad === 0 ? 'Agotado' : (prod.cantidad <= stockMin ? 'Stock Bajo' : 'En Stock');
-
-    // Registrar venta en memoria local de inmediato
-    const costoUnit = parseFloat(prod.costo_dop) || 0;
-    const ganancia = totalVenta - (costoUnit * cant);
-    const idVentaLocal = 'VTA-' + Date.now().toString().slice(-6);
-    const nuevaVenta = {
-      id_venta: idVentaLocal,
-      fecha_venta: new Date().toISOString().replace('T', ' ').substring(0, 19),
-      id_articulo: prod.id,
-      nombre_articulo: prod.nombre,
-      categoria: prod.categoria || 'Variedades',
-      cantidad: cant,
-      precio_unitario_dop: precio,
-      total_dop: totalVenta,
-      costo_unitario_dop: costoUnit,
-      ganancia_dop: ganancia,
-      cliente: cliente,
-      telefono: telefonoCliente,
-      metodo_pago: metodo,
-      estado: esCredito ? 'Pendiente de Cobro' : 'Completada',
-      notas: esCredito ? `${numCuotas} cuotas ${frecuencia === 'quincenal' ? 'quincenales (15 y 30)' : 'mensuales'}` : ''
-    };
-
-    state.sales.unshift(nuevaVenta);
-
-    // Si es crédito, registrar la deuda en Cobros de inmediato
-    let nuevoCobro = null;
-    if (esCredito) {
-      const idCobro = 'COB-' + Date.now().toString().slice(-6);
-      const saldoPendiente = Math.max(0, totalVenta - abonoInicial);
-      const planCuotas = ThorAPI.calcularPlanCuotas(totalVenta, abonoInicial, numCuotas, frecuencia, new Date());
-
-      const historialAbonos = [];
-      if (abonoInicial > 0) {
-        historialAbonos.push({
-          id_abono: 'ABN-INI-' + Date.now(),
-          fecha: new Date().toLocaleString(),
-          monto: abonoInicial,
-          metodo_pago: 'Efectivo',
-          nota: 'Abono inicial en tienda'
-        });
-      }
-
-      let proximoVencimiento = '';
-      const primerPendiente = planCuotas.find(c => c.estado === 'Pendiente');
-      if (primerPendiente) proximoVencimiento = primerPendiente.fecha_vencimiento;
-
-      nuevoCobro = {
-        id_cobro: idCobro,
-        id_venta: idVentaLocal,
-        fecha_venta: nuevaVenta.fecha_venta,
-        cliente: cliente,
-        telefono: telefonoCliente,
-        articulo: prod.nombre,
-        monto_total_dop: totalVenta,
-        abono_inicial_dop: abonoInicial,
-        total_cobrado_dop: abonoInicial,
-        saldo_pendiente_dop: saldoPendiente,
-        num_cuotas: numCuotas,
-        frecuencia: frecuencia,
-        estado: saldoPendiente <= 0 ? 'Saldada' : (abonoInicial > 0 ? 'Parcial' : 'Pendiente'),
-        proximo_vencimiento: proximoVencimiento,
-        historial_abonos: historialAbonos,
-        plan_cuotas: planCuotas
-      };
-
-      state.cobros.unshift(nuevoCobro);
-    }
-
-    // Actualizar caché de inmediato en localStorage
-    const cached = ThorAPI.getCachedData();
-    if (cached) {
-      if (cached.inventario) {
-        const cp = cached.inventario.find(x => x.id === prod.id);
-        if (cp) {
-          cp.cantidad = prod.cantidad;
-          cp.estado = prod.estado;
-        }
-      }
-      if (!cached.ventas) cached.ventas = [];
-      cached.ventas.unshift(nuevaVenta);
-      if (esCredito && nuevoCobro) {
-        if (!cached.cobros) cached.cobros = [];
-        cached.cobros.unshift(nuevoCobro);
-      }
-      ThorAPI.setCachedData(cached);
-    }
-
-    // Cerrar modal y re-renderizar inmediatamente
-    closeAllModals();
-    renderAll();
-
-    if (esCredito) {
-      const saldo = totalVenta - abonoInicial;
-      Sonner.success(`¡Venta a Crédito ("Fiado") registrada! Cliente: ${cliente} • Saldo: RD$ ${Number(saldo).toLocaleString()} en ${numCuotas} cuotas ${frecuencia}.`, 5500);
-    } else {
-      Sonner.success(`¡Venta registrada! Total: RD$ ${Number(totalVenta).toLocaleString()} — Stock restante: ${prod.cantidad} un.`, 4500);
-    }
-
-    // Sincronizar con Google Sheets en segundo plano sin congelar la pantalla
     const salePayload = {
       id_articulo: prod.id,
       cantidad: cant,
@@ -1950,13 +1849,55 @@ const ThorApp = (function() {
       num_cuotas: numCuotas
     };
 
-    ThorAPI.registerSale(salePayload).then(res => {
-      if (res && res.status === 'success') {
-        sincronizarConNube(false);
+    // Deshabilitar botón para evitar doble-tap (M5)
+    const submitBtn = document.querySelector('#formSale button[type="submit"]');
+    const origBtnHtml = submitBtn ? submitBtn.innerHTML : 'Registrar Venta';
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      // api.js (operarEnLocal) es la ÚNICA que muta localStorage
+      const res = await ThorAPI.registerSale(salePayload);
+
+      if (res && (res.status === 'success' || res.isQueued)) {
+        // Recargar state desde la fuente única de verdad (cache actualizado por operarEnLocal)
+        const freshData = ThorAPI.getCachedData();
+        if (freshData) {
+          state.inventory = freshData.inventario || [];
+          state.sales = freshData.ventas || [];
+          state.cobros = freshData.cobros || [];
+          state.receptions = freshData.recepciones || [];
+        }
+
+        closeAllModals();
+        renderAll();
+
+        const stockRestante = state.inventory.find(p => p.id === prod.id)?.cantidad ?? '?';
+
+        if (esCredito) {
+          const saldo = totalVenta - abonoInicial;
+          Sonner.success(`¡Venta a Crédito ("Fiado") registrada! Cliente: ${cliente} • Saldo: RD$ ${Number(saldo).toLocaleString()} en ${numCuotas} cuotas ${frecuencia}.`, 5500);
+        } else {
+          Sonner.success(`¡Venta registrada! Total: RD$ ${Number(totalVenta).toLocaleString()} — Stock restante: ${stockRestante} un.`, 4500);
+        }
+
+        // Si se guardó en la nube exitosamente, sincronizar para obtener IDs del servidor
+        if (res.isQueued) {
+          Sonner.warning('Guardado localmente. Se subirá a la nube cuando haya conexión.', 4000);
+        } else {
+          sincronizarConNube(false);
+        }
+      } else {
+        Sonner.error(res?.message || 'No se pudo registrar la venta');
       }
-    }).catch(err => {
-      console.warn('Error sincronizando venta con Google Sheets:', err);
-    });
+    } catch (err) {
+      console.error('Error registrando venta:', err);
+      Sonner.error('Error inesperado al registrar la venta');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origBtnHtml;
+      }
+    }
   }
 
   const TANK_DRAFT_KEY = 'thor_tank_draft_backup_v1';
@@ -2448,12 +2389,24 @@ const ThorApp = (function() {
 
     try {
       const res = await ThorAPI.registerReception(payload);
-      if (res && res.status === 'success') {
+      if (res && (res.status === 'success' || res.isQueued)) {
         const totalUnidades = res.total_unidades ?? res.totalUnidades ?? 0;
         Sonner.success(`Tanque ingresado: ${totalUnidades} unidades añadidas al inventario`);
         clearTankDraftBackup();
         closeAllModals();
-        await sincronizarConNube(false);
+
+        // Recargar state desde caché local (fuente única de verdad)
+        const fresh = ThorAPI.getCachedData();
+        if (fresh) {
+          state.inventory = fresh.inventario || [];
+          state.receptions = fresh.recepciones || [];
+        }
+
+        if (res.isQueued) {
+          Sonner.warning('Tanque guardado localmente. Se subirá a la nube cuando haya conexión.', 4000);
+        } else {
+          await sincronizarConNube(false);
+        }
         renderAll();
       } else {
         Sonner.error(res?.message || 'Error al registrar tanque');

@@ -235,14 +235,7 @@ const ThorAPI = (function() {
   async function login(username, password, remember = true) {
     const cfg = getConfig();
     if (!cfg.isConfigured) {
-      // Modo local simulado
-      if (username.trim() === 'Pameladlsantos' && password === 'Thorayka2419') {
-        const fakeToken = 'LOCAL_SES_' + Date.now();
-        const user = { username: 'Pameladlsantos', nombre: 'Pamela De Los Santos', rol: 'Administradora' };
-        setSession(fakeToken, user, remember);
-  return { success: true, user: user, token: fakeToken };
-      }
-return { success: false, message: 'Usuario o contraseña incorrectos.' };
+      return { success: false, message: 'Sistema no configurado. Conecte con Google Sheets primero.' };
     }
 
     try {
@@ -267,12 +260,11 @@ return { success: false, message: 'Usuario o contraseña incorrectos.' };
       }
     } catch (e) {
       console.error('Error conectando con autenticación:', e);
-      // Fallback si hay desconexión temporal de internet
-      if (username.trim() === 'Pameladlsantos' && password === 'Thorayka2419') {
-        const offlineToken = 'OFFLINE_SES_' + Date.now();
-        const user = { username: 'Pameladlsantos', nombre: 'Pamela De Los Santos', rol: 'Administradora' };
-        setSession(offlineToken, user, remember);
-  return { success: true, user: user, isOffline: true };
+      // Offline: intentar usar sesión guardada previamente
+      const savedToken = getSessionToken();
+      const savedUser = getCurrentUser();
+      if (savedToken && savedUser) {
+        return { success: true, user: savedUser, isOffline: true, message: 'Usando sesión guardada (sin conexión).' };
       }
 return { success: false, message: 'No se pudo conectar con el servidor de autenticación.' };
     }
@@ -342,27 +334,42 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     window.dispatchEvent(new CustomEvent('thor:outbox-updated', { detail: { count: queue.length } }));
   }
 
+  function moveToDeadLetterQueue(item) {
+    try {
+      const DLQ_KEY = 'thor_dead_letter_queue_v1';
+      const raw = localStorage.getItem(DLQ_KEY);
+      const dlq = raw ? JSON.parse(raw) : [];
+      item.failedAt = new Date().toISOString();
+      dlq.push(item);
+      localStorage.setItem(DLQ_KEY, JSON.stringify(dlq));
+      console.warn('Operación movida a dead-letter queue:', item.queueId, item.action);
+    } catch (e) {
+      console.error('Error guardando en dead-letter queue:', e);
+    }
+  }
+
+  function getDeadLetterQueue() {
+    try {
+      const raw = localStorage.getItem('thor_dead_letter_queue_v1');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   async function silentRelogin() {
     const cfg = getConfig();
     if (!cfg.isConfigured) return false;
-    try {
-      const resp = await fetch(cfg.gasUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'login',
-          username: 'Pameladlsantos',
-          password: 'Thorayka2419'
-        })
-      });
-      const res = await resp.json();
-      if (res && res.status === 'success' && res.token) {
-        setSession(res.token, res.user, true);
-        return true;
-      }
-    } catch (e) {
-      console.warn('Re-autenticación silenciosa en servidor:', e);
+    // Intentar renovar token usando credenciales almacenadas en sesión (nunca hardcodeadas)
+    const savedUser = getCurrentUser();
+    if (!savedUser || !savedUser.username) {
+      clearSession();
+      window.dispatchEvent(new CustomEvent('thor:session-expired'));
+      return false;
     }
+    // El token expiró pero tenemos sesión guardada: pedir al usuario que re-ingrese
+    clearSession();
+    window.dispatchEvent(new CustomEvent('thor:session-expired'));
     return false;
   }
 
@@ -380,16 +387,10 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       return { success: true, processed: 0, pending: 0 };
     }
 
-    // Sanitizar cola si se acumuló en exceso por reconciliaciones previas
-    if (queue.length > 30) {
-      const seen = new Set();
-      queue = queue.filter(item => {
-        const k = item.action + '_' + (item.data?.id || item.data?.id_venta || item.data?.nombre || item.queueId);
-        if (seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      });
-      saveOutbox(queue);
+    // Protección contra cola excesiva: alertar pero NUNCA descartar operaciones
+    if (queue.length > 50) {
+      console.warn(`Cola de sincronización grande: ${queue.length} operaciones pendientes`);
+      Sonner.warning(`Hay ${queue.length} operaciones pendientes de sincronizar. Verifique su conexión a internet.`, 6000);
     }
 
     isFlushingOutbox = true;
@@ -438,8 +439,19 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
             processed++;
           } else {
             item.retries = (item.retries || 0) + 1;
-            if (item.retries >= 3) {
+            if (item.retries >= 5) {
+              // Mover a dead-letter queue en vez de borrar — NUNCA perder datos
+              moveToDeadLetterQueue(item);
               removeFromOutbox(item.queueId);
+              Sonner.error(`Error persistente sincronizando operación. Se guardó en cola de recuperación.`, 5000);
+            } else {
+              // Actualizar contador de reintentos en la cola
+              let currentQueue = getOutbox();
+              const idx = currentQueue.findIndex(q => q.queueId === item.queueId);
+              if (idx >= 0) {
+                currentQueue[idx].retries = item.retries;
+                saveOutbox(currentQueue);
+              }
             }
             failed++;
           }

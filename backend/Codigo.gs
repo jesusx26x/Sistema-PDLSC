@@ -554,19 +554,46 @@ function eliminarProducto(id) {
 
 function ajustarStockProducto(id, delta, motivo) {
   if (!id) return { status: 'error', message: 'ID de producto requerido' };
+  const deltaN = parseInt(delta);
+  if (isNaN(deltaN)) return { status: 'error', message: 'Delta de ajuste inválido' };
+
   const sheet = getSheet(SHEETS.INVENTARIO);
   const data = sheet.getDataRange().getValues();
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
       let actual = parseInt(data[i][4]) || 0;
-      let nuevo = Math.max(0, actual + parseInt(delta));
+      let nuevo = Math.max(0, actual + deltaN);
       let stockMin = parseInt(data[i][5]) || 3;
       let nuevoEstado = nuevo === 0 ? 'Agotado' : (nuevo <= stockMin ? 'Stock Bajo' : 'En Stock');
 
       sheet.getRange(i + 1, 5).setValue(nuevo);
       sheet.getRange(i + 1, 11).setValue(nuevoEstado);
       sheet.getRange(i + 1, 13).setValue(new Date());
+
+      // Registrar ajuste en hoja AJUSTES para auditoría y reconciliación
+      try {
+        const ss = SpreadsheetApp.getActiveSpreadsheet();
+        let ajSheet = ss.getSheetByName('AJUSTES');
+        if (!ajSheet) {
+          ajSheet = ss.insertSheet('AJUSTES');
+          ajSheet.appendRow(['Fecha', 'ID Producto', 'Nombre Producto', 'Cantidad Anterior', 'Delta', 'Cantidad Nueva', 'Motivo', 'Usuario']);
+          estilarCabecera(ajSheet, 8, '#0B132B', '#D4AF37');
+          ajSheet.setFrozenRows(1);
+        }
+        ajSheet.appendRow([
+          new Date(),
+          id,
+          String(data[i][1] || ''),
+          actual,
+          deltaN,
+          nuevo,
+          String(motivo || 'Ajuste manual'),
+          'Sistema'
+        ]);
+      } catch (logErr) {
+        console.warn('No se pudo registrar ajuste en hoja AJUSTES:', logErr);
+      }
 
       return {
         status: 'success',
@@ -602,6 +629,9 @@ function registrarVenta(venta) {
   }
 
   const cantidadVenta = parseInt(venta.cantidad);
+  if (isNaN(cantidadVenta) || cantidadVenta <= 0) {
+    return { status: 'error', message: 'Cantidad inválida. Debe ser un número entero positivo.' };
+  }
   const stockActual = parseInt(producto[4]) || 0;
 
   if (stockActual < cantidadVenta) {
@@ -812,8 +842,8 @@ function registrarAbono(pago) {
   }
 
   const montoAbono = parseFloat(pago.monto);
-  if (montoAbono <= 0) {
-    return { status: 'error', message: 'El monto a abonar debe ser mayor a 0' };
+  if (isNaN(montoAbono) || montoAbono <= 0) {
+    return { status: 'error', message: 'Monto inválido. Debe ser un número positivo mayor a 0.' };
   }
 
   const cobSheet = getSheet(SHEETS.COBROS);
@@ -1454,6 +1484,24 @@ function conciliarInventarioConRecepciones() {
     }
   }
 
+  // 1b. Calcular ajustes manuales por producto (hoja AJUSTES si existe)
+  const ajustesMap = new Map();
+  try {
+    const ajSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('AJUSTES');
+    if (ajSheet) {
+      const ajData = ajSheet.getDataRange().getValues();
+      for (let a = 1; a < ajData.length; a++) {
+        const artNom = norm(ajData[a][2]); // Columna C: nombre producto
+        const delta = parseInt(ajData[a][4]) || 0; // Columna E: delta (+/-)
+        if (artNom) {
+          ajustesMap.set(artNom, (ajustesMap.get(artNom) || 0) + delta);
+        }
+      }
+    }
+  } catch (e) {
+    // La hoja AJUSTES es opcional, si no existe se ignora
+  }
+
   // 2. Calcular total recibido por producto
   const recepcionesMap = new Map();
   const metaMap = new Map();
@@ -1513,7 +1561,8 @@ function conciliarInventarioConRecepciones() {
   // 4. Actualizar o restaurar existencias
   recepcionesMap.forEach((totalRecibido, nomKey) => {
     const totalVendido = ventasMap.get(nomKey) || 0;
-    const stockCalculado = Math.max(0, totalRecibido - totalVendido);
+    const ajuste = ajustesMap.get(nomKey) || 0;
+    const stockCalculado = Math.max(0, totalRecibido - totalVendido + ajuste);
 
     if (invMap.has(nomKey)) {
       const rowIdx = invMap.get(nomKey);
