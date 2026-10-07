@@ -82,8 +82,13 @@ const ThorAPI = (function() {
     OUTBOX_QUEUE: 'thor_outbox_queue_v1',
     SYNC_LOG: 'thor_sync_log_v1',
     DLQ: 'thor_dead_letter_queue_v1',
-    DLQ_AUTO: 'thor_dlq_reintento_auto'
+    DLQ_AUTO: 'thor_dlq_reintento_auto',
+    EVENTOS: 'thor_eventos_cliente_v1'
   };
+
+  // Versión de esta app y versión mínima del backend con la que funciona correctamente
+  const VERSION_APP = '2026.10-f9';
+  const VERSION_BACKEND_REQUERIDA = 9;
 
   const DEFAULT_RATE = (typeof THOR_CONFIG !== 'undefined' && THOR_CONFIG.DEFAULT_USD_RATE) ? THOR_CONFIG.DEFAULT_USD_RATE : 60.50;
   const DEFAULT_CATEGORIES = [
@@ -470,6 +475,14 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     return reintentarRecuperacion();
   }
 
+  let avisoVersionMostrado = false;
+  function verificarVersionBackend(version) {
+    if ((parseInt(version) || 0) >= VERSION_BACKEND_REQUERIDA || avisoVersionMostrado) return;
+    avisoVersionMostrado = true;
+    registrarEventoCliente('backend_desactualizado', '', `El servidor tiene la versión ${version || 'anterior a 9'} y la app necesita la ${VERSION_BACKEND_REQUERIDA}`, VERSION_APP);
+    window.dispatchEvent(new CustomEvent('thor:backend-desactualizado', { detail: { version: version || null, requerida: VERSION_BACKEND_REQUERIDA } }));
+  }
+
   function getHistorialSync() {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SYNC_LOG);
@@ -515,7 +528,58 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     }
   }
 
+  /**
+   * Registro de errores para el administrador: se guarda en el dispositivo y se envía al
+   * servidor (hoja "Registro de Errores") en la siguiente sincronización.
+   */
+  const eventosYaRegistrados = new Set();
+  function registrarEventoCliente(tipo, accion, mensaje, detalle) {
+    const clave = tipo + '|' + accion + '|' + mensaje;
+    if (tipo === 'error_js' && eventosYaRegistrados.has(clave)) return; // un mismo error, una vez por sesión
+    eventosYaRegistrados.add(clave);
+    try {
+      const lista = JSON.parse(localStorage.getItem(STORAGE_KEYS.EVENTOS) || '[]');
+      lista.push({ id: generarUuid(), fecha: fechaLocal(), tipo, accion: accion || '', mensaje: String(mensaje || '').substring(0, 500), detalle: String(detalle || '').substring(0, 500) });
+      localStorage.setItem(STORAGE_KEYS.EVENTOS, JSON.stringify(lista.slice(-50)));
+    } catch (e) {
+      console.warn('No se pudo guardar el evento:', e);
+    }
+  }
+
+  let enviandoEventos = false;
+  async function enviarEventosCliente() {
+    const cfg = getConfig();
+    if (enviandoEventos || !cfg.isConfigured || !navigator.onLine || !sesionDisponible()) return;
+    let lista;
+    try { lista = JSON.parse(localStorage.getItem(STORAGE_KEYS.EVENTOS) || '[]'); } catch (e) { lista = []; }
+    if (!lista.length) return;
+    enviandoEventos = true;
+    try {
+      const lote = lista.slice(0, 25);
+      const respuesta = await fetchConTimeout(cfg.gasUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'logClientEvents',
+          token: getSessionToken(),
+          data: { eventos: lote, dispositivo: (navigator.userAgent || '').substring(0, 160), version: VERSION_APP }
+        })
+      });
+      const json = await respuesta.json();
+      if (json && json.status === 'success') {
+        const enviados = new Set(lote.map(e => e.id));
+        const restantes = JSON.parse(localStorage.getItem(STORAGE_KEYS.EVENTOS) || '[]').filter(e => !enviados.has(e.id));
+        localStorage.setItem(STORAGE_KEYS.EVENTOS, JSON.stringify(restantes));
+      }
+    } catch (e) {
+      // Se reintenta en la próxima sincronización
+    } finally {
+      enviandoEventos = false;
+    }
+  }
+
   function registrarEnHistorial(tipo, item, mensaje, visto = false) {
+    registrarEventoCliente(tipo, NOMBRES_ACCION[item.action] || item.action, mensaje, resumirOperacion(item));
     const lista = getHistorialSync();
     lista.unshift({
       id: generarUuid(),
@@ -657,6 +721,7 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       console.warn('No se pudo guardar la foto del servidor:', e);
       if (!avisoAlmacenamientoMostrado) {
         avisoAlmacenamientoMostrado = true;
+        registrarEventoCliente('almacenamiento', '', 'Almacenamiento del navegador lleno: no se pudo guardar la foto del servidor', String(e && e.name));
         window.dispatchEvent(new CustomEvent('thor:almacenamiento-lleno'));
       }
       return false;
@@ -1574,7 +1639,9 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
             }
             setSnapshot(res.data);
             res.data = reconstruirCache();
+            verificarVersionBackend(res.data.version_backend);
             reintentarRecuperacionAutomatica();
+            enviarEventosCliente();
           }
           return res;
         } finally {
@@ -1609,6 +1676,9 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     marcarHistorialVisto,
     contarPorRevisar,
     normalizarNombre,
+    registrarEventoCliente,
+    enviarEventosCliente,
+    VERSION_APP,
     enqueueOutbox,
     generarId,
     DEFAULT_CATEGORIES

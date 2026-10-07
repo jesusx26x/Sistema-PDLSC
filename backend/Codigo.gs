@@ -20,6 +20,10 @@
  * 5. Disparador programable para Respaldo Automático diario en Google Drive (2:00 AM).
  */
 
+// Versión del backend. Subirla en cada cambio de este archivo; el frontend exige una mínima
+// y avisa si el código publicado en Apps Script quedó atrás.
+const VERSION_BACKEND = 9;
+
 // Zona horaria del negocio: fechas, "ventas de hoy" y vencimientos siempre en hora de RD,
 // sin depender de la zona configurada en el proyecto de Apps Script.
 const ZONA_HORARIA = 'America/Santo_Domingo';
@@ -40,7 +44,8 @@ const AUTH_CONFIG = {
   BLOQUEO_SEGUNDOS: 900, // 15 minutos
   DURACION_SESION_MS: 30 * 24 * 60 * 60 * 1000, // 30 días
   CACHE_SESION_SEGUNDOS: 21600, // 6 horas (máximo de CacheService)
-  MAX_SESIONES_ACTIVAS: 20
+  MAX_SESIONES_ACTIVAS: 20,
+  RENOVAR_SI_QUEDAN_MS: 7 * 24 * 60 * 60 * 1000 // con menos de 7 días de vigencia, el uso la extiende otros 30
 };
 
 /**
@@ -57,6 +62,8 @@ function onOpen() {
       .addItem('✅ Aplicar Correcciones Marcadas del Diagnóstico', 'menuAplicarCorrecciones')
       .addItem('💾 Crear Copia de Respaldo en Drive', 'crearRespaldoEnDrive')
       .addItem('⏰ Configurar Respaldo Automático Diario', 'configurarDisparadorRespaldo')
+      .addItem('📬 Configurar Monitoreo Diario (correo al administrador)', 'configurarMonitoreoDiario')
+      .addItem('🛡️ Proteger Hojas contra Ediciones Accidentales', 'menuProtegerHojas')
       .addSeparator()
       .addItem('🔑 Cambiar Usuario y Contraseña', 'menuCambiarCredenciales')
       .addItem('🚪 Cerrar Todas las Sesiones Activas', 'menuCerrarTodasLasSesiones')
@@ -155,7 +162,30 @@ function crearRespaldoEnDrive() {
 
   const copia = archivo.makeCopy(nombreCopia, carpetaBackup);
   console.log('Respaldo creado exitosamente: ' + copia.getName());
+  rotarRespaldos(carpetaBackup);
   return copia.getUrl();
+}
+
+/**
+ * Conserva solo los últimos RESPALDOS_A_CONSERVAR respaldos; los anteriores van a la papelera
+ * de Drive (recuperables durante 30 días).
+ */
+function rotarRespaldos(carpeta) {
+  try {
+    const respaldos = [];
+    const it = carpeta.getFiles();
+    while (it.hasNext()) {
+      const f = it.next();
+      if (String(f.getName()).indexOf('Backup Thor Essence') === 0 && !f.isTrashed()) respaldos.push(f);
+    }
+    respaldos.sort((a, b) => b.getDateCreated().getTime() - a.getDateCreated().getTime());
+    const sobrantes = respaldos.slice(RESPALDOS_A_CONSERVAR);
+    sobrantes.forEach(f => f.setTrashed(true));
+    return sobrantes.length;
+  } catch (e) {
+    console.warn('No se pudo rotar los respaldos:', e);
+    return 0;
+  }
 }
 
 /**
@@ -444,6 +474,18 @@ function purgarSesionesInvalidas() {
   }
 }
 
+/**
+ * Sesión deslizante: si a la sesión le quedan menos de 7 días y se está usando, se extiende
+ * otros 30 días. Pamela no tiene que volver a escribir la contraseña mientras use la app.
+ */
+function renovarSesionSiCorresponde(token, data, props) {
+  if (!data || (data.expiraEn - Date.now()) > AUTH_CONFIG.RENOVAR_SI_QUEDAN_MS) return;
+  data.expiraEn = Date.now() + AUTH_CONFIG.DURACION_SESION_MS;
+  const json = JSON.stringify(data);
+  try { props.setProperty('SESSION_' + token, json); } catch (e) {}
+  try { CacheService.getScriptCache().put(token, json, AUTH_CONFIG.CACHE_SESION_SEGUNDOS); } catch (e) {}
+}
+
 function sesionVigente(data, desde) {
   return !!(data && data.expiraEn > Date.now() && data.creadoEn >= desde);
 }
@@ -463,8 +505,12 @@ function validarSesionRLS(token) {
   // 1. Validar en CacheService
   try {
     const cachedStr = CacheService.getScriptCache().get(token);
-    if (cachedStr && sesionVigente(JSON.parse(cachedStr), desde)) {
-      return true;
+    if (cachedStr) {
+      const data = JSON.parse(cachedStr);
+      if (sesionVigente(data, desde)) {
+        renovarSesionSiCorresponde(token, data, props);
+        return true;
+      }
     }
   } catch (e) {}
 
@@ -472,10 +518,12 @@ function validarSesionRLS(token) {
   try {
     const propStr = props.getProperty('SESSION_' + token);
     if (propStr) {
-      if (sesionVigente(JSON.parse(propStr), desde)) {
+      const data = JSON.parse(propStr);
+      if (sesionVigente(data, desde)) {
         try {
           CacheService.getScriptCache().put(token, propStr, AUTH_CONFIG.CACHE_SESION_SEGUNDOS);
         } catch (ce) {}
+        renovarSesionSiCorresponde(token, data, props);
         return true;
       }
       props.deleteProperty('SESSION_' + token);
@@ -509,6 +557,7 @@ function doGet(e) {
       return jsonResponse({
         status: 'success',
         message: 'Backend Thor Essence activo y funcionando',
+        version: VERSION_BACKEND,
         rls: 'Activo (Acceso Restringido)',
         timestamp: new Date().toISOString()
       });
@@ -616,6 +665,11 @@ function doPost(e) {
     // 4. LECTURAS por POST: el token viaja en el cuerpo, no en la URL (historial, registros)
     const lectura = responderLectura(action);
     if (lectura) return lectura;
+
+    // 5. Registro de errores y rechazos que reportan los dispositivos (no toca el inventario)
+    if (action === 'logClientEvents') {
+      return jsonResponse(registrarEventosCliente(payload.data || {}));
+    }
   } catch (err) {
     console.error('doPost (' + action + '):', err);
     return jsonResponse({ status: 'error', code: 'SERVER_ERROR', message: err.toString() }, 500);
@@ -925,6 +979,7 @@ function obtenerTodosLosDatos() {
     metricas: calcularMetricasGenerales(inventario, ventas, cobros),
     historial: historial,
     alias: obtenerAliasObjeto(),
+    version_backend: VERSION_BACKEND,
     // El cliente descarta de su cola local las operaciones que ya están aplicadas aquí
     ops_aplicadas: obtenerOperacionesRecientes(500)
   };
@@ -2648,3 +2703,210 @@ function eliminarRecepcion(idRecepcion) {
       (faltantes.length ? ' No se pudo descontar todo: ' + faltantes.join('; ') : '')
   };
 }
+
+/**
+ * =========================================================================
+ * MONITOREO, REGISTRO DE ERRORES Y MANTENIMIENTO
+ * =========================================================================
+ * - Los dispositivos reportan rechazos, operaciones en recuperación y errores de la app
+ *   a la hoja "Registro de Errores".
+ * - Cada mañana, monitoreoDiario() revisa ese registro, ejecuta el diagnóstico de inventario
+ *   (duplicados, excesos, tanques dobles y cuadre del kardex), depura registros antiguos y
+ *   envía un correo al administrador si hay algo que revisar (y uno de control los lunes).
+ */
+const HOJA_REGISTRO_ERRORES = 'Registro de Errores';
+const DIAS_CONSERVAR_REGISTROS = 180;
+const RESPALDOS_A_CONSERVAR = 30;
+const MAX_EVENTOS_POR_ENVIO = 25;
+
+function hojaRegistroErrores() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(HOJA_REGISTRO_ERRORES);
+  if (!sheet) {
+    sheet = ss.insertSheet(HOJA_REGISTRO_ERRORES);
+    sheet.getRange(1, 1, 1, 8).setValues([[
+      'Fecha (servidor)', 'Fecha (dispositivo)', 'Tipo', 'Acción', 'Mensaje', 'Detalle', 'Dispositivo', 'Versión app'
+    ]]);
+    estilarCabecera(sheet, 8, '#0B132B', '#D4AF37');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function registrarEventosCliente(datos) {
+  const eventos = (Array.isArray(datos.eventos) ? datos.eventos : []).slice(0, MAX_EVENTOS_POR_ENVIO);
+  if (!eventos.length) return { status: 'success', registrados: 0 };
+  const texto = (v, max) => String(v === undefined || v === null ? '' : v).substring(0, max || 500);
+  const ahora = new Date();
+  const filas = eventos.map(e => [
+    ahora, texto(e.fecha, 40), texto(e.tipo, 40), texto(e.accion, 80), texto(e.mensaje), texto(e.detalle),
+    texto(datos.dispositivo, 160), texto(datos.version, 40)
+  ]);
+
+  const lock = LockService.getScriptLock();
+  const conLock = lock.tryLock(5000);
+  try {
+    const sheet = hojaRegistroErrores();
+    if (conLock) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, filas.length, 8).setValues(filas);
+    } else {
+      filas.forEach(f => sheet.appendRow(f));
+    }
+  } finally {
+    if (conLock) lock.releaseLock();
+  }
+  return { status: 'success', registrados: filas.length };
+}
+
+/**
+ * Borra filas más antiguas que `dias` (las hojas de registro crecen en orden cronológico).
+ */
+function depurarFilasAntiguas(nombreHoja, columnaFecha, dias) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nombreHoja);
+  if (!sheet || sheet.getLastRow() < 2) return 0;
+  const limite = Date.now() - dias * 86400000;
+  const fechas = sheet.getRange(2, columnaFecha, sheet.getLastRow() - 1, 1).getValues();
+  let antiguas = 0;
+  for (let i = 0; i < fechas.length; i++) {
+    const t = fechas[i][0] ? new Date(fechas[i][0]).getTime() : 0;
+    if (t && t < limite) antiguas++;
+    else break;
+  }
+  if (antiguas > 0) sheet.deleteRows(2, antiguas);
+  return antiguas;
+}
+
+function correoAdministrador() {
+  return PropertiesService.getScriptProperties().getProperty('ADMIN_EMAIL') || Session.getEffectiveUser().getEmail();
+}
+
+function monitoreoDiario() {
+  const lock = LockService.getScriptLock();
+  const conLock = lock.tryLock(60000);
+  try {
+    const ahora = Date.now();
+    const informe = { errores: [], totalEventos: 0, diagnostico: null, depuradas: 0 };
+
+    // 1. Errores y rechazos reportados por los dispositivos en las últimas 24 horas
+    const reg = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA_REGISTRO_ERRORES);
+    if (reg && reg.getLastRow() > 1) {
+      const grupos = {};
+      reg.getRange(2, 1, reg.getLastRow() - 1, 8).getValues().forEach(f => {
+        const t = f[0] ? new Date(f[0]).getTime() : 0;
+        if (!t || ahora - t > 86400000) return;
+        informe.totalEventos++;
+        const clave = f[2] + ' · ' + f[3] + ' · ' + f[4];
+        grupos[clave] = (grupos[clave] || 0) + 1;
+      });
+      informe.errores = Object.keys(grupos).map(k => ({ descripcion: k, veces: grupos[k] }))
+        .sort((a, b) => b.veces - a.veces);
+    }
+
+    // 2. Inventario: duplicados, excesos, tanques dobles y cuadre del kardex
+    informe.diagnostico = diagnosticarInventario(false);
+
+    // 3. Mantenimiento
+    if (conLock) {
+      informe.depuradas = depurarFilasAntiguas(HOJA_OPERACIONES, 2, DIAS_CONSERVAR_REGISTROS) +
+        depurarFilasAntiguas(HOJA_REGISTRO_ERRORES, 1, DIAS_CONSERVAR_REGISTROS);
+    }
+
+    // 4. Aviso al administrador
+    const r = informe.diagnostico.resumen;
+    const problemasInventario = r.productos_duplicados + r.productos_con_exceso + r.recepciones_duplicadas + r.diferencias_kardex;
+    informe.hayProblemas = informe.totalEventos > 0 || problemasInventario > 0;
+    const esLunes = Utilities.formatDate(new Date(), ZONA_HORARIA, 'u') === '1';
+    if (informe.hayProblemas || esLunes) {
+      MailApp.sendEmail(correoAdministrador(), asuntoMonitoreo(informe), cuerpoMonitoreo(informe));
+      informe.correoEnviado = true;
+    }
+    PropertiesService.getScriptProperties().setProperty('MONITOREO_ULTIMA_EJECUCION', new Date().toISOString());
+    return informe;
+  } finally {
+    if (conLock) lock.releaseLock();
+  }
+}
+
+function asuntoMonitoreo(informe) {
+  return informe.hayProblemas
+    ? '⚠️ Thor Essence: hay elementos por revisar'
+    : '✅ Thor Essence: control semanal sin novedades';
+}
+
+function cuerpoMonitoreo(informe) {
+  const r = informe.diagnostico.resumen;
+  const lineas = [
+    'Resumen automático del sistema Thor Essence — ' + Utilities.formatDate(new Date(), ZONA_HORARIA, 'yyyy-MM-dd HH:mm'),
+    '',
+    '1) Errores y operaciones rechazadas en las últimas 24 h: ' + informe.totalEventos
+  ];
+  informe.errores.slice(0, 15).forEach(e => lineas.push('   - (' + e.veces + 'x) ' + e.descripcion));
+  lineas.push(
+    '',
+    '2) Inventario (' + r.productos + ' productos revisados):',
+    '   - Productos duplicados: ' + r.productos_duplicados,
+    '   - Productos con stock de más: ' + r.productos_con_exceso + ' (' + r.unidades_de_mas + ' unidades)',
+    '   - Tanques registrados dos veces: ' + r.recepciones_duplicadas,
+    '   - Diferencias entre Movimientos e Inventario: ' + r.diferencias_kardex,
+    '',
+    '3) Mantenimiento: ' + informe.depuradas + ' registro(s) de más de ' + DIAS_CONSERVAR_REGISTROS + ' días depurados.',
+    ''
+  );
+  if (informe.hayProblemas) {
+    lineas.push('Qué hacer: abre la hoja de cálculo › 🌸 Thor Essence Admin › 🔍 Diagnosticar Inventario,',
+      'y revisa la hoja "' + HOJA_REGISTRO_ERRORES + '" para el detalle de los errores.');
+  } else {
+    lineas.push('Todo en orden. Este correo de control se envía los lunes para confirmar que el monitoreo funciona.');
+  }
+  return lineas.join('\n');
+}
+
+/**
+ * Crea el disparador diario (7:00 AM) y envía un correo de prueba. Ejecutarlo desde el menú
+ * también concede el permiso de envío de correos.
+ */
+function configurarMonitoreoDiario() {
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'monitoreoDiario') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('monitoreoDiario').timeBased().everyDays(1).atHour(7).create();
+
+  const destino = correoAdministrador();
+  MailApp.sendEmail(destino, '✅ Thor Essence: monitoreo diario activado',
+    'Recibirás un correo cada mañana (7:00 AM) si hay errores en los dispositivos o problemas de inventario, ' +
+    'y un correo de control todos los lunes.\n\nPara cambiar el destinatario, crea la propiedad de script ADMIN_EMAIL.');
+  try {
+    SpreadsheetApp.getUi().alert('📬 Monitoreo diario activado.\n\nSe envió un correo de prueba a ' + destino + '.');
+  } catch (e) {
+    console.log('Monitoreo configurado por script.');
+  }
+}
+
+/**
+ * H14: protección "con advertencia" de las hojas de datos: si alguien intenta editarlas a mano,
+ * Google Sheets pide confirmación. La app y los menús siguen funcionando normalmente.
+ */
+function menuProtegerHojas() {
+  const n = protegerHojasDeDatos();
+  SpreadsheetApp.getUi().alert('🛡️ ' + n + ' hoja(s) protegidas.\n\nSi alguien intenta editarlas a mano, Google Sheets mostrará una advertencia. ' +
+    'Los datos deben modificarse desde la app o desde este menú.');
+}
+
+function protegerHojasDeDatos() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const nombres = [SHEETS.INVENTARIO, SHEETS.VENTAS, SHEETS.COBROS, SHEETS.RECEPCIONES, HOJA_MOVIMIENTOS, HOJA_OPERACIONES, HOJA_ALIAS];
+  let protegidas = 0;
+  nombres.forEach(nombre => {
+    const sheet = ss.getSheetByName(nombre);
+    if (!sheet) return;
+    sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET).forEach(p => {
+      if (String(p.getDescription()).indexOf('Thor Essence') === 0) p.remove();
+    });
+    sheet.protect()
+      .setDescription('Thor Essence: los datos se modifican desde la app')
+      .setWarningOnly(true);
+    protegidas++;
+  });
+  return protegidas;
+}
+

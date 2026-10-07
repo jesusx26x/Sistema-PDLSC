@@ -5,10 +5,14 @@
   "scripts": {
     "build:css": "tailwindcss -c tailwind.config.js -i css/tailwind.input.css -o css/tailwind.css --minify",
     "vendor": "node -e \"require('fs').mkdirSync('js/vendor',{recursive:true});require('fs').copyFileSync('node_modules/chart.js/dist/chart.umd.min.js','js/vendor/chart.umd.min.js')\"",
-    "build": "npm run build:css && npm run vendor"
+    "build": "npm run build:css && npm run vendor",
+    "test": "node tests/run.js"
   },
   "devDependencies": {
     "chart.js": "4.5.1",
     "tailwindcss": "3.4.19"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

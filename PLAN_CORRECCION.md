@@ -139,5 +139,6 @@ Los códigos (C1, A3, M5…) refieren a los hallazgos de esa auditoría.
 | 6 — Métricas y fechas | ✅ Desplegado |
 | 7 — PWA, XSS, rendimiento | ✅ Desplegado |
 | 8 — Cero pérdidas y cero duplicados (auditoría 2) | ✅ Desplegado |
+| 9 — Detección temprana (auditoría 2) | ✅ Desplegado (monitoreo diario y protección de hojas activos) |
 
 > Las fases 8 en adelante provienen de [AUDITORIA_INTEGRAL_2026-10.md](AUDITORIA_INTEGRAL_2026-10.md).

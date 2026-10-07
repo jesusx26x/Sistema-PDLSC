@@ -128,3 +128,30 @@ Cada cambio de stock queda registrado: `SALDO_INICIAL`, `ALTA`, `EDICION`, `AJUS
 
 **Historial en el teléfono:** la app descarga el detalle de las ventas de los últimos 180 días y los fiados abiertos; los reportes incluyen todo el historial mediante un resumen que calcula el servidor.
 
+## 📬 Monitoreo diario (correo al administrador)
+
+1. En Google Sheets: **`🌸 Thor Essence Admin`** > **`📬 Configurar Monitoreo Diario (correo al administrador)`**.
+2. Acepta el permiso de **enviar correo** que pide Google (solo la primera vez). Llega un correo de prueba.
+3. Desde entonces, cada mañana (7:00 AM) el sistema:
+   - revisa la hoja **`Registro de Errores`** (rechazos, operaciones en recuperación y errores que reportan los teléfonos),
+   - ejecuta el diagnóstico de inventario (duplicados, excesos, tanques dobles, cuadre del kardex),
+   - depura registros de más de 180 días en `Operaciones` y `Registro de Errores`,
+   - y **envía un correo si hay algo que revisar**. Los lunes envía además un correo de control aunque todo esté bien.
+4. El correo va al propietario del script. Para cambiarlo: *Apps Script › ⚙️ Configuración del proyecto › Propiedades del script* → `ADMIN_EMAIL`.
+
+## 🛡️ Protección de hojas
+
+**`🌸 Thor Essence Admin`** > **`🛡️ Proteger Hojas contra Ediciones Accidentales`** activa una advertencia si alguien intenta editar a mano `Inventario`, `Ventas`, `Cobros`, `Recepciones`, `Movimientos`, `Operaciones` o `Alias`. La app y los menús siguen funcionando normalmente.
+
+## 💾 Respaldos
+
+El respaldo diario conserva las **últimas 30 copias** en la carpeta `Respaldos Thor Essence`; las anteriores pasan a la papelera de Drive (recuperables durante 30 días).
+
+## 🔢 Versión del backend
+
+`Codigo.gs` declara `VERSION_BACKEND`. Si la app publicada necesita una versión más nueva, muestra el aviso *"El servidor de Google Sheets tiene una versión anterior"*: significa que falta pegar y publicar el `Codigo.gs` actual.
+
+## 🔐 Sesión
+
+La sesión dura 30 días y **se renueva sola** mientras se use la app (cuando le quedan menos de 7 días). Solo se vuelve a pedir la contraseña si la app no se usa en un mes o si se cambia la contraseña.
+

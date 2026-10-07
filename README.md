@@ -85,6 +85,9 @@ Sistema-PDLSC/
 ├── package.json                 # Herramientas de desarrollo (Tailwind CLI, Chart.js)
 ├── tailwind.config.js           # Configuración de Tailwind
 ├── PLAN_CORRECCION.md           # Plan de corrección por fases (auditoría 2026)
+├── AUDITORIA_INTEGRAL_2026-10.md # Segunda auditoría y su seguimiento
+├── tests/                       # Pruebas automáticas (npm test)
+├── .github/workflows/           # Pruebas en cada push (GitHub Actions)
 │
 └── backend/
     ├── Thor_Essence_Base_De_Datos.xlsx # Plantilla Excel lista para subir a Google Drive
@@ -103,6 +106,8 @@ npm install
 npm run build
 ```
 
+- **Pruebas:** `npm test` ejecuta más de 100 pruebas (backend con Google Sheets simulado + la app real conectada a él: varios dispositivos, sin conexión, respuestas perdidas, duplicados). GitHub Actions las ejecuta en cada push (`.github/workflows/pruebas.yml`) y también verifica que `css/tailwind.css` esté al día. No subas un cambio con pruebas en rojo.
+- Si cambias `backend/Codigo.gs`, sube `VERSION_BACKEND` (y `VERSION_BACKEND_REQUERIDA` en `js/api.js` si la app depende del cambio): la app avisa cuando el servidor quedó desactualizado.
 - Ejecuta `npm run build:css` cada vez que agregues o cambies clases de Tailwind en `index.html`, `404.html` o `js/`, y sube `css/tailwind.css` junto con el cambio.
 - En cada despliegue del frontend sube `CACHE_NAME` en `sw.js` para que los dispositivos descarguen la versión nueva.
 - Si el cambio toca `backend/Codigo.gs`, publícalo primero en Apps Script (*Gestionar implementaciones › Editar › Nueva versión*).

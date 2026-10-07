@@ -116,6 +116,20 @@ const ThorApp = (function() {
     // Aviso persistente de operaciones rechazadas o en recuperación
     window.addEventListener('thor:historial-sync', actualizarAvisoRevision);
     window.addEventListener('thor:outbox-updated', actualizarAvisoRevision);
+    window.addEventListener('thor:backend-desactualizado', () => {
+      Sonner.warning('El servidor de Google Sheets tiene una versión anterior a la de la app. Avisa al administrador para que lo actualice.', 10000);
+    });
+
+    // Errores inesperados de la app: quedan en el registro del administrador
+    window.addEventListener('error', (e) => {
+      if (!e || !e.filename || e.filename.indexOf(location.origin) !== 0) return; // solo errores de la propia app
+      ThorAPI.registrarEventoCliente('error_js', '', e.message, `${e.filename.replace(location.origin, '')}:${e.lineno}:${e.colno}`);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      const motivo = e && e.reason;
+      ThorAPI.registrarEventoCliente('error_js', '', (motivo && motivo.message) || String(motivo), (motivo && motivo.stack ? String(motivo.stack).split('\n')[1] || '' : '').trim());
+    });
+
     window.addEventListener('thor:almacenamiento-lleno', () => {
       Sonner.warning('El almacenamiento de este navegador está lleno. La app sigue funcionando, pero conviene liberar espacio o avisar al administrador.', 10000);
     });

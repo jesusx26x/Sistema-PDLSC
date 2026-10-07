@@ -250,6 +250,19 @@ Cada operación añade una fila y la búsqueda de duplicados recorre toda la col
 
 **Pruebas:** 84 automatizadas en verde (13 nuevas de la Fase 8) + verificación en navegador (escritorio y teléfono).
 
+### Fase 9 — ✅ desplegada (monitoreo diario y protección de hojas activos)
+
+| Hallazgo | Resultado |
+|---|---|
+| H9 | 102 pruebas en `tests/` (`npm test`) + GitHub Actions en cada push; prueba estática que detecta funciones inexistentes (como H17) y CSS desactualizado. |
+| H10 | La app reporta rechazos, operaciones en recuperación, errores de JavaScript, almacenamiento lleno y backend desactualizado a la hoja `Registro de Errores`. |
+| H11 | `monitoreoDiario()` a las 7:00 AM: errores de 24 h + diagnóstico de inventario + cuadre del kardex → correo al administrador si hay algo (y control los lunes). |
+| H12 | `VERSION_BACKEND` en `ping` y `getAllData`; la app avisa si el servidor está desactualizado. |
+| H13 | Sesión deslizante: se extiende 30 días al usarla cuando le quedan menos de 7. |
+| H14 | Menú para proteger las hojas de datos con advertencia. |
+| H15 | El respaldo diario conserva las últimas 30 copias. |
+| H16 | Depuración de `Operaciones` y `Registro de Errores` de más de 180 días. |
+
 ## 7. Criterios de "cero quejas"
 
 Al cerrar las Fases 8 y 9, el sistema debería cumplir lo siguiente:
