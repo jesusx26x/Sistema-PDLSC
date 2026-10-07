@@ -20,6 +20,10 @@
  * 5. Disparador programable para Respaldo Automático diario en Google Drive (2:00 AM).
  */
 
+// Zona horaria del negocio: fechas, "ventas de hoy" y vencimientos siempre en hora de RD,
+// sin depender de la zona configurada en el proyecto de Apps Script.
+const ZONA_HORARIA = 'America/Santo_Domingo';
+
 const SHEETS = {
   INVENTARIO: 'Inventario',
   VENTAS: 'Ventas',
@@ -138,7 +142,7 @@ function menuCerrarTodasLasSesiones() {
  */
 function crearRespaldoEnDrive() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const nombreCopia = 'Backup Thor Essence — ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd_HH-mm');
+  const nombreCopia = 'Backup Thor Essence — ' + Utilities.formatDate(new Date(), ZONA_HORARIA, 'yyyy-MM-dd_HH-mm');
   const archivo = DriveApp.getFileById(ss.getId());
   
   let carpetaBackup;
@@ -521,55 +525,39 @@ function doGet(e) {
       }, 401);
     }
 
-    inicializarHojasSiNoExisten();
-
-    if (action === 'getAllData') {
-      // Se espera a que termine cualquier escritura en curso para no leer una venta a medio registrar
-      const lock = LockService.getScriptLock();
-      const conLock = lock.tryLock(10000);
-      try {
-        return jsonResponse({
-          status: 'success',
-          data: obtenerTodosLosDatos()
-        });
-      } finally {
-        if (conLock) lock.releaseLock();
-      }
-    }
-
-    if (action === 'getInventory') {
-      return jsonResponse({
-        status: 'success',
-        data: obtenerInventario()
-      });
-    }
-
-    if (action === 'getSales') {
-      return jsonResponse({
-        status: 'success',
-        data: obtenerVentas()
-      });
-    }
-
-    if (action === 'getReceptions') {
-      return jsonResponse({
-        status: 'success',
-        data: obtenerRecepciones()
-      });
-    }
-
-    if (action === 'getCobros') {
-      return jsonResponse({
-        status: 'success',
-        data: obtenerCobros()
-      });
-    }
+    const lectura = responderLectura(action);
+    if (lectura) return lectura;
 
     return jsonResponse({ status: 'error', message: 'Acción GET no reconocida' }, 400);
 
   } catch (err) {
     console.error('doGet:', err);
     return jsonResponse({ status: 'error', code: 'SERVER_ERROR', message: err.toString() }, 500);
+  }
+}
+
+const LECTURAS = {
+  getAllData: () => obtenerTodosLosDatos(),
+  getInventory: () => obtenerInventario(),
+  getSales: () => obtenerVentas(),
+  getReceptions: () => obtenerRecepciones(),
+  getCobros: () => obtenerCobros()
+};
+
+/**
+ * Atiende una acción de solo lectura (ya autenticada). Devuelve null si la acción no es de lectura.
+ * Espera a que termine cualquier escritura en curso para no leer una venta a medio registrar.
+ */
+function responderLectura(action) {
+  const lector = LECTURAS[action];
+  if (!lector) return null;
+  inicializarHojasSiNoExisten();
+  const lock = LockService.getScriptLock();
+  const conLock = lock.tryLock(10000);
+  try {
+    return jsonResponse({ status: 'success', data: lector() });
+  } finally {
+    if (conLock) lock.releaseLock();
   }
 }
 
@@ -622,6 +610,10 @@ function doPost(e) {
         message: 'Acceso denegado por RLS: Sesión no autorizada, inválida o expirada.'
       }, 401);
     }
+
+    // 4. LECTURAS por POST: el token viaja en el cuerpo, no en la URL (historial, registros)
+    const lectura = responderLectura(action);
+    if (lectura) return lectura;
   } catch (err) {
     console.error('doPost (' + action + '):', err);
     return jsonResponse({ status: 'error', code: 'SERVER_ERROR', message: err.toString() }, 500);
@@ -739,7 +731,7 @@ function r2(n) {
 }
 
 function generarId(prefijo) {
-  const fecha = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyyMMdd');
+  const fecha = Utilities.formatDate(new Date(), ZONA_HORARIA, 'yyyyMMdd');
   return prefijo + '-' + fecha + '-' + Utilities.getUuid().replace(/-/g, '').substring(0, 8).toUpperCase();
 }
 
@@ -820,13 +812,16 @@ function registrarOperacionProcesada(opId, action, resultado) {
  */
 
 function obtenerTodosLosDatos() {
+  const inventario = obtenerInventario();
+  const ventas = obtenerVentas();
+  const cobros = obtenerCobros();
   return {
-    inventario: obtenerInventario(),
-    ventas: obtenerVentas(),
+    inventario: inventario,
+    ventas: ventas,
     recepciones: obtenerRecepciones(),
-    cobros: obtenerCobros(),
+    cobros: cobros,
     configuracion: obtenerConfiguracion(),
-    metricas: calcularMetricasGenerales(),
+    metricas: calcularMetricasGenerales(inventario, ventas, cobros),
     // El cliente descarta de su cola local las operaciones que ya están aplicadas aquí
     ops_aplicadas: obtenerOperacionesRecientes(500)
   };
@@ -1154,7 +1149,7 @@ function crearRegistroCobro(info) {
   if (abonoInicial > 0) {
     historialAbonos.push({
       id_abono: String(info.id_abono_inicial || '').trim() || generarId('ABN'),
-      fecha: Utilities.formatDate(ahora, Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd HH:mm:ss'),
+      fecha: Utilities.formatDate(ahora, ZONA_HORARIA, 'yyyy-MM-dd HH:mm:ss'),
       monto: abonoInicial,
       metodo_pago: 'Efectivo',
       nota: 'Abono inicial en venta'
@@ -1223,7 +1218,7 @@ function calcularPlanCuotas(montoTotal, abonoInicial, numCuotas, frecuencia, fec
       fechaVenc = obtenerProximaQuincena(baseD, i);
     }
 
-    const fechaStr = Utilities.formatDate(fechaVenc, Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd');
+    const fechaStr = Utilities.formatDate(fechaVenc, ZONA_HORARIA, 'yyyy-MM-dd');
     const montoCuota = i === numCuotas 
       ? Math.round((saldoRestante - (montoBasePorCuota * (numCuotas - 1))) * 100) / 100 
       : montoBasePorCuota;
@@ -1326,7 +1321,7 @@ function registrarAbono(pago) {
   saldoPendiente = r2(Math.max(0, totalDop - totalCobrado));
 
   const ahora = new Date();
-  const fechaStr = Utilities.formatDate(ahora, Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd HH:mm:ss');
+  const fechaStr = Utilities.formatDate(ahora, ZONA_HORARIA, 'yyyy-MM-dd HH:mm:ss');
   historialAbonos.push({
     id_abono: idAbono,
     fecha: fechaStr,
@@ -1719,9 +1714,9 @@ function obtenerRecepciones() {
   return items.reverse();
 }
 
-function calcularMetricasGenerales() {
-  const inventario = obtenerInventario();
-  const ventas = obtenerVentas();
+function calcularMetricasGenerales(inventarioLeido, ventasLeidas, cobrosLeidos) {
+  const inventario = inventarioLeido || obtenerInventario();
+  const ventas = ventasLeidas || obtenerVentas();
 
   let totalProductos = inventario.length;
   let totalUnidadesStock = 0;
@@ -1738,8 +1733,8 @@ function calcularMetricasGenerales() {
     else if (p.cantidad <= p.stock_minimo) productosStockBajo++;
   });
 
-  const hoyStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd');
-  const mesStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM');
+  const hoyStr = Utilities.formatDate(new Date(), ZONA_HORARIA, 'yyyy-MM-dd');
+  const mesStr = Utilities.formatDate(new Date(), ZONA_HORARIA, 'yyyy-MM');
 
   let ventasHoyDop = 0;
   let gananciaHoyDop = 0;
@@ -1760,7 +1755,7 @@ function calcularMetricasGenerales() {
     }
   });
 
-  const cobros = obtenerCobros();
+  const cobros = cobrosLeidos || obtenerCobros();
   let totalPorCobrarDop = 0;
   let cuotasPendientesHoy = 0;
   let clientesConDeuda = 0;
@@ -1927,7 +1922,7 @@ function getSheet(nombre) {
 
 function formatearFecha(dateObj) {
   try {
-    return Utilities.formatDate(new Date(dateObj), Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd HH:mm:ss');
+    return Utilities.formatDate(new Date(dateObj), ZONA_HORARIA, 'yyyy-MM-dd HH:mm:ss');
   } catch (e) {
     return String(dateObj);
   }

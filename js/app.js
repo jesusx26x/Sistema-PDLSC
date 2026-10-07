@@ -33,6 +33,24 @@ const ThorApp = (function() {
     tankDraftItems: []
   };
 
+  /**
+   * Escapa texto para insertarlo en HTML. Los nombres de productos, clientes y tanques los
+   * escribe el usuario: sin esto, un nombre con "<" rompe la pantalla o inyecta HTML.
+   */
+  function esc(valor) {
+    return String(valor === undefined || valor === null ? '' : valor)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function textoSeguroCsv(valor) {
+    const t = String(valor === undefined || valor === null ? '' : valor);
+    return /^[=+\-@]/.test(t) ? "'" + t : t;
+  }
+
   async function init() {
     setupNavigation();
     setupModals();
@@ -465,11 +483,11 @@ const ThorApp = (function() {
 
     let ventasMes = 0;
     let gananciaMes = 0;
-    const mesActual = new Date().toISOString().substring(0, 7);
+    const mesActual = ThorAPI.fechaLocal().substring(0, 7);
 
     state.sales.forEach(v => {
       if (v.estado === 'Cancelada') return;
-      const f = (v.fecha_venta || '').substring(0, 7);
+      const f = ThorAPI.normalizarFecha(v.fecha_venta).substring(0, 7);
       if (f === mesActual || !v.fecha_venta) {
         ventasMes += parseFloat(v.total_dop) || 0;
         gananciaMes += parseFloat(v.ganancia_dop) || 0;
@@ -485,8 +503,8 @@ const ThorApp = (function() {
     let totalPorCobrar = 0;
     let deudasActivas = 0;
     let cuotasVencenPronto = 0;
-    const hoyStr = new Date().toISOString().substring(0, 10);
-    const finQuincena = ThorAPI.obtenerProximaQuincena(new Date(), 1).toISOString().substring(0, 10);
+    const hoyStr = ThorAPI.fechaLocal().substring(0, 10);
+    const finQuincena = ThorAPI.fechaLocal(ThorAPI.obtenerProximaQuincena(new Date(), 1)).substring(0, 10);
 
     (state.cobros || []).forEach(c => {
       if (c.estado !== 'Saldada' && c.estado !== 'Cancelada') {
@@ -576,7 +594,7 @@ const ThorApp = (function() {
         html += `
           <div class="p-2.5 rounded-xl bg-[#0D131F] border border-white/10 hover:border-amber-500/30 transition flex items-center justify-between gap-2 shadow-xs">
             <div class="min-w-0">
-              <p class="text-xs font-semibold text-slate-100 truncate">${p.nombre}</p>
+              <p class="text-xs font-semibold text-slate-100 truncate">${esc(p.nombre)}</p>
               <p class="text-[10px] text-slate-400">Quedan: <strong class="${esAgotado ? 'text-rose-400' : 'text-amber-400'} font-mono">${qty}</strong> (Mín: ${p.stock_minimo || 3})</p>
             </div>
             <button onclick="ThorApp.quickAdjustStock('${p.id}', 1)" class="btn-tactile px-2 py-1 text-[11px] bg-amber-500/15 text-amber-300 font-bold rounded-lg border border-amber-500/30 hover:bg-amber-500/25 shrink-0">
@@ -604,7 +622,7 @@ const ThorApp = (function() {
         html += `
           <div class="p-2.5 rounded-xl bg-[#0D131F] border border-white/10 hover:border-amber-500/30 transition flex items-center justify-between gap-2 shadow-xs">
             <div class="min-w-0">
-              <p class="text-xs font-semibold text-slate-100 truncate">${c.cliente}</p>
+              <p class="text-xs font-semibold text-slate-100 truncate">${esc(c.cliente)}</p>
               <p class="text-[10px] text-slate-400">Pendiente: <strong class="text-amber-400 font-mono">RD$ ${pendiente.toLocaleString()}</strong> • Vence: <span class="text-rose-400">${c.proximo_vencimiento || 'Pronto'}</span></p>
             </div>
             <div class="flex items-center gap-1 shrink-0">
@@ -649,7 +667,7 @@ const ThorApp = (function() {
 
     const fechaLimite = new Date();
     fechaLimite.setDate(fechaLimite.getDate() + 3);
-    const fechaLimiteStr = fechaLimite.toISOString().substring(0, 10);
+    const fechaLimiteStr = ThorAPI.fechaLocal(fechaLimite).substring(0, 10);
 
     const cobrosUrgentes = (state.cobros || []).filter(c => {
       if (c.estado === 'Saldada' || c.estado === 'Cancelada') return false;
@@ -675,7 +693,7 @@ const ThorApp = (function() {
       const dataVentas = ultimos7Dias.map(d => {
         let total = 0;
         state.sales.forEach(v => {
-          if (v.estado !== 'Cancelada' && (v.fecha_venta || '').startsWith(d.dateStr)) {
+          if (v.estado !== 'Cancelada' && ThorAPI.normalizarFecha(v.fecha_venta).startsWith(d.dateStr)) {
             total += parseFloat(v.total_dop) || 0;
           }
         });
@@ -782,8 +800,8 @@ const ThorApp = (function() {
               ${esCancelada ? '<span class="text-rose-400 font-bold">✕</span>' : '<svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>'}
             </div>
             <div>
-              <p class="text-xs font-semibold text-slate-100 ${esCancelada ? 'line-through text-slate-500' : ''}">${v.nombre_articulo}</p>
-              <p class="text-[11px] text-slate-400">${v.cantidad} un. • <span class="text-slate-200 font-medium">${v.cliente || 'Cliente General'}</span> • <span class="text-amber-400 font-medium">${v.metodo_pago || 'Efectivo'}</span></p>
+              <p class="text-xs font-semibold text-slate-100 ${esCancelada ? 'line-through text-slate-500' : ''}">${esc(v.nombre_articulo)}</p>
+              <p class="text-[11px] text-slate-400">${v.cantidad} un. • <span class="text-slate-200 font-medium">${esc(v.cliente || 'Cliente General')}</span> • <span class="text-amber-400 font-medium">${esc(v.metodo_pago || 'Efectivo')}</span></p>
             </div>
           </div>
           <div class="text-right shrink-0">
@@ -808,9 +826,9 @@ const ThorApp = (function() {
         const key = nom.toLowerCase();
         if (!seen.has(key)) {
           seen.add(key);
-          const safeNom = nom.replace(/"/g, '&quot;');
+          const safeNom = esc(nom);
           const stock = p.cantidad || 0;
-          optionsHtml += `<option value="${safeNom}">Categoría: ${p.categoria || 'Variedades'} | Stock: ${stock} uds | Venta: RD$ ${Math.round(p.precio_venta_dop || 0).toLocaleString()}</option>`;
+          optionsHtml += `<option value="${safeNom}">Categoría: ${esc(p.categoria || 'Variedades')} | Stock: ${stock} uds | Venta: RD$ ${Math.round(p.precio_venta_dop || 0).toLocaleString()}</option>`;
         }
       }
     });
@@ -901,13 +919,13 @@ const ThorApp = (function() {
           <tr class="border-b border-white/5 hover:bg-white/[0.03] transition">
             <td class="py-3 px-4">
               <div class="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
-                <span>${p.nombre}</span>
+                <span>${esc(p.nombre)}</span>
                 ${badgeOrigen}
               </div>
-              <div class="text-xs text-slate-400 font-mono">${p.id} • ${p.ubicacion || (esLocal ? 'Tienda / Local' : 'Tanque')}</div>
+              <div class="text-xs text-slate-400 font-mono">${esc(p.id)} • ${esc(p.ubicacion || (esLocal ? 'Tienda / Local' : 'Tanque'))}</div>
             </td>
             <td class="py-3 px-3">
-              <span class="text-xs px-2.5 py-0.5 rounded-md bg-[#1A2234] text-slate-300 font-medium border border-white/10">${p.categoria || 'Variedades'}</span>
+              <span class="text-xs px-2.5 py-0.5 rounded-md bg-[#1A2234] text-slate-300 font-medium border border-white/10">${esc(p.categoria || 'Variedades')}</span>
             </td>
             <td class="py-3 px-3 text-center">
               <div class="flex items-center justify-center gap-1.5">
@@ -971,11 +989,11 @@ const ThorApp = (function() {
             <div class="flex items-start justify-between gap-2">
               <div>
                 <div class="flex items-center gap-1.5 mb-0.5">
-                  <span class="text-[10px] uppercase font-bold text-amber-400 tracking-wider">${p.categoria || 'Variedades'}</span>
+                  <span class="text-[10px] uppercase font-bold text-amber-400 tracking-wider">${esc(p.categoria || 'Variedades')}</span>
                   ${badgeOrigen}
                 </div>
-                <h4 class="font-bold text-slate-100 text-sm leading-snug">${p.nombre}</h4>
-                <p class="text-[11px] text-slate-400 font-mono">${p.ubicacion || (esLocal ? 'Tienda / Local' : 'Tanque')} • ID: ${p.id}</p>
+                <h4 class="font-bold text-slate-100 text-sm leading-snug">${esc(p.nombre)}</h4>
+                <p class="text-[11px] text-slate-400 font-mono">${esc(p.ubicacion || (esLocal ? 'Tienda / Local' : 'Tanque'))} • ID: ${esc(p.id)}</p>
               </div>
               <span class="${badgeClass}">${statusText}</span>
             </div>
@@ -1121,15 +1139,15 @@ const ThorApp = (function() {
               <div class="text-[11px] text-slate-400">${v.fecha_venta || ''}</div>
             </td>
             <td class="py-3 px-3">
-              <div class="font-semibold text-slate-100 text-sm ${esCancelada ? 'line-through text-slate-500' : ''}">${v.nombre_articulo}</div>
-              <div class="text-xs text-slate-300 font-medium">${v.cliente || 'Cliente General'}</div>
+              <div class="font-semibold text-slate-100 text-sm ${esCancelada ? 'line-through text-slate-500' : ''}">${esc(v.nombre_articulo)}</div>
+              <div class="text-xs text-slate-300 font-medium">${esc(v.cliente || 'Cliente General')}</div>
             </td>
             <td class="py-3 px-3 text-center font-bold text-sm text-slate-200">
               ${v.cantidad} un.
             </td>
             <td class="py-3 px-3 text-right">
               <div class="font-bold text-sm text-slate-100 font-mono">RD$ ${Number(v.total_dop || 0).toLocaleString()}</div>
-              <div class="text-[11px] text-amber-400/90 font-medium">${v.metodo_pago || 'Efectivo'}</div>
+              <div class="text-[11px] text-amber-400/90 font-medium">${esc(v.metodo_pago || 'Efectivo')}</div>
             </td>
             <td class="py-3 px-3 text-right font-semibold text-sm ${esCancelada ? 'text-slate-400' : (Number(v.ganancia_dop || 0) < 0 ? 'text-rose-400 font-bold' : 'text-emerald-400')}">
               ${Number(v.ganancia_dop || 0) < 0 ? `-RD$ ${Math.abs(Math.round(Number(v.ganancia_dop))).toLocaleString()}` : `RD$ ${Number(v.ganancia_dop || 0).toLocaleString()}`}
@@ -1162,8 +1180,8 @@ const ThorApp = (function() {
               <span class="${esCancelada ? 'badge-danger' : 'badge-success'}">${v.estado || 'Completada'}</span>
             </div>
             <div>
-              <h4 class="font-bold text-slate-100 text-sm ${esCancelada ? 'line-through text-slate-500' : ''}">${v.nombre_articulo}</h4>
-              <p class="text-xs text-slate-300">${v.cantidad} unidades • ${v.cliente || 'Cliente General'}</p>
+              <h4 class="font-bold text-slate-100 text-sm ${esCancelada ? 'line-through text-slate-500' : ''}">${esc(v.nombre_articulo)}</h4>
+              <p class="text-xs text-slate-300">${v.cantidad} unidades • ${esc(v.cliente || 'Cliente General')}</p>
             </div>
             <div class="flex items-center justify-between bg-[#1A2234]/60 p-2.5 rounded-xl border border-white/5 text-xs">
               <div>
@@ -1211,9 +1229,9 @@ const ThorApp = (function() {
             <div>
               <div class="flex items-center gap-2">
                 <svg class="w-5 h-5 inline text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-                <h3 class="font-bold text-base text-slate-100">${r.nombre_tanque}</h3>
+                <h3 class="font-bold text-base text-slate-100">${esc(r.nombre_tanque)}</h3>
               </div>
-              <p class="text-xs text-slate-400 mt-0.5">Llegada: <strong class="text-slate-200">${r.fecha}</strong> • Origen: <strong class="text-slate-200">${r.origen || 'EE.UU.'}</strong></p>
+              <p class="text-xs text-slate-400 mt-0.5">Llegada: <strong class="text-slate-200">${r.fecha}</strong> • Origen: <strong class="text-slate-200">${esc(r.origen || 'EE.UU.')}</strong></p>
             </div>
             <div class="flex items-center gap-2">
               <span class="badge-gold">${r.total_unidades} Unidades</span>
@@ -1232,7 +1250,7 @@ const ThorApp = (function() {
             </div>
             <div class="col-span-2 sm:col-span-1">
               <span class="text-slate-400 block text-[11px]">Notas / Observaciones</span>
-              <span class="text-slate-300 truncate block">${r.notas || 'Sin notas'}</span>
+              <span class="text-slate-300 truncate block">${esc(r.notas || 'Sin notas')}</span>
             </div>
           </div>
 
@@ -1242,7 +1260,7 @@ const ThorApp = (function() {
               <div class="max-h-40 overflow-y-auto space-y-1.5 pr-1">
                 ${r.articulos.map(item => `
                   <div class="flex items-center justify-between text-xs py-2 px-3 rounded-xl bg-[#0D131F] border border-white/5">
-                    <span class="text-slate-200 font-medium">${item.nombre}</span>
+                    <span class="text-slate-200 font-medium">${esc(item.nombre)}</span>
                     <span class="text-amber-400 font-mono font-bold">${item.cantidad} un. • RD$ ${Number(item.precio_venta_dop || 0).toLocaleString()}</span>
                   </div>
                 `).join('')}
@@ -1303,7 +1321,7 @@ const ThorApp = (function() {
             <div class="flex items-center justify-between py-2.5 border-b border-white/5 last:border-0 text-xs">
               <div class="flex items-center gap-2.5">
                 <span class="w-5 h-5 rounded-full bg-amber-500/15 text-amber-300 font-bold flex items-center justify-center text-[10px] border border-amber-500/30">${idx + 1}</span>
-                <span class="text-slate-200 font-medium">${item.nombre}</span>
+                <span class="text-slate-200 font-medium">${esc(item.nombre)}</span>
               </div>
               <div class="text-right">
                 <span class="font-bold text-slate-100 font-mono">${item.cantidad} un.</span>
@@ -1617,7 +1635,7 @@ const ThorApp = (function() {
       const origTxt = (p.origen === 'local' || p.origen === 'Compra Local') ? 'Local' : (p.ubicacion ? p.ubicacion : 'Tanque');
       select.innerHTML += `
         <option value="${p.id}" ${disabled} ${selectedProductId === p.id ? 'selected' : ''}>
-          ${p.nombre} — RD$ ${Number(p.precio_venta_dop || 0).toLocaleString()} ${stockTxt} [${origTxt}]
+          ${esc(p.nombre)} — RD$ ${Number(p.precio_venta_dop || 0).toLocaleString()} ${stockTxt} [${esc(origTxt)}]
         </option>
       `;
     });
@@ -2050,7 +2068,7 @@ const ThorApp = (function() {
 
     let html = '<option value="__NEW__">✨ + Registrar un Tanque Nuevo</option>';
     tankMap.forEach((info, name) => {
-      const safeName = name.replace(/"/g, '&quot;');
+      const safeName = esc(name);
       const isSelected = selectedTankName && selectedTankName.trim().toLowerCase() === name.toLowerCase();
       html += `<option value="${safeName}" ${isSelected ? 'selected' : ''}>📦 Continuar: ${safeName} (${info.totalUnits} piezas)</option>`;
     });
@@ -2109,7 +2127,7 @@ const ThorApp = (function() {
 
       if (document.getElementById('tankName')) document.getElementById('tankName').value = draft.nombre_tanque || '';
       if (document.getElementById('tankOrigin')) document.getElementById('tankOrigin').value = draft.origen || 'Miami, FL - EE.UU.';
-      if (document.getElementById('tankDate')) document.getElementById('tankDate').value = draft.fecha || new Date().toISOString().substring(0, 10);
+      if (document.getElementById('tankDate')) document.getElementById('tankDate').value = draft.fecha || ThorAPI.fechaLocal().substring(0, 10);
       const freightInput = document.getElementById('tankFreightUsd') || document.getElementById('tankFreight');
       if (freightInput) freightInput.value = draft.flete_usd || '';
       if (document.getElementById('tankRate')) document.getElementById('tankRate').value = draft.tasa_cambio || state.exchangeRate.toFixed(2);
@@ -2143,7 +2161,7 @@ const ThorApp = (function() {
     populateExistingTanksDropdown();
     onSelectExistingTank('__NEW__');
 
-    document.getElementById('tankDate').value = new Date().toISOString().substring(0, 10);
+    document.getElementById('tankDate').value = ThorAPI.fechaLocal().substring(0, 10);
     document.getElementById('tankRate').value = state.exchangeRate.toFixed(2);
     const indicator = document.getElementById('tankDraftAutoSaveIndicator');
     const discardBtn = document.getElementById('btnDiscardTankDraft');
@@ -2206,7 +2224,7 @@ const ThorApp = (function() {
     let html = '';
 
     state.tankDraftItems.forEach((item, idx) => {
-      const safeNombre = (item.nombre || '').replace(/"/g, '&quot;');
+      const safeNombre = esc(item.nombre || '');
       const cleanNom = (item.nombre || '').trim().toLowerCase();
       const existingMatch = (state.inventory || []).find(p =>
         (item.id && p.id === item.id) ||
@@ -2443,7 +2461,7 @@ const ThorApp = (function() {
 
     const payload = {
       nombre_tanque: nombreTanque,
-      fecha: document.getElementById('tankDate')?.value || new Date().toISOString().substring(0, 10),
+      fecha: document.getElementById('tankDate')?.value || ThorAPI.fechaLocal().substring(0, 10),
       origen: document.getElementById('tankOrigin')?.value?.trim() || 'Miami, FL - EE.UU.',
       flete_usd: flete,
       tasa_cambio: tasa,
@@ -2572,7 +2590,7 @@ const ThorApp = (function() {
     let csv = 'ID,Nombre,Categoria,Cantidad,Costo USD,Costo DOP,Precio Venta DOP,Ubicacion,Estado\n';
     state.inventory.forEach(p => {
       const safeId = p.id || '';
-      const safeNom = (p.nombre || '').replace(/"/g, '""');
+      const safeNom = textoSeguroCsv(p.nombre).replace(/"/g, '""');
       const safeCat = p.categoria || 'Variedades';
       const safeCant = p.cantidad || 0;
       const safeCostoUsd = p.costo_usd || 0;
@@ -2586,7 +2604,7 @@ const ThorApp = (function() {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `Thor_Essence_Inventario_${new Date().toISOString().substring(0, 10)}.csv`);
+    link.setAttribute('download', `Thor_Essence_Inventario_${ThorAPI.fechaLocal().substring(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -2608,8 +2626,8 @@ const ThorApp = (function() {
     let clientesMap = new Set();
     let totalRecuperado = 0;
 
-    const hoyStr = new Date().toISOString().substring(0, 10);
-    const finQuincena = ThorAPI.obtenerProximaQuincena(new Date(), 1).toISOString().substring(0, 10);
+    const hoyStr = ThorAPI.fechaLocal().substring(0, 10);
+    const finQuincena = ThorAPI.fechaLocal(ThorAPI.obtenerProximaQuincena(new Date(), 1)).substring(0, 10);
 
     state.cobros.forEach(c => {
       totalRecuperado += (parseFloat(c.total_cobrado_dop) || 0);
@@ -2693,14 +2711,14 @@ const ThorApp = (function() {
         tableHtml += `
           <tr class="border-b border-white/5 hover:bg-white/[0.03] transition">
             <td class="py-3 px-4">
-              <div class="font-semibold text-slate-100 text-sm">${c.cliente}</div>
+              <div class="font-semibold text-slate-100 text-sm">${esc(c.cliente)}</div>
               <div class="text-xs text-slate-400 flex items-center gap-1.5">
-                <span>${c.telefono || 'Sin WhatsApp'}</span>
+                <span>${esc(c.telefono || 'Sin WhatsApp')}</span>
                 ${c.telefono ? `<button onclick="ThorApp.openWhatsAppReminder('${c.id_cobro}')" class="text-emerald-400 hover:text-emerald-300 text-xs font-bold" title="WhatsApp"><svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg></button>` : ''}
               </div>
             </td>
             <td class="py-3 px-3">
-              <div class="font-medium text-slate-200 text-xs">${c.articulo}</div>
+              <div class="font-medium text-slate-200 text-xs">${esc(c.articulo)}</div>
               <div class="text-[11px] text-amber-400/90 font-medium">${c.num_cuotas} cuotas (${c.frecuencia === 'quincenal' ? '15 y 30' : 'Mensual'})</div>
             </td>
             <td class="py-3 px-3 text-right font-bold text-sm text-slate-100 font-mono">
@@ -2774,8 +2792,8 @@ const ThorApp = (function() {
             <div class="flex items-start justify-between gap-2">
               <div>
                 <span class="text-[10px] uppercase font-bold text-amber-400 tracking-wider font-mono">${c.id_cobro}</span>
-                <h4 class="font-bold text-slate-100 text-sm">${c.cliente}</h4>
-                <p class="text-xs text-slate-300">${c.articulo} • ${c.num_cuotas} cuotas</p>
+                <h4 class="font-bold text-slate-100 text-sm">${esc(c.cliente)}</h4>
+                <p class="text-xs text-slate-300">${esc(c.articulo)} • ${c.num_cuotas} cuotas</p>
               </div>
               <span class="${badgeClass}">${statusText}</span>
             </div>
@@ -2832,7 +2850,7 @@ const ThorApp = (function() {
     const container = document.getElementById('cobrosFilterPillsContainer');
     if (!container) return;
 
-    const hoyStr = new Date().toISOString().substring(0, 10);
+    const hoyStr = ThorAPI.fechaLocal().substring(0, 10);
     let total = state.cobros.length;
     let pendingCount = 0;
     let paidCount = 0;
@@ -3128,8 +3146,8 @@ const ThorApp = (function() {
           html += `
             <div class="flex items-center justify-between p-2 rounded-xl bg-[#0D131F] border border-white/10 text-xs">
               <div>
-                <span class="font-semibold text-slate-200">${ab.nota || 'Abono'}</span>
-                <span class="text-[10px] text-slate-400 block">${ab.fecha} • ${ab.metodo_pago || 'Efectivo'}</span>
+                <span class="font-semibold text-slate-200">${esc(ab.nota || 'Abono')}</span>
+                <span class="text-[10px] text-slate-400 block">${ab.fecha} • ${esc(ab.metodo_pago || 'Efectivo')}</span>
               </div>
               <span class="font-bold font-mono text-emerald-400">+RD$ ${Number(ab.monto).toLocaleString()}</span>
             </div>
@@ -3236,7 +3254,7 @@ const ThorApp = (function() {
       const diaNom = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][d.getDay()];
       resultado.push({
         label: `${diaNom} ${d.getDate()}`,
-        dateStr: d.toISOString().substring(0, 10)
+        dateStr: ThorAPI.fechaLocal(d).substring(0, 10)
       });
     }
     return resultado;

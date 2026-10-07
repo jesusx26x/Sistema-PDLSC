@@ -71,18 +71,41 @@ Sistema-PDLSC/
 │   └── logo.jpg                 # Logotipo oficial de Thor Essence
 │
 ├── css/
-│   └── styles.css               # Estilos Emil Kowalski + Bento Grid UX-UI-PRO-MAX
+│   ├── styles.css               # Estilos Emil Kowalski + Bento Grid UX-UI-PRO-MAX
+│   ├── tailwind.input.css       # Entrada de Tailwind
+│   └── tailwind.css             # Tailwind compilado (generado con npm run build:css)
 │
 ├── js/
 │   ├── config.js                # Configuración centralizada (Zero-Config para Pamela)
-│   ├── api.js                   # Módulo API, Toasts Sonner y tasa de cambio
-│   └── app.js                   # Controlador UI, ventas, inventario y tanques
+│   ├── api.js                   # Módulo API, cola offline, sincronización y Toasts Sonner
+│   ├── app.js                   # Controlador UI, ventas, inventario y tanques
+│   └── vendor/chart.umd.min.js  # Chart.js 4.5.1 (alojado para funcionar sin conexión)
+│
+├── sw.js                        # Service Worker (app shell offline)
+├── package.json                 # Herramientas de desarrollo (Tailwind CLI, Chart.js)
+├── tailwind.config.js           # Configuración de Tailwind
+├── PLAN_CORRECCION.md           # Plan de corrección por fases (auditoría 2026)
 │
 └── backend/
     ├── Thor_Essence_Base_De_Datos.xlsx # Plantilla Excel lista para subir a Google Drive
     ├── Codigo.gs                # Código de Google Apps Script con menú y respaldos
     └── INSTRUCCIONES_CONFIGURACION.md  # Guía paso a paso para el desarrollador
 ```
+
+---
+
+## 🛠️ Desarrollo
+
+El sitio publicado no necesita compilación en el servidor, pero el CSS de Tailwind se genera en local:
+
+```bash
+npm install
+npm run build
+```
+
+- Ejecuta `npm run build:css` cada vez que agregues o cambies clases de Tailwind en `index.html`, `404.html` o `js/`, y sube `css/tailwind.css` junto con el cambio.
+- En cada despliegue del frontend sube `CACHE_NAME` en `sw.js` para que los dispositivos descarguen la versión nueva.
+- Si el cambio toca `backend/Codigo.gs`, publícalo primero en Apps Script (*Gestionar implementaciones › Editar › Nueva versión*).
 
 ---
 

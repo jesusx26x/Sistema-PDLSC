@@ -4,3 +4,6 @@
 Thumbs.db
 scratch/
 *.mp4
+
+# Dependencias de desarrollo (Tailwind CLI, Chart.js)
+node_modules/

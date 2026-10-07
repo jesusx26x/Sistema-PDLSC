@@ -40,10 +40,12 @@ const Sonner = (function() {
     toast.innerHTML = `
       <div class="flex items-center gap-2.5">
         <span class="text-base shrink-0">${icon}</span>
-        <div class="text-xs font-semibold text-slate-100">${message}</div>
+        <div class="text-xs font-semibold text-slate-100" data-mensaje></div>
       </div>
       <button class="text-slate-400 hover:text-slate-200 text-xs shrink-0 pl-2">✕</button>
     `;
+    // El mensaje puede contener nombres escritos por el usuario: siempre como texto, nunca HTML
+    toast.querySelector('[data-mensaje]').textContent = String(message);
 
     const closeBtn = toast.querySelector('button');
     const dismiss = () => {
@@ -667,19 +669,28 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       return { status: 'error', code: 'UNAUTHORIZED_RLS', authRequired: true, message: 'Sesión no iniciada' };
     }
 
-    const url = new URL(cfg.gasUrl);
-    url.searchParams.append('action', action);
-    url.searchParams.append('token', getSessionToken());
-    for (let k in extraParams) {
-      url.searchParams.append(k, extraParams[k]);
-    }
+    // Lectura por POST: el token viaja en el cuerpo y no queda en historiales ni registros de URL
+    const leerPorPost = () => fetchConTimeout(cfg.gasUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({}, extraParams, { action: action, token: getSessionToken() }))
+    });
+    // Respaldo para backends anteriores que solo aceptan lecturas por GET
+    const leerPorGet = () => {
+      const url = new URL(cfg.gasUrl);
+      url.searchParams.append('action', action);
+      url.searchParams.append('token', getSessionToken());
+      for (let k in extraParams) {
+        url.searchParams.append(k, extraParams[k]);
+      }
+      return fetchConTimeout(url.toString(), { method: 'GET', headers: { 'Accept': 'application/json' } });
+    };
 
     try {
-      const response = await fetchConTimeout(url.toString(), {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' }
-      });
-      const json = await response.json();
+      let json = await (await leerPorPost()).json();
+      if (json && json.status === 'error' && /no reconocida/i.test(json.message || '')) {
+        json = await (await leerPorGet()).json();
+      }
       if (json && json.code === 'UNAUTHORIZED_RLS') {
         notificarSesionVencida();
       }

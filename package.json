@@ -1,0 +1,14 @@
+{
+  "name": "thor-essence",
+  "private": true,
+  "description": "Herramientas de desarrollo de Thor Essence (el sitio publicado no necesita compilación en el servidor).",
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i css/tailwind.input.css -o css/tailwind.css --minify",
+    "vendor": "node -e \"require('fs').mkdirSync('js/vendor',{recursive:true});require('fs').copyFileSync('node_modules/chart.js/dist/chart.umd.min.js','js/vendor/chart.umd.min.js')\"",
+    "build": "npm run build:css && npm run vendor"
+  },
+  "devDependencies": {
+    "chart.js": "4.5.1",
+    "tailwindcss": "3.4.19"
+  }
+}

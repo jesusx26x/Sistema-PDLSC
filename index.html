@@ -14,33 +14,13 @@
   <link rel="icon" type="image/jpeg" href="assets/logo.jpg">
   <link rel="apple-touch-icon" href="assets/logo.jpg">
 
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              pearl: '#F8FAFC',
-              surface: '#FFFFFF',
-              surfaceRaised: '#F1F5F9',
-              card: '#FFFFFF',
-              gold: '#B8860B',
-              goldLight: '#DFB743',
-              goldDark: '#926704'
-            }
-          }
-        }
-      }
-    }
-  </script>
-
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Chart.js 4.5.1 alojado en el sitio (funciona sin conexión) -->
+  <script src="js/vendor/chart.umd.min.js"></script>
 
   <!-- Estilos Personalizados White Luxury & Glassmorphism -->
   <link rel="stylesheet" href="css/styles.css">
+  <!-- Tailwind compilado (npm run build:css). Va después de styles.css, como lo inyectaba el CDN -->
+  <link rel="stylesheet" href="css/tailwind.css">
 </head>
 
 <body class="bg-[#0B0F17] text-slate-100 min-h-screen flex flex-col md:flex-row pb-20 md:pb-0 selection:bg-amber-500/20 selection:text-amber-300">

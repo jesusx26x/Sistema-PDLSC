@@ -117,6 +117,14 @@ Los códigos (C1, A3, M5…) refieren a los hallazgos de esa auditoría.
 - Función `escapeHtml` aplicada a todo texto de usuario en `innerHTML` y en Sonner.
 - Token por POST en lugar de query string; evitar `inicializarHojasSiNoExisten` en cada request y la doble lectura en `getAllData`.
 
+**Implementado (Fases 6 y 7):**
+- Fechas de la interfaz en hora local (antes UTC: después de las 8 PM contaba el día siguiente); backend con zona fija `America/Santo_Domingo`.
+- Tailwind compilado a `css/tailwind.css` (sin CDN de desarrollo) y Chart.js 4.5.1 en `js/vendor/`; `npm run build` los regenera.
+- Service worker v6: pre-cachea el app shell, primero red con respaldo en caché (timeout 4 s), fuentes en caché; la app abre con estilos y gráficas sin conexión.
+- `esc()` en todas las plantillas HTML con texto del usuario; los avisos (Sonner) se muestran como texto; CSV protegido contra fórmulas.
+- Lecturas por POST (token fuera de la URL) con respaldo GET para backends anteriores; `getAllData` lee cada hoja una sola vez.
+- `404.html` con `<base>` para funcionar en cualquier ruta.
+
 ---
 
 ## Estado
@@ -126,7 +134,7 @@ Los códigos (C1, A3, M5…) refieren a los hallazgos de esa auditoría.
 | 1 — Credenciales y sesiones | ✅ Desplegado (pendiente: regenerar el manual PDF sin credenciales) |
 | 2 — Idempotencia e IDs | ✅ Desplegado |
 | 3 — Conciliación | ✅ Desplegado y datos corregidos (tanque duplicado + 2 productos con 62 u. de más) |
-| 4 — Cola y sincronización | 🟡 Código listo y probado — pendiente de desplegar |
-| 5 — Reglas de negocio | 🟡 Código listo y probado — pendiente de desplegar |
-| 6 — Métricas y fechas | 🟡 Mayormente cubierta en la Fase 5 (métricas locales y formato de fecha) |
-| 7 — PWA, XSS, rendimiento | ⏳ Pendiente |
+| 4 — Cola y sincronización | ✅ Desplegado |
+| 5 — Reglas de negocio | ✅ Desplegado (prorrateo de flete pospuesto por decisión del negocio) |
+| 6 — Métricas y fechas | 🟡 Código listo y probado — pendiente de desplegar |
+| 7 — PWA, XSS, rendimiento | 🟡 Código listo y probado — pendiente de desplegar |
