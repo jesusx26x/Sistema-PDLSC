@@ -49,7 +49,8 @@ function onOpen() {
     const ui = SpreadsheetApp.getUi();
     ui.createMenu('🌸 Thor Essence Admin')
       .addItem('🚀 Inicializar / Verificar Estructura', 'menuInicializar')
-      .addItem('🔄 Reconciliar y Reparar Stock de Inventario', 'menuConciliarInventario')
+      .addItem('🔍 Diagnosticar Inventario (duplicados y excesos)', 'menuDiagnosticarInventario')
+      .addItem('✅ Aplicar Correcciones Marcadas del Diagnóstico', 'menuAplicarCorrecciones')
       .addItem('💾 Crear Copia de Respaldo en Drive', 'crearRespaldoEnDrive')
       .addItem('⏰ Configurar Respaldo Automático Diario', 'configurarDisparadorRespaldo')
       .addSeparator()
@@ -69,9 +70,24 @@ function menuInicializar() {
   SpreadsheetApp.getUi().alert('✅ Estructura de Thor Essence verificada y lista para operar con RLS activo.' + aviso);
 }
 
-function menuConciliarInventario() {
-  const res = conciliarInventarioConRecepciones();
-  SpreadsheetApp.getUi().alert('🔄 Conciliación y Reparación de Inventario:\n\n' + res.message);
+function menuDiagnosticarInventario() {
+  const res = diagnosticarInventario(true);
+  const hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA_DIAGNOSTICO);
+  if (hoja) hoja.activate();
+  SpreadsheetApp.getUi().alert('🔍 Diagnóstico de Inventario\n\n' + res.message +
+    '\n\nRevisa la hoja "' + HOJA_DIAGNOSTICO + '", marca la casilla "Aplicar" en las filas que quieras corregir ' +
+    '(puedes editar "Nuevo stock") y usa "✅ Aplicar Correcciones Marcadas del Diagnóstico".');
+}
+
+function menuAplicarCorrecciones() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.alert('✅ Aplicar correcciones',
+    'Se aplicarán SOLO las filas marcadas en la hoja "' + HOJA_DIAGNOSTICO + '".\n' +
+    'Antes se creará una copia de respaldo en Google Drive.\n\n¿Continuar?',
+    ui.ButtonSet.YES_NO);
+  if (r !== ui.Button.YES) return;
+  const res = aplicarCorreccionesMarcadas();
+  ui.alert((res.status === 'success' ? '✅ ' : '❌ ') + res.message);
 }
 
 /**
@@ -612,6 +628,8 @@ function doPost(e) {
     }
 
     inicializarHojasSiNoExisten();
+    // El kardex se crea (con el saldo inicial) antes de la primera mutación
+    hojaMovimientos();
 
     // Idempotencia: si esta operación ya se procesó (reintento de la cola offline o respuesta
     // perdida en la red), se devuelve el resultado original sin volver a aplicar la mutación.
@@ -682,7 +700,8 @@ function ejecutarAccion(action, payload) {
     }
 
     case 'reconcileInventory':
-      return conciliarInventarioConRecepciones();
+      // Solo diagnostica: nunca modifica el inventario automáticamente
+      return diagnosticarInventario(true);
 
     case 'deleteReception': {
       const delRecId = payload.id_recepcion || (payload.data && (payload.data.id_recepcion || payload.data));
@@ -858,12 +877,21 @@ function guardarOActualizarProducto(prod) {
   }
 
   if (filaEncontrada > 0) {
-    const fechaIngresoOriginal = data[filaEncontrada - 1][11] || ahora;
+    const filaActual = data[filaEncontrada - 1];
+    if (String(filaActual[10]) === 'Eliminado') {
+      return { status: 'error', code: 'PRODUCTO_ELIMINADO', message: 'El producto "' + filaActual[1] + '" fue eliminado del inventario y no se puede modificar.' };
+    }
+    const cantidadAnterior = parseInt(filaActual[4]) || 0;
+    const fechaIngresoOriginal = filaActual[11] || ahora;
     sheet.getRange(filaEncontrada, 1, 1, 13).setValues([[
       id, nombre, categoria, descripcion, cantidad, stockMinimo,
       costoUsd, costoDop, precioVentaDop, ubicacion, estado,
       fechaIngresoOriginal, ahora
     ]]);
+    registrarMovimientos([{
+      id: id, nombre: nombre, tipo: 'EDICION', delta: cantidad - cantidadAnterior, stock: cantidad,
+      detalle: 'Cantidad editada en el formulario del producto'
+    }]);
     return { status: 'success', message: 'Producto actualizado exitosamente', id: id };
   } else {
     sheet.appendRow([
@@ -871,6 +899,10 @@ function guardarOActualizarProducto(prod) {
       costoUsd, costoDop, precioVentaDop, ubicacion, estado,
       ahora, ahora
     ]);
+    registrarMovimientos([{
+      id: id, nombre: nombre, tipo: 'ALTA', delta: cantidad, stock: cantidad,
+      detalle: 'Producto creado manualmente'
+    }]);
     return { status: 'success', message: 'Producto registrado exitosamente', id: id };
   }
 }
@@ -882,17 +914,29 @@ function eliminarProducto(id) {
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
-      // A3 FIX: Soft-delete seguro para preservar historial y evitar zombis en reconciliación
+      if (String(data[i][10]) === 'Eliminado') {
+        return { status: 'success', duplicado: true, message: 'El producto ya estaba dado de baja' };
+      }
+      const stockAnterior = parseInt(data[i][4]) || 0;
+      // Soft-delete: se conserva la fila para el historial de ventas y movimientos
       sheet.getRange(i + 1, 5).setValue(0); // Cantidad a 0
       sheet.getRange(i + 1, 11).setValue('Eliminado'); // Estado Eliminado
       sheet.getRange(i + 1, 13).setValue(new Date()); // Fecha actualización
+      registrarMovimientos([{
+        id: id, nombre: data[i][1], tipo: 'ELIMINACION', delta: -stockAnterior, stock: 0,
+        detalle: 'Producto dado de baja'
+      }]);
       return { status: 'success', message: 'Producto dado de baja exitosamente' };
     }
   }
   return { status: 'error', message: 'Producto no encontrado' };
 }
 
-function ajustarStockProducto(id, delta, motivo) {
+/**
+ * Suma o resta unidades a un producto y lo registra en el kardex.
+ * tipo: 'AJUSTE' (manual, por defecto) o 'ANULACION' (devolución por venta anulada).
+ */
+function ajustarStockProducto(id, delta, motivo, tipo, referencia) {
   if (!id) return { status: 'error', message: 'ID de producto requerido' };
   const deltaN = parseInt(delta);
   if (isNaN(deltaN)) return { status: 'error', message: 'Delta de ajuste inválido' };
@@ -902,38 +946,22 @@ function ajustarStockProducto(id, delta, motivo) {
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
-      let actual = parseInt(data[i][4]) || 0;
-      let nuevo = Math.max(0, actual + deltaN);
-      let stockMin = parseInt(data[i][5]) || 3;
-      let nuevoEstado = nuevo === 0 ? 'Agotado' : (nuevo <= stockMin ? 'Stock Bajo' : 'En Stock');
+      if (String(data[i][10]) === 'Eliminado') {
+        return { status: 'error', code: 'PRODUCTO_ELIMINADO', message: 'El producto "' + data[i][1] + '" fue eliminado del inventario; no se ajustó su stock.' };
+      }
+
+      const actual = parseInt(data[i][4]) || 0;
+      const nuevo = Math.max(0, actual + deltaN);
+      const stockMin = parseInt(data[i][5]) || 3;
 
       sheet.getRange(i + 1, 5).setValue(nuevo);
-      sheet.getRange(i + 1, 11).setValue(nuevoEstado);
+      sheet.getRange(i + 1, 11).setValue(estadoPorStock(nuevo, stockMin));
       sheet.getRange(i + 1, 13).setValue(new Date());
 
-      // Registrar ajuste en hoja AJUSTES para auditoría y reconciliación
-      try {
-        const ss = SpreadsheetApp.getActiveSpreadsheet();
-        let ajSheet = ss.getSheetByName('AJUSTES');
-        if (!ajSheet) {
-          ajSheet = ss.insertSheet('AJUSTES');
-          ajSheet.appendRow(['Fecha', 'ID Producto', 'Nombre Producto', 'Cantidad Anterior', 'Delta', 'Cantidad Nueva', 'Motivo', 'Usuario']);
-          estilarCabecera(ajSheet, 8, '#0B132B', '#D4AF37');
-          ajSheet.setFrozenRows(1);
-        }
-        ajSheet.appendRow([
-          new Date(),
-          id,
-          String(data[i][1] || ''),
-          actual,
-          deltaN,
-          nuevo,
-          String(motivo || 'Ajuste manual'),
-          'Sistema'
-        ]);
-      } catch (logErr) {
-        console.warn('No se pudo registrar ajuste en hoja AJUSTES:', logErr);
-      }
+      registrarMovimientos([{
+        id: id, nombre: data[i][1], tipo: tipo || 'AJUSTE', delta: nuevo - actual, stock: nuevo,
+        referencia: referencia, detalle: motivo || 'Ajuste manual'
+      }]);
 
       return {
         status: 'success',
@@ -976,6 +1004,9 @@ function registrarVenta(venta) {
 
   if (!producto) {
     return { status: 'error', message: 'El producto vendido no existe en el inventario' };
+  }
+  if (String(producto[10]) === 'Eliminado') {
+    return { status: 'error', code: 'PRODUCTO_ELIMINADO', message: 'El producto "' + producto[1] + '" fue eliminado del inventario.' };
   }
 
   const cantidadVenta = parseInt(venta.cantidad);
@@ -1049,6 +1080,10 @@ function registrarVenta(venta) {
   invSheet.getRange(filaProd, 5).setValue(nuevoStock);
   invSheet.getRange(filaProd, 11).setValue(nuevoEstado);
   invSheet.getRange(filaProd, 13).setValue(ahora);
+  registrarMovimientos([{
+    id: producto[0], nombre: producto[1], tipo: 'VENTA', delta: -cantidadVenta, stock: nuevoStock,
+    referencia: idVenta, detalle: clienteNombre + ' · ' + metodoPago
+  }]);
 
   return {
     status: 'success',
@@ -1389,8 +1424,8 @@ function cancelarVenta(idVenta) {
       const idProd = String(data[i][2]);
       const cantRestituir = parseInt(data[i][5]) || 0;
 
-      // Restituir stock en inventario
-      ajustarStockProducto(idProd, cantRestituir, 'Cancelación de venta ' + idVenta);
+      // Restituir stock en inventario (si el producto fue eliminado, la venta se anula igual sin revivirlo)
+      const resStock = ajustarStockProducto(idProd, cantRestituir, 'Anulación de venta ' + idVenta, 'ANULACION', idVenta);
 
       // Marcar estado cancelada en Ventas
       venSheet.getRange(i + 1, 14).setValue('Cancelada');
@@ -1410,7 +1445,12 @@ function cancelarVenta(idVenta) {
         console.warn('Error cancelando cobro en COBROS:', cobErr);
       }
 
-      return { status: 'success', message: 'Venta ' + idVenta + ' cancelada, stock repuesto y cuenta por cobrar anulada' };
+      return {
+        status: 'success',
+        message: resStock.status === 'success'
+          ? 'Venta ' + idVenta + ' cancelada, stock repuesto y cuenta por cobrar anulada'
+          : 'Venta ' + idVenta + ' cancelada. ' + resStock.message
+      };
     }
   }
 
@@ -1482,12 +1522,17 @@ function registrarRecepcionTanque(rec) {
   const invSheet = getSheet(SHEETS.INVENTARIO);
   const invData = invSheet.getDataRange().getValues();
 
-  // Mapa de búsqueda rápida por ID y nombre normalizado
+  // Mapa de búsqueda rápida por ID y nombre normalizado (solo productos activos:
+  // un producto eliminado nunca se revive al recibir un tanque)
   const idMap = new Map();
   const nomMap = new Map();
+  const todosLosIds = new Set();
+  const movimientos = [];
 
   for (let i = 1; i < invData.length; i++) {
     const rowId = String(invData[i][0] || '').trim();
+    if (rowId) todosLosIds.add(rowId);
+    if (String(invData[i][10]) === 'Eliminado') continue;
     const rowNom = norm(invData[i][1]);
     if (rowId) idMap.set(rowId, i);
     if (rowNom && !nomMap.has(rowNom)) nomMap.set(rowNom, i);
@@ -1526,10 +1571,16 @@ function registrarRecepcionTanque(rec) {
       invData[rowIdx][9] = nombreTanque;
       invData[rowIdx][10] = nuevoEstado;
       invData[rowIdx][12] = ahora;
+      movimientos.push({
+        id: invData[rowIdx][0], nombre: invData[rowIdx][1], tipo: 'RECEPCION', delta: cant, stock: nuevoStock,
+        referencia: idRecepcion, detalle: nombreTanque
+      });
     } else {
       // PRODUCTO NUEVO: REGISTRAR EN INVENTARIO
-      const nuevoId = artId || generarId('PROD');
+      // (si el ID enviado pertenece a un producto eliminado, se genera uno nuevo para no duplicar IDs)
+      const nuevoId = (artId && !todosLosIds.has(artId)) ? artId : generarId('PROD');
       art.id = nuevoId;
+      todosLosIds.add(nuevoId);
       const estado = cant === 0 ? 'Agotado' : (cant <= 3 ? 'Stock Bajo' : 'En Stock');
       const newRowIdx = invData.length;
       invData.push([
@@ -1549,6 +1600,10 @@ function registrarRecepcionTanque(rec) {
       ]);
       idMap.set(nuevoId, newRowIdx);
       if (artNom) nomMap.set(artNom, newRowIdx);
+      movimientos.push({
+        id: nuevoId, nombre: art.nombre, tipo: 'RECEPCION', delta: cant, stock: cant,
+        referencia: idRecepcion, detalle: nombreTanque + ' (producto nuevo)'
+      });
     }
   });
 
@@ -1570,6 +1625,7 @@ function registrarRecepcionTanque(rec) {
     notas,
     JSON.stringify(rec.articulos)
   ]);
+  registrarMovimientos(movimientos);
 
   return {
     status: 'success',
@@ -1833,214 +1889,551 @@ function purgarTodasLasHojas(confirmacion) {
     return { status: 'error', message: 'Acción rechazada: código de confirmación requerido para purgar todas las hojas.' };
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheetsToPurge = [SHEETS.INVENTARIO, SHEETS.VENTAS, SHEETS.RECEPCIONES, SHEETS.COBROS];
+  const sheetsToPurge = [SHEETS.INVENTARIO, SHEETS.VENTAS, SHEETS.RECEPCIONES, SHEETS.COBROS, 'AJUSTES'];
   sheetsToPurge.forEach(name => {
     const s = ss.getSheetByName(name);
     if (s && s.getLastRow() > 1) {
       s.deleteRows(2, s.getLastRow() - 1);
     }
   });
+  // El kardex y el diagnóstico se regeneran desde cero
+  [HOJA_MOVIMIENTOS, HOJA_DIAGNOSTICO].forEach(name => {
+    const s = ss.getSheetByName(name);
+    if (s) ss.deleteSheet(s);
+  });
   return { status: 'success', message: 'Todas las tablas de datos han sido limpiadas a 0 en Google Sheets.' };
 }
 
 /**
- * Autoconciliación y Reparación Integral de Inventario:
- * 1. Calcula la sumatoria histórica de unidades recibidas en todas las recepciones válidas.
- * 2. Descuenta las ventas completadas o pendientes (no canceladas) para cada producto.
- * 3. Corrige cualquier stock que haya sido disminuido o sobreescrito accidentalmente.
- * 4. Inserta productos faltantes que existan en recepciones pero falten en Inventario.
- * 5. Fusiona registros duplicados en el inventario.
+ * =========================================================================
+ * KARDEX: REGISTRO DE MOVIMIENTOS DE INVENTARIO
+ * =========================================================================
+ * Cada cambio de stock queda en la hoja "Movimientos" con su tipo, cantidad (+/-),
+ * stock resultante y referencia (venta, tanque…). Al crear la hoja se registra el
+ * SALDO_INICIAL de cada producto, de modo que la suma de los movimientos de un
+ * producto debe ser siempre igual a su stock en Inventario.
  */
-function conciliarInventarioConRecepciones() {
-  const invSheet = getSheet(SHEETS.INVENTARIO);
-  const invData = invSheet.getDataRange().getValues();
-  const recSheet = getSheet(SHEETS.RECEPCIONES);
-  const recData = recSheet.getDataRange().getValues();
-  const venSheet = getSheet(SHEETS.VENTAS);
-  const venData = venSheet.getDataRange().getValues();
+const HOJA_MOVIMIENTOS = 'Movimientos';
+
+function estadoPorStock(cantidad, stockMin) {
+  return cantidad <= 0 ? 'Agotado' : (cantidad <= stockMin ? 'Stock Bajo' : 'En Stock');
+}
+
+function hojaMovimientos() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(HOJA_MOVIMIENTOS);
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet(HOJA_MOVIMIENTOS);
+  sheet.getRange(1, 1, 1, 9).setValues([[
+    'ID Movimiento', 'Fecha', 'ID Producto', 'Producto', 'Tipo', 'Cantidad (+/-)', 'Stock Resultante', 'Referencia', 'Detalle'
+  ]]);
+  estilarCabecera(sheet, 9, '#0B132B', '#D4AF37');
+  sheet.setFrozenRows(1);
+
+  const inv = getSheet(SHEETS.INVENTARIO).getDataRange().getValues();
   const ahora = new Date();
-
-  const norm = str => String(str || '').replace(/\s+/g, ' ').trim().toLowerCase();
-
-  // 1. Calcular total vendido por producto
-  const ventasMap = new Map();
-  for (let v = 1; v < venData.length; v++) {
-    const estado = String(venData[v][13] || '').trim();
-    if (estado !== 'Cancelada') {
-      const artNom = norm(venData[v][3]);
-      const cant = parseInt(venData[v][5]) || 0;
-      if (artNom) {
-        ventasMap.set(artNom, (ventasMap.get(artNom) || 0) + cant);
-      }
-    }
+  const filas = [];
+  for (let i = 1; i < inv.length; i++) {
+    const id = String(inv[i][0] || '').trim();
+    if (!id || String(inv[i][10]) === 'Eliminado') continue;
+    const cant = parseInt(inv[i][4]) || 0;
+    filas.push([generarId('MOV'), ahora, id, String(inv[i][1] || ''), 'SALDO_INICIAL', cant, cant, '', 'Stock existente al activar el registro de movimientos']);
   }
+  if (filas.length) sheet.getRange(2, 1, filas.length, 9).setValues(filas);
+  return sheet;
+}
 
-  // 1b. Calcular ajustes manuales por producto (hoja AJUSTES si existe)
-  const ajustesMap = new Map();
-  try {
-    const ajSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('AJUSTES');
-    if (ajSheet) {
-      const ajData = ajSheet.getDataRange().getValues();
-      for (let a = 1; a < ajData.length; a++) {
-        const artNom = norm(ajData[a][2]); // Columna C: nombre producto
-        const delta = parseInt(ajData[a][4]) || 0; // Columna E: delta (+/-)
-        if (artNom) {
-          ajustesMap.set(artNom, (ajustesMap.get(artNom) || 0) + delta);
-        }
-      }
-    }
-  } catch (e) {
-    // La hoja AJUSTES es opcional, si no existe se ignora
-  }
+/**
+ * movimientos: [{ id, nombre, tipo, delta, stock, referencia, detalle }]
+ * Se escriben en un solo bloque. Los movimientos con delta 0 se omiten.
+ */
+function registrarMovimientos(movimientos) {
+  const lista = (movimientos || []).filter(m => m && (parseInt(m.delta) || 0) !== 0);
+  if (!lista.length) return;
+  const sheet = hojaMovimientos();
+  const ahora = new Date();
+  const filas = lista.map(m => [
+    generarId('MOV'), ahora, String(m.id), String(m.nombre || ''), m.tipo,
+    parseInt(m.delta) || 0, parseInt(m.stock) || 0, String(m.referencia || ''), String(m.detalle || '')
+  ]);
+  sheet.getRange(sheet.getLastRow() + 1, 1, filas.length, 9).setValues(filas);
+}
 
-  // 2. Calcular total recibido por producto
-  const recepcionesMap = new Map();
-  const metaMap = new Map();
+/**
+ * =========================================================================
+ * DIAGNÓSTICO Y CORRECCIÓN DE INVENTARIO
+ * =========================================================================
+ * Reemplaza la antigua "conciliación automática", que podía duplicar productos
+ * (recreaba los eliminados o renombrados) e inflar el stock. El diagnóstico NO
+ * modifica el inventario: genera la hoja "Diagnóstico Inventario" con propuestas,
+ * y solo se aplican las filas que el administrador marca.
+ *
+ * Stock justificado de un producto (o grupo de duplicados) =
+ *     recibido en tanques (sin contar tanques registrados dos veces)
+ *   − vendido (ventas no anuladas, por ID de producto)
+ *   + ajustes manuales (hoja AJUSTES histórica, sin anulaciones; y movimientos ALTA/AJUSTE/EDICION)
+ */
+const HOJA_DIAGNOSTICO = 'Diagnóstico Inventario';
+const VENTANA_TANQUE_DUPLICADO_MS = 30 * 60 * 1000;
+const COLUMNAS_DIAGNOSTICO = [
+  'Aplicar', 'Tipo', 'ID', 'Nombre', 'Grupo (ID principal)', 'Stock actual', 'Recibido en tanques',
+  'Vendido', 'Ajustes', 'Stock justificado', 'Diferencia', 'Confianza', 'Acción propuesta', 'Nuevo stock', 'Explicación'
+];
 
-  for (let r = 1; r < recData.length; r++) {
-    const rawArticulos = recData[r][8];
-    const nombreTanque = String(recData[r][2] || 'Tanque Importado').replace(/\s+/g, ' ').trim();
-    if (!rawArticulos) continue;
+function normalizarNombre(str) {
+  return String(str || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
 
-    let items = [];
-    try {
-      items = JSON.parse(rawArticulos);
-    } catch(e) {
-      continue;
-    }
+function diagnosticarInventario(escribirHoja) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const norm = normalizarNombre;
 
-    items.forEach(item => {
-      const nom = String(item.nombre || '').trim();
-      if (!nom || nom.toUpperCase().includes('PRUEBA')) return;
-      const nomKey = norm(nom);
-      const cant = parseInt(item.cantidad) || 0;
-
-      recepcionesMap.set(nomKey, (recepcionesMap.get(nomKey) || 0) + cant);
-      if (!metaMap.has(nomKey)) {
-        const tasaConfig = (typeof obtenerConfiguracion === 'function') ? (parseFloat(obtenerConfiguracion().TASA_CAMBIO_USD_DOP) || 60.50) : 60.50;
-        metaMap.set(nomKey, {
-          nombre: nom,
-          categoria: item.categoria || 'Variedades',
-          costo_usd: parseFloat(item.costo_usd) || 0,
-          costo_dop: parseFloat(item.costo_dop) || ((parseFloat(item.costo_usd) || 0) * tasaConfig),
-          precio_venta_dop: parseFloat(item.precio_venta_dop) || 0,
-          ubicacion: nombreTanque
-        });
-      }
+  // 1. Productos activos
+  const inv = getSheet(SHEETS.INVENTARIO).getDataRange().getValues();
+  const productos = new Map();
+  for (let i = 1; i < inv.length; i++) {
+    const id = String(inv[i][0] || '').trim();
+    if (!id || String(inv[i][10]) === 'Eliminado') continue;
+    const fecha = inv[i][11] ? new Date(inv[i][11]).getTime() : NaN;
+    productos.set(id, {
+      id: id,
+      nombre: String(inv[i][1] || ''),
+      clave: norm(inv[i][1]),
+      stock: parseInt(inv[i][4]) || 0,
+      fechaIngreso: isNaN(fecha) ? Number.MAX_SAFE_INTEGER : fecha,
+      restaurado: id.indexOf('PROD-REST-') === 0,
+      creadoPorTanque: String(inv[i][3] || '').indexOf('Tanque:') === 0,
+      vendido: 0,
+      ajustes: 0,
+      tieneAlta: false,
+      kardex: null
     });
   }
 
-  // 3. Mapear inventario existente y detectar duplicados
-  const invMap = new Map();
-  const filasUnicas = [invData[0]]; // Cabecera
-  let filasActualizadas = 0;
-  let nuevosAgregados = 0;
+  // 2. Alias: nombres con los que se conoce cada producto (actual, ventas y tanques con ID)
+  const alias = new Map();
+  const agregarAlias = (nombre, id) => {
+    const k = norm(nombre);
+    if (!k || !productos.has(id)) return;
+    if (!alias.has(k)) alias.set(k, new Set());
+    alias.get(k).add(id);
+  };
+  productos.forEach(p => agregarAlias(p.nombre, p.id));
 
-  for (let i = 1; i < invData.length; i++) {
-    const rowNom = norm(invData[i][1]);
-    if (!rowNom) continue;
-    const rowEstado = String(invData[i][10] || '').trim();
-
-    if (rowEstado === 'Eliminado') {
-      invMap.set(rowNom, -1); // A3 FIX: Marcar expresamente como eliminado para no revivir
-      filasUnicas.push(invData[i].slice());
-      continue;
-    }
-
-    if (invMap.has(rowNom)) {
-      // Duplicado: sumar existencias al primer registro y no incluir fila duplicada
-      const primerIdx = invMap.get(rowNom);
-      if (primerIdx > 0) {
-        filasUnicas[primerIdx][4] = (parseInt(filasUnicas[primerIdx][4]) || 0) + (parseInt(invData[i][4]) || 0);
-      }
-    } else {
-      invMap.set(rowNom, filasUnicas.length);
-      filasUnicas.push(invData[i].slice());
+  // 3. Ventas (por ID de producto)
+  const ven = getSheet(SHEETS.VENTAS).getDataRange().getValues();
+  for (let i = 1; i < ven.length; i++) {
+    const idProd = String(ven[i][2] || '').trim();
+    if (!ven[i][0] || !productos.has(idProd)) continue;
+    agregarAlias(ven[i][3], idProd);
+    if (String(ven[i][13]) !== 'Cancelada') {
+      productos.get(idProd).vendido += parseInt(ven[i][5]) || 0;
     }
   }
 
-  // 4. Actualizar o restaurar existencias
-  recepcionesMap.forEach((totalRecibido, nomKey) => {
-    // Si el producto fue expresamente eliminado por el usuario, no recrearlo
-    if (invMap.get(nomKey) === -1) return;
-
-    const totalVendido = ventasMap.get(nomKey) || 0;
-    const ajuste = ajustesMap.get(nomKey) || 0;
-    const stockCalculado = Math.max(0, totalRecibido - totalVendido + ajuste);
-
-    if (invMap.has(nomKey)) {
-      const rowIdx = invMap.get(nomKey);
-      if (rowIdx > 0) {
-        const stockActual = parseInt(filasUnicas[rowIdx][4]) || 0;
-
-        // Si el stock actual es menor al calculado (por sobreescritura previa), restaurar
-        if (stockActual < stockCalculado) {
-          filasUnicas[rowIdx][4] = stockCalculado;
-          const stockMin = parseInt(filasUnicas[rowIdx][5]) || 3;
-          filasUnicas[rowIdx][10] = stockCalculado === 0 ? 'Agotado' : (stockCalculado <= stockMin ? 'Stock Bajo' : 'En Stock');
-          filasUnicas[rowIdx][12] = ahora;
-          filasActualizadas++;
-        }
-      }
+  // 4. Recepciones y tanques registrados dos veces
+  const recData = getSheet(SHEETS.RECEPCIONES).getDataRange().getValues();
+  const recepciones = [];
+  for (let i = 1; i < recData.length; i++) {
+    if (!recData[i][0]) continue;
+    let articulos = [];
+    try { articulos = JSON.parse(recData[i][8] || '[]') || []; } catch (e) {}
+    const firma = norm(recData[i][2]) + '|' + articulos
+      .map(a => norm(a.nombre) + ':' + (parseInt(a.cantidad) || 0))
+      .sort()
+      .join(';');
+    const fecha = recData[i][1] ? new Date(recData[i][1]).getTime() : 0;
+    recepciones.push({ id: String(recData[i][0]), fecha: fecha, tanque: String(recData[i][2] || ''), total: parseInt(recData[i][4]) || 0, articulos: articulos, firma: firma, duplicadaDe: null });
+    articulos.forEach(a => {
+      if (a && a.id && productos.has(String(a.id))) agregarAlias(a.nombre, String(a.id));
+    });
+  }
+  recepciones.sort((a, b) => a.fecha - b.fecha);
+  const ultimaPorFirma = new Map();
+  recepciones.forEach(r => {
+    const previa = ultimaPorFirma.get(r.firma);
+    if (previa && r.articulos.length && (r.fecha - previa.fecha) <= VENTANA_TANQUE_DUPLICADO_MS) {
+      r.duplicadaDe = previa.id;
     } else {
-      // Producto huérfano en recepciones: agregar a inventario
-      const meta = metaMap.get(nomKey) || {};
-      const stockMin = 3;
-      const estado = stockCalculado === 0 ? 'Agotado' : (stockCalculado <= stockMin ? 'Stock Bajo' : 'En Stock');
-      const nuevoId = generarId('PROD-REST');
-
-      const nuevaFila = [
-        nuevoId,
-        meta.nombre || nomKey.toUpperCase(),
-        meta.categoria || 'Variedades',
-        'Tanque: ' + (meta.ubicacion || 'Tanque Importado'),
-        stockCalculado,
-        stockMin,
-        meta.costo_usd || 0,
-        meta.costo_dop || 0,
-        meta.precio_venta_dop || 0,
-        meta.ubicacion || 'Almacén Principal',
-        estado,
-        ahora,
-        ahora
-      ];
-      invMap.set(nomKey, filasUnicas.length);
-      filasUnicas.push(nuevaFila);
-      nuevosAgregados++;
+      ultimaPorFirma.set(r.firma, r);
     }
   });
 
-  // 5. Guardar inventario en lote atómico
-  if (filasActualizadas > 0 || nuevosAgregados > 0 || filasUnicas.length !== invData.length) {
-    invSheet.clearContents();
-    invSheet.getRange(1, 1, filasUnicas.length, 13).setValues(filasUnicas);
-    estilarCabecera(invSheet, 13, '#0B132B', '#D4AF37');
-    invSheet.setFrozenRows(1);
+  // 5. Grupos de duplicados: productos que comparten algún nombre (actual o histórico)
+  const padre = new Map();
+  const raiz = id => {
+    while (padre.get(id) !== id) {
+      padre.set(id, padre.get(padre.get(id)));
+      id = padre.get(id);
+    }
+    return id;
+  };
+  productos.forEach((p, id) => padre.set(id, id));
+  alias.forEach(ids => {
+    const lista = Array.from(ids);
+    for (let i = 1; i < lista.length; i++) padre.set(raiz(lista[i]), raiz(lista[0]));
+  });
+
+  const grupos = new Map();
+  productos.forEach((p, id) => {
+    const r = raiz(id);
+    if (!grupos.has(r)) grupos.set(r, { miembros: [], recibido: 0 });
+    grupos.get(r).miembros.push(p);
+  });
+  const grupoDe = id => grupos.get(raiz(id));
+
+  // 6. Unidades recibidas por grupo (tanques no duplicados)
+  const sinProducto = new Map();
+  recepciones.forEach(r => {
+    if (r.duplicadaDe) return;
+    r.articulos.forEach(a => {
+      const cant = parseInt(a && a.cantidad) || 0;
+      if (cant <= 0) return;
+      let idProd = a.id && productos.has(String(a.id)) ? String(a.id) : null;
+      if (!idProd) {
+        const ids = alias.get(norm(a.nombre));
+        if (ids && ids.size) idProd = Array.from(ids)[0];
+      }
+      if (idProd) {
+        grupoDe(idProd).recibido += cant;
+      } else {
+        const k = norm(a.nombre);
+        sinProducto.set(k, { nombre: a.nombre, cantidad: ((sinProducto.get(k) || {}).cantidad || 0) + cant });
+      }
+    });
+  });
+
+  // 7. Ajustes históricos (hoja AJUSTES; las anulaciones ya están fuera de "vendido")
+  const ajSheet = ss.getSheetByName('AJUSTES');
+  if (ajSheet) {
+    const aj = ajSheet.getDataRange().getValues();
+    for (let i = 1; i < aj.length; i++) {
+      const idProd = String(aj[i][1] || '').trim();
+      if (!productos.has(idProd)) continue;
+      if (/^(Cancelación|Anulación) de venta/i.test(String(aj[i][6] || ''))) continue;
+      productos.get(idProd).ajustes += parseInt(aj[i][4]) || 0;
+    }
   }
 
+  // 8. Movimientos del kardex: ajustes nuevos y cuadre por producto
+  const movSheet = ss.getSheetByName(HOJA_MOVIMIENTOS);
+  if (movSheet) {
+    const mov = movSheet.getDataRange().getValues();
+    for (let i = 1; i < mov.length; i++) {
+      const idProd = String(mov[i][2] || '').trim();
+      const p = productos.get(idProd);
+      if (!p) continue;
+      const tipo = String(mov[i][4]);
+      const delta = parseInt(mov[i][5]) || 0;
+      if (tipo === 'ALTA' || tipo === 'AJUSTE' || tipo === 'EDICION') p.ajustes += delta;
+      if (tipo === 'ALTA') p.tieneAlta = true;
+      p.kardex = (p.kardex || 0) + delta;
+    }
+  }
+
+  // 9. Filas del diagnóstico
+  const filas = [];
+  const resumen = {
+    productos: productos.size,
+    grupos_duplicados: 0,
+    productos_duplicados: 0,
+    productos_con_exceso: 0,
+    unidades_de_mas: 0,
+    recepciones_duplicadas: 0,
+    diferencias_kardex: 0
+  };
+
+  recepciones.filter(r => r.duplicadaDe).forEach(r => {
+    resumen.recepciones_duplicadas++;
+    filas.push({
+      prioridad: 0,
+      valores: [false, 'TANQUE DUPLICADO', r.id, r.tanque, r.duplicadaDe, '', r.total, '', '', '', '', 'Alta',
+        'ELIMINAR_RECEPCION_DUPLICADA', '',
+        'Mismo tanque y mismos artículos que ' + r.duplicadaDe + ' registrados con menos de 30 min de diferencia. ' +
+        'Solo borra el registro repetido; el stock de más se corrige con las filas de productos.']
+    });
+  });
+
+  grupos.forEach(g => {
+    const miembros = g.miembros.slice().sort((a, b) =>
+      (a.restaurado - b.restaurado) || (a.fechaIngreso - b.fechaIngreso) || (b.vendido - a.vendido));
+    const principal = miembros[0];
+    const actual = miembros.reduce((t, p) => t + p.stock, 0);
+    const vendido = miembros.reduce((t, p) => t + p.vendido, 0);
+    const ajustes = miembros.reduce((t, p) => t + p.ajustes, 0);
+    const tieneAlta = miembros.some(p => p.tieneAlta);
+    const verificable = g.recibido > 0 || tieneAlta;
+    const justificado = g.recibido - vendido + ajustes;
+    const diferencia = actual - justificado;
+    const confianza = !verificable ? 'No verificable'
+      : (miembros.some(p => !p.creadoPorTanque) && !tieneAlta ? 'Revisar' : 'Alta');
+    const notaManual = confianza === 'Revisar'
+      ? ' El producto se creó a mano antes de activar el registro de movimientos: si tenía stock inicial, súmalo en "Nuevo stock".'
+      : '';
+    const notaKardex = p => (p.kardex !== null && p.kardex !== p.stock)
+      ? ' | Movimientos suman ' + p.kardex + ' pero el inventario dice ' + p.stock + ' (¿edición directa en la hoja?).'
+      : '';
+    miembros.forEach(p => { if (p.kardex !== null && p.kardex !== p.stock) resumen.diferencias_kardex++; });
+
+    const filaGrupo = (accion, nuevo, explicacion, prioridad) => ({
+      prioridad: prioridad,
+      valores: [false, 'PRODUCTO', principal.id, principal.nombre, principal.id, principal.stock,
+        g.recibido, vendido, ajustes, verificable ? justificado : '', verificable ? diferencia : '',
+        confianza, accion, nuevo, explicacion + notaManual + notaKardex(principal)]
+    });
+
+    if (miembros.length > 1) {
+      resumen.grupos_duplicados++;
+      resumen.productos_duplicados += miembros.length - 1;
+      const nuevo = verificable ? Math.max(0, justificado) : actual;
+      if (verificable && diferencia > 0) resumen.unidades_de_mas += diferencia;
+      filas.push(filaGrupo('AJUSTAR_STOCK', nuevo,
+        'Producto principal de un grupo de ' + miembros.length + ' registros con el mismo nombre. Stock total del grupo: ' +
+        actual + (verificable ? ' (justificado: ' + justificado + ')' : '') + '. Quedará con ' + nuevo + ' unidades.', 1));
+      miembros.slice(1).forEach(p => {
+        filas.push({
+          prioridad: 1,
+          valores: [false, 'PRODUCTO', p.id, p.nombre, principal.id, p.stock, '', p.vendido, p.ajustes, '', '',
+            confianza, 'ELIMINAR_DUPLICADO', 0,
+            (p.restaurado ? 'Copia creada por la antigua conciliación automática' : 'Registro repetido') +
+            ' de "' + principal.nombre + '". Se da de baja; sus ventas se conservan en el historial.' + notaKardex(p)]
+        });
+      });
+      return;
+    }
+
+    if (verificable && diferencia > 0) {
+      resumen.productos_con_exceso++;
+      resumen.unidades_de_mas += diferencia;
+      filas.push(filaGrupo('AJUSTAR_STOCK', Math.max(0, justificado),
+        'Hay ' + diferencia + ' unidad(es) más de lo que justifican tanques, ventas y ajustes registrados. ' +
+        'Si antes de esta versión cambiaste la cantidad en el formulario del producto, ese cambio no quedó registrado: verifica el conteo físico.', 2));
+    } else {
+      filas.push(filaGrupo('', '',
+        !verificable ? 'Sin tanques ni alta registrada: no se puede verificar.'
+          : (diferencia < 0 ? 'Hay ' + (-diferencia) + ' unidad(es) menos de lo esperado (ventas o mermas no registradas). No se propone subir stock.'
+            : 'Correcto.'), 3));
+    }
+  });
+
+  sinProducto.forEach(info => {
+    filas.push({
+      prioridad: 4,
+      valores: [false, 'RECIBIDO SIN PRODUCTO', '', info.nombre, '', '', info.cantidad, '', '', '', '', '', '', '',
+        'Artículo recibido en tanques que no corresponde a ningún producto activo (probablemente eliminado).']
+    });
+  });
+
+  filas.sort((a, b) => a.prioridad - b.prioridad);
+  const valores = filas.map(f => f.valores);
+  if (escribirHoja) escribirHojaDiagnostico(valores);
+
+  const hallazgos = resumen.productos_duplicados + resumen.productos_con_exceso + resumen.recepciones_duplicadas;
   return {
     status: 'success',
-    restaurados: filasActualizadas,
-    agregados: nuevosAgregados,
-    total_productos: filasUnicas.length - 1,
-    message: (filasActualizadas > 0 || nuevosAgregados > 0)
-      ? `Conciliación exitosa: se restauró el stock de ${filasActualizadas} productos y se añadieron ${nuevosAgregados} productos faltantes.`
-      : 'Inventario 100% íntegro y verificado contra recepciones y ventas.'
+    resumen: resumen,
+    filas: valores,
+    message: hallazgos === 0
+      ? 'Inventario sin duplicados ni excesos detectados (' + resumen.productos + ' productos revisados).'
+      : 'Se detectaron ' + resumen.productos_duplicados + ' producto(s) duplicado(s), ' +
+        resumen.productos_con_exceso + ' producto(s) con stock de más, ' +
+        resumen.recepciones_duplicadas + ' tanque(s) registrados dos veces y ' +
+        resumen.unidades_de_mas + ' unidad(es) por encima de lo justificado. ' +
+        'El administrador puede revisarlo en la hoja "' + HOJA_DIAGNOSTICO + '".'
   };
 }
 
+function escribirHojaDiagnostico(valores) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(HOJA_DIAGNOSTICO);
+  if (!sheet) sheet = ss.insertSheet(HOJA_DIAGNOSTICO);
+  sheet.clear();
+  sheet.getRange(1, 1, 1, COLUMNAS_DIAGNOSTICO.length).setValues([COLUMNAS_DIAGNOSTICO]);
+  estilarCabecera(sheet, COLUMNAS_DIAGNOSTICO.length, '#0B132B', '#D4AF37');
+  sheet.setFrozenRows(1);
+  if (!valores.length) return sheet;
+
+  sheet.getRange(2, 1, valores.length, COLUMNAS_DIAGNOSTICO.length).setValues(valores);
+  // Casillas solo en las filas con acción propuesta (están ordenadas primero)
+  const conAccion = valores.filter(v => v[12]).length;
+  if (conAccion) sheet.getRange(2, 1, conAccion, 1).insertCheckboxes();
+  return sheet;
+}
+
+/**
+ * Aplica las filas marcadas en la hoja de diagnóstico. Crea antes un respaldo en Drive.
+ * Una fila de producto se omite si su stock cambió desde el diagnóstico (p. ej. hubo una venta).
+ */
+function aplicarCorreccionesMarcadas() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName(HOJA_DIAGNOSTICO);
+  if (!hoja) return { status: 'error', message: 'Primero ejecuta "🔍 Diagnosticar Inventario".' };
+
+  const marcadas = hoja.getDataRange().getValues().slice(1).filter(f => f[0] === true && f[12]);
+  if (!marcadas.length) return { status: 'error', message: 'No hay filas marcadas en la columna "Aplicar".' };
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    return { status: 'error', message: 'El sistema está procesando otra operación. Inténtalo de nuevo en unos segundos.' };
+  }
+
+  try {
+    hojaMovimientos();
+    try {
+      crearRespaldoEnDrive();
+    } catch (e) {
+      return { status: 'error', message: 'No se pudo crear el respaldo en Drive; no se aplicó ningún cambio. ' + e };
+    }
+
+    const invSheet = getSheet(SHEETS.INVENTARIO);
+    const inv = invSheet.getDataRange().getValues();
+    const filaPorId = new Map();
+    for (let i = 1; i < inv.length; i++) {
+      if (inv[i][0]) filaPorId.set(String(inv[i][0]).trim(), i);
+    }
+
+    const ahora = new Date();
+    const movimientos = [];
+    const recepcionesABorrar = [];
+    const avisos = [];
+    let aplicadas = 0;
+
+    marcadas.forEach(f => {
+      const accion = String(f[12]);
+      const id = String(f[2]).trim();
+
+      if (accion === 'ELIMINAR_RECEPCION_DUPLICADA') {
+        recepcionesABorrar.push(id);
+        return;
+      }
+
+      const idx = filaPorId.get(id);
+      if (idx === undefined || String(inv[idx][10]) === 'Eliminado') {
+        avisos.push(id + ': ya no está activo');
+        return;
+      }
+      const stockActual = parseInt(inv[idx][4]) || 0;
+      if (f[5] !== '' && stockActual !== (parseInt(f[5]) || 0)) {
+        avisos.push(id + ': su stock cambió desde el diagnóstico (' + f[5] + ' → ' + stockActual + '); vuelve a diagnosticar');
+        return;
+      }
+
+      if (accion === 'ELIMINAR_DUPLICADO') {
+        inv[idx][4] = 0;
+        inv[idx][10] = 'Eliminado';
+        inv[idx][12] = ahora;
+        movimientos.push({ id: id, nombre: inv[idx][1], tipo: 'ELIMINACION', delta: -stockActual, stock: 0,
+          referencia: String(f[4]), detalle: 'Duplicado eliminado desde el diagnóstico (principal: ' + f[4] + ')' });
+        aplicadas++;
+      } else if (accion === 'AJUSTAR_STOCK') {
+        const nuevo = parseInt(f[13]);
+        if (isNaN(nuevo) || nuevo < 0) {
+          avisos.push(id + ': "Nuevo stock" inválido');
+          return;
+        }
+        inv[idx][4] = nuevo;
+        inv[idx][10] = estadoPorStock(nuevo, parseInt(inv[idx][5]) || 3);
+        inv[idx][12] = ahora;
+        movimientos.push({ id: id, nombre: inv[idx][1], tipo: 'CORRECCION', delta: nuevo - stockActual, stock: nuevo,
+          detalle: 'Corrección desde el diagnóstico de inventario' });
+        aplicadas++;
+      } else {
+        avisos.push(id + ': acción desconocida "' + accion + '"');
+      }
+    });
+
+    if (inv.length > 1) invSheet.getRange(1, 1, inv.length, 13).setValues(inv);
+    registrarMovimientos(movimientos);
+
+    if (recepcionesABorrar.length) {
+      const recSheet = getSheet(SHEETS.RECEPCIONES);
+      const rec = recSheet.getDataRange().getValues();
+      const borrar = new Set(recepcionesABorrar);
+      for (let i = rec.length - 1; i >= 1; i--) {
+        if (borrar.has(String(rec[i][0]).trim())) {
+          recSheet.deleteRow(i + 1);
+          aplicadas++;
+        }
+      }
+    }
+
+    const despues = diagnosticarInventario(true);
+    return {
+      status: 'success',
+      aplicadas: aplicadas,
+      avisos: avisos,
+      message: 'Se aplicaron ' + aplicadas + ' corrección(es). Se creó un respaldo en Drive antes de los cambios.' +
+        (avisos.length ? '\n\nOmitidas:\n- ' + avisos.join('\n- ') : '') +
+        '\n\nNuevo diagnóstico: ' + despues.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Elimina una recepción de tanque y descuenta del inventario las unidades que ingresó.
+ * Si parte de esas unidades ya se vendió, el stock queda en 0 y se informa el faltante.
+ */
 function eliminarRecepcion(idRecepcion) {
   if (!idRecepcion) return { status: 'error', message: 'ID de recepción requerido' };
   const recSheet = getSheet(SHEETS.RECEPCIONES);
   const rows = recSheet.getDataRange().getValues();
+  let filaRec = -1;
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][0]).trim() === String(idRecepcion).trim()) {
-      recSheet.deleteRow(i + 1);
-      // A4 FIX: Reconciliar inventario automáticamente para deducir el stock del tanque eliminado
-      conciliarInventarioConRecepciones();
-      return { status: 'success', message: 'Recepción ' + idRecepcion + ' eliminada y existencias de inventario recalculadas exitosamente' };
+      filaRec = i;
+      break;
     }
   }
-  return { status: 'error', message: 'Recepción no encontrada: ' + idRecepcion };
-}
+  if (filaRec < 0) return { status: 'error', message: 'Recepción no encontrada: ' + idRecepcion };
 
+  let articulos = [];
+  try { articulos = JSON.parse(rows[filaRec][8] || '[]') || []; } catch (e) {}
+
+  const invSheet = getSheet(SHEETS.INVENTARIO);
+  const inv = invSheet.getDataRange().getValues();
+  const idMap = new Map();
+  const nomMap = new Map();
+  for (let i = 1; i < inv.length; i++) {
+    if (String(inv[i][10]) === 'Eliminado') continue;
+    const id = String(inv[i][0] || '').trim();
+    if (id) idMap.set(id, i);
+    const k = normalizarNombre(inv[i][1]);
+    if (k && !nomMap.has(k)) nomMap.set(k, i);
+  }
+
+  const ahora = new Date();
+  const movimientos = [];
+  const faltantes = [];
+  articulos.forEach(a => {
+    const cant = parseInt(a && a.cantidad) || 0;
+    if (cant <= 0) return;
+    const idx = (a.id && idMap.has(String(a.id))) ? idMap.get(String(a.id)) : nomMap.get(normalizarNombre(a.nombre));
+    if (idx === undefined) {
+      faltantes.push(a.nombre + ': producto no activo (' + cant + ' u.)');
+      return;
+    }
+    const actual = parseInt(inv[idx][4]) || 0;
+    const quitar = Math.min(actual, cant);
+    if (quitar < cant) faltantes.push(inv[idx][1] + ': solo había ' + actual + ' de ' + cant + ' u.');
+    const nuevo = actual - quitar;
+    inv[idx][4] = nuevo;
+    inv[idx][10] = estadoPorStock(nuevo, parseInt(inv[idx][5]) || 3);
+    inv[idx][12] = ahora;
+    movimientos.push({ id: inv[idx][0], nombre: inv[idx][1], tipo: 'REVERSION_RECEPCION', delta: -quitar, stock: nuevo,
+      referencia: idRecepcion, detalle: 'Tanque eliminado: ' + rows[filaRec][2] });
+  });
+
+  if (inv.length > 1) invSheet.getRange(1, 1, inv.length, 13).setValues(inv);
+  registrarMovimientos(movimientos);
+  recSheet.deleteRow(filaRec + 1);
+
+  return {
+    status: 'success',
+    faltantes: faltantes,
+    message: 'Recepción ' + idRecepcion + ' eliminada y sus unidades descontadas del inventario.' +
+      (faltantes.length ? ' No se pudo descontar todo: ' + faltantes.join('; ') : '')
+  };
+}

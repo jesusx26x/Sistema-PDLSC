@@ -568,117 +568,6 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     return { success: failed === 0, processed, pending: remaining };
   }
 
-  function autoConciliarInventarioConRecepciones(data, shouldEnqueue = false) {
-    if (!data || !data.recepciones || !data.inventario || !Array.isArray(data.inventario) || data.inventario.length === 0) {
-      return { conciliados: 0 };
-    }
-    const norm = str => String(str || '').replace(/\s+/g, ' ').trim().toLowerCase();
-
-    // 1. Mapear inventario existente por ID y por nombre normalizado
-    const invMap = new Map();
-    data.inventario.forEach(p => {
-      const k = norm(p.nombre);
-      if (k && !invMap.has(k)) invMap.set(k, p);
-      if (p.id) invMap.set(String(p.id).trim(), p);
-    });
-
-    // 2. Mapear ventas no canceladas para descontar del total recibido
-    const ventasMap = new Map();
-    if (Array.isArray(data.ventas)) {
-      data.ventas.forEach(v => {
-        if (v && v.estado !== 'Cancelada') {
-          const k = norm(v.nombre_articulo);
-          if (k) {
-            ventasMap.set(k, (ventasMap.get(k) || 0) + (parseInt(v.cantidad) || 0));
-          }
-        }
-      });
-    }
-
-    // 3. Mapear sumatoria histórica de recepciones por producto
-    const recMap = new Map();
-    const metaMap = new Map();
-
-    data.recepciones.forEach(r => {
-      if (!r || !r.articulos || !Array.isArray(r.articulos)) return;
-      if (r.nombre_tanque && r.nombre_tanque.toUpperCase().includes('TEST')) return;
-
-      r.articulos.forEach(art => {
-        const nom = String(art.nombre || '').trim();
-        if (!nom || nom.toUpperCase().includes('PRUEBA')) return;
-        const nomKey = norm(nom);
-        const cant = parseInt(art.cantidad) || 0;
-
-        recMap.set(nomKey, (recMap.get(nomKey) || 0) + cant);
-        if (!metaMap.has(nomKey)) {
-          metaMap.set(nomKey, {
-            nombre: nom,
-            categoria: art.categoria || 'Variedades',
-            costo_usd: parseFloat(art.costo_usd) || 0,
-            costo_dop: parseFloat(art.costo_dop) || ((parseFloat(art.costo_usd) || 0) * (parseFloat(r.tasa_cambio) || 60.50)),
-            precio_venta_dop: parseFloat(art.precio_venta_dop) || 0,
-            ubicacion: r.nombre_tanque || 'Almacén Principal'
-          });
-        }
-      });
-    });
-
-    let conciliados = 0;
-    const ahora = new Date().toLocaleString();
-
-    // 4. Auditar cada producto recibido: reparar si su stock fue sobreescrito o crear si falta
-    recMap.forEach((totalRecibido, nomKey) => {
-      const totalVendido = ventasMap.get(nomKey) || 0;
-      const stockEsperado = Math.max(0, totalRecibido - totalVendido);
-
-      const existing = invMap.get(nomKey);
-      if (existing) {
-        // Si el stock actual en memoria o nube es menor al físicamente esperado, restaurarlo
-        if (existing.cantidad < stockEsperado) {
-          existing.cantidad = stockEsperado;
-          const min = parseInt(existing.stock_minimo) || 3;
-          existing.estado = stockEsperado === 0 ? 'Agotado' : (stockEsperado <= min ? 'Stock Bajo' : 'En Stock');
-          existing.fecha_actualizacion = ahora;
-          if (shouldEnqueue) {
-            enqueueOutbox('saveProduct', existing);
-          }
-          conciliados++;
-        }
-      } else {
-        // Producto huérfano en recepciones que falta en inventario: recrearlo
-        const meta = metaMap.get(nomKey) || {};
-        const nuevoProd = {
-          id: generarId('PROD-REST'),
-          nombre: meta.nombre || nomKey.toUpperCase(),
-          categoria: meta.categoria || 'Variedades',
-          descripcion: 'Tanque: ' + (meta.ubicacion || 'Tanque Importado'),
-          cantidad: stockEsperado,
-          stock_minimo: 3,
-          costo_usd: meta.costo_usd || 0,
-          costo_dop: meta.costo_dop || 0,
-          precio_venta_dop: meta.precio_venta_dop || 0,
-          ubicacion: meta.ubicacion || 'Almacén Principal',
-          estado: stockEsperado === 0 ? 'Agotado' : (stockEsperado <= 3 ? 'Stock Bajo' : 'En Stock'),
-          fecha_ingreso: ahora,
-          fecha_actualizacion: ahora
-        };
-        data.inventario.unshift(nuevoProd);
-        invMap.set(nomKey, nuevoProd);
-        if (shouldEnqueue) {
-          enqueueOutbox('saveProduct', nuevoProd);
-        }
-        conciliados++;
-      }
-    });
-
-    if (conciliados > 0) {
-      recalcularMetricasLocales(data);
-      setCachedData(data);
-    }
-
-    return { conciliados };
-  }
-
   async function apiGet(action, extraParams = {}) {
     const cfg = getConfig();
     if (!cfg.isConfigured) {
@@ -1272,11 +1161,7 @@ return {
       lastFetchAllTimestamp = now;
       inFlightFetchAll = (async () => {
         try {
-          const res = await apiGet('getAllData');
-          if (res && res.status === 'success' && res.data) {
-            autoConciliarInventarioConRecepciones(res.data, true);
-          }
-          return res;
+          return await apiGet('getAllData');
         } finally {
           inFlightFetchAll = null;
         }
@@ -1298,7 +1183,6 @@ return {
     // Confiabilidad, Cola Outbox y Autoconciliación
     flushOutbox,
     getPendingOutboxCount: () => getOutbox().length,
-    autoConciliarInventarioConRecepciones,
     reconcileWithCloud: () => apiPost('reconcileInventory', {}),
     resetSystemData: (confirmacion) => apiPost('resetAllData', { confirmacion: confirmacion || '' }),
     getDeadLetterQueue,

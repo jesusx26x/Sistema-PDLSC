@@ -65,6 +65,15 @@ Los códigos (C1, A3, M5…) refieren a los hallazgos de esa auditoría.
 - Ningún ajuste, anulación ni recepción revive un producto `Eliminado` sin intención explícita.
 - Conciliación solo bajo demanda y con vista previa de cambios.
 
+**Implementado:**
+- Cliente: eliminada `autoConciliarInventarioConRecepciones` (origen de los `PROD-REST-…`, de productos eliminados/renombrados que reaparecían y de mermas revertidas).
+- Backend: kardex en la hoja `Movimientos` con `SALDO_INICIAL` al activarse; todas las operaciones de stock registran su movimiento. Ya no se escribe `AJUSTES`.
+- Backend: un producto `Eliminado` no se revive (venta, ajuste, edición, anulación y tanque por nombre o ID); un tanque con el ID de un eliminado crea un producto con ID nuevo.
+- Backend: `eliminarRecepcion` descuenta las unidades del tanque (con aviso si ya se vendieron).
+- Backend: `diagnosticarInventario()` reemplaza a `conciliarInventarioConRecepciones()`. No modifica nada; agrupa duplicados por nombre actual e histórico (ventas y tanques), excluye tanques registrados dos veces, no cuenta dos veces las anulaciones y propone acciones en la hoja `Diagnóstico Inventario`.
+- Backend: `aplicarCorreccionesMarcadas()` aplica solo filas marcadas, con respaldo previo en Drive, lock, y omite filas cuyo stock cambió desde el diagnóstico.
+- Despliegue: backend y frontend deben publicarse juntos (el frontend anterior seguía recreando copias); diagnosticar después de que los dispositivos carguen la versión nueva (`CACHE_NAME` v4).
+
 ## Fase 4 — Robustez de la cola y sincronización (A2, A5, A6, A7, M7) · 🟠
 
 - Distinguir fallo de red (reintentar) de rechazo de negocio (sacar del outbox, revertir el cambio local, mostrar el error).
@@ -99,7 +108,7 @@ Los códigos (C1, A3, M5…) refieren a los hallazgos de esa auditoría.
 |---|---|
 | 1 — Credenciales y sesiones | ✅ Desplegado (pendiente: regenerar el manual PDF sin credenciales) |
 | 2 — Idempotencia e IDs | ✅ Desplegado |
-| 3 — Conciliación | ⏳ Pendiente |
+| 3 — Conciliación | 🟡 Código listo y probado — pendiente de desplegar y limpiar datos |
 | 4 — Cola y sincronización | ⏳ Pendiente |
 | 5 — Reglas de negocio | ⏳ Pendiente |
 | 6 — Métricas y fechas | ⏳ Pendiente |

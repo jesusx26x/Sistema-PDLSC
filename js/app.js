@@ -3275,8 +3275,9 @@ const ThorApp = (function() {
 
       // 2. Vaciar cola Outbox si hay pendientes
       await ThorAPI.flushOutbox();
-      // 3. Solicitar autoconciliación en la nube
-      try { await ThorAPI.reconcileWithCloud(); } catch (_) {}
+      // 3. Diagnóstico en la nube (solo lectura: detecta duplicados y excesos, no modifica el inventario)
+      let diagnostico = null;
+      try { diagnostico = await ThorAPI.reconcileWithCloud(); } catch (_) {}
       // 4. Descargar datos frescos
       const dataRes = await ThorAPI.fetchAllData(true);
 
@@ -3287,7 +3288,13 @@ const ThorApp = (function() {
         state.cobros = dataRes.data.cobros || [];
         ThorAPI.setCachedData(dataRes.data);
         renderAll();
-        Sonner.success(`Diagnóstico 100% íntegro: ${state.inventory.length} productos y ${state.receptions.length} tanques verificados en Google Sheets.`);
+        const r = diagnostico && diagnostico.resumen;
+        const hallazgos = r ? (r.productos_duplicados + r.productos_con_exceso + r.recepciones_duplicadas) : 0;
+        if (hallazgos > 0) {
+          Sonner.warning(diagnostico.message, 12000);
+        } else {
+          Sonner.success(`Diagnóstico 100% íntegro: ${state.inventory.length} productos y ${state.receptions.length} tanques verificados en Google Sheets.`);
+        }
       } else {
         Sonner.warning('Diagnóstico completado en modo local.');
       }

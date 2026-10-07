@@ -89,10 +89,20 @@ Para que los cambios de suma acumulativa atómica y autoconciliación queden 100
 
 ---
 
-## 🔄 Menú de Conciliación en Google Sheets (En caso de dudas de stock)
+## 🔍 Diagnóstico y Corrección de Inventario (duplicados y stock de más)
 
-Si en algún momento Pamela desea verificar o auditar su inventario:
-1. Abre la hoja de cálculo de Google Sheets.
-2. En la barra superior, haz clic en:  
-   👉 **`🌸 Thor Essence Admin`** > **`🔄 Reconciliar y Reparar Stock de Inventario`**.
-3. El sistema auditará automáticamente todas las recepciones históricas contra las ventas registradas y corregirá cualquier discrepancia al instante sin perder ni una sola unidad.
+La antigua "conciliación automática" se eliminó: podía duplicar productos e inflar el stock. Ahora el sistema **nunca corrige el inventario por su cuenta**; propone y el administrador decide.
+
+1. En Google Sheets: **`🌸 Thor Essence Admin`** > **`🔍 Diagnosticar Inventario (duplicados y excesos)`**.
+2. Se abre la hoja **`Diagnóstico Inventario`**. Las filas con acción propuesta aparecen primero:
+   - **`ELIMINAR_DUPLICADO`**: copia de otro producto (incluye las `PROD-REST-…` y productos renombrados). Se da de baja; sus ventas quedan en el historial.
+   - **`AJUSTAR_STOCK`**: el stock supera lo que justifican tanques − ventas + ajustes. La columna **Nuevo stock** trae la propuesta y **se puede editar** con el conteo físico.
+   - **`ELIMINAR_RECEPCION_DUPLICADA`**: tanque registrado dos veces. Solo borra el registro repetido.
+   - Confianza **Revisar**: el producto se creó a mano antes de esta versión y pudo tener stock inicial no registrado. Verificar antes de marcar.
+3. Marca la casilla **Aplicar** solo en las filas que quieras corregir.
+4. **`🌸 Thor Essence Admin`** > **`✅ Aplicar Correcciones Marcadas del Diagnóstico`**. Se crea antes un respaldo en Drive (`Respaldos Thor Essence`). Si el stock de un producto cambió desde el diagnóstico (por ejemplo, hubo una venta), esa fila se omite y hay que volver a diagnosticar.
+
+El botón de diagnóstico de la app ejecuta el mismo análisis (sin aplicar nada) y avisa si hay hallazgos.
+
+### 📒 Hoja `Movimientos` (kardex)
+Cada cambio de stock queda registrado: `SALDO_INICIAL`, `ALTA`, `EDICION`, `AJUSTE`, `VENTA`, `ANULACION`, `RECEPCION`, `REVERSION_RECEPCION`, `ELIMINACION` y `CORRECCION`, con la cantidad (+/−), el stock resultante y la referencia (venta, tanque). La suma de los movimientos de un producto debe ser igual a su stock; el diagnóstico avisa si no coincide (por ejemplo, por una edición directa en la hoja Inventario). **No edites ni borres esta hoja.** La hoja `AJUSTES` queda como historial y ya no se escribe.
