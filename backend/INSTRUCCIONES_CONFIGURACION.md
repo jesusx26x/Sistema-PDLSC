@@ -116,3 +116,15 @@ Cada cambio de stock queda registrado: `SALDO_INICIAL`, `ALTA`, `EDICION`, `AJUS
 
 **Edición de productos:** al editar un producto se guardan nombre, precio, costo, categoría, etc., pero **la cantidad no se sobrescribe**. Si se cambia la cantidad en el formulario, la app registra la diferencia como un ajuste (queda en `Movimientos`). Así, dos dispositivos con datos desactualizados no se pisan las ventas.
 
+## 🗂️ Hojas internas (ocultas) — no editar ni borrar
+
+| Hoja | Para qué sirve |
+|:---|:---|
+| `Operaciones` | Registro de operaciones ya aplicadas: evita duplicar ventas, tanques o abonos si un teléfono reenvía una operación. |
+| `Alias` | Cuando dos equipos crean el mismo producto (o un tanque sin conexión trae un producto que ya existía), guarda "ID del dispositivo → ID real" para que las ventas posteriores caigan en el producto correcto. |
+| `Movimientos` | Kardex: cada entrada y salida de stock. |
+
+**Productos con el mismo nombre:** el sistema no permite dos productos activos con el mismo nombre (sin distinguir mayúsculas, acentos ni espacios repetidos). Si se crea uno repetido, las unidades se suman al existente.
+
+**Historial en el teléfono:** la app descarga el detalle de las ventas de los últimos 180 días y los fiados abiertos; los reportes incluyen todo el historial mediante un resumen que calcula el servidor.
+

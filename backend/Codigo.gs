@@ -499,6 +499,7 @@ function validarAcceso(token) {
  */
 
 function doGet(e) {
+  aliasEnMemoria = null;
   try {
     const params = e ? e.parameter : {};
     const action = params.action || 'ping';
@@ -562,6 +563,7 @@ function responderLectura(action) {
 }
 
 function doPost(e) {
+  aliasEnMemoria = null;
   let payload = {};
   if (e && e.postData && e.postData.contents) {
     try {
@@ -755,6 +757,75 @@ function existeIdEnHoja(sheet, id) {
     .findNext();
 }
 
+/**
+ * =========================================================================
+ * ALIAS DE IDS DE PRODUCTO
+ * =========================================================================
+ * Un dispositivo sin conexión puede crear un producto (o recibirlo en un tanque) con un ID
+ * propio cuando ese producto ya existía en la nube con otro ID. El servidor los une por nombre
+ * y registra aquí "ID del dispositivo → ID real", de modo que las ventas, ajustes y ediciones
+ * que lleguen después con el ID del dispositivo se apliquen al producto correcto.
+ */
+const HOJA_ALIAS = 'Alias';
+let aliasEnMemoria = null;
+
+function hojaAlias() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(HOJA_ALIAS);
+  if (!sheet) {
+    sheet = ss.insertSheet(HOJA_ALIAS);
+    sheet.getRange(1, 1, 1, 4).setValues([['ID usado por el dispositivo', 'ID real', 'Fecha', 'Motivo']]);
+    estilarCabecera(sheet, 4, '#0B132B', '#D4AF37');
+    sheet.setFrozenRows(1);
+    sheet.hideSheet();
+  }
+  return sheet;
+}
+
+function mapaAlias() {
+  if (aliasEnMemoria) return aliasEnMemoria;
+  aliasEnMemoria = new Map();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA_ALIAS);
+  if (sheet && sheet.getLastRow() > 1) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues().forEach(f => {
+      const alias = String(f[0] || '').trim();
+      const real = String(f[1] || '').trim();
+      if (alias && real && alias !== real) aliasEnMemoria.set(alias, real);
+    });
+  }
+  return aliasEnMemoria;
+}
+
+/**
+ * Devuelve el ID real de un producto (sigue la cadena de alias; tolera ciclos).
+ */
+function resolverIdProducto(id) {
+  let actual = String(id === undefined || id === null ? '' : id).trim();
+  const mapa = mapaAlias();
+  const vistos = new Set();
+  while (actual && mapa.has(actual) && !vistos.has(actual)) {
+    vistos.add(actual);
+    actual = mapa.get(actual);
+  }
+  return actual;
+}
+
+function registrarAlias(alias, real, motivo) {
+  alias = String(alias || '').trim();
+  real = String(real || '').trim();
+  if (!alias || !real || alias === real) return;
+  const mapa = mapaAlias();
+  if (mapa.get(alias) === real) return;
+  hojaAlias().appendRow([alias, real, new Date(), motivo || '']);
+  mapa.set(alias, real);
+}
+
+function obtenerAliasObjeto() {
+  const obj = {};
+  mapaAlias().forEach((real, alias) => { obj[alias] = resolverIdProducto(real) || real; });
+  return obj;
+}
+
 const HOJA_OPERACIONES = 'Operaciones';
 
 function hojaOperaciones() {
@@ -811,17 +882,49 @@ function registrarOperacionProcesada(opId, action, resultado) {
  * =========================================================================
  */
 
+/**
+ * Días de historial detallado que se envían al dispositivo. Lo anterior viaja como resumen
+ * (totales y productos más vendidos) para que el almacenamiento del navegador no se llene.
+ */
+const VENTANA_HISTORIAL_DIAS = 180;
+
 function obtenerTodosLosDatos() {
   const inventario = obtenerInventario();
   const ventas = obtenerVentas();
   const cobros = obtenerCobros();
+
+  const limite = Utilities.formatDate(new Date(Date.now() - VENTANA_HISTORIAL_DIAS * 86400000), ZONA_HORARIA, 'yyyy-MM-dd');
+  const cobrosVisibles = cobros.filter(c =>
+    (c.estado !== 'Saldada' && c.estado !== 'Cancelada') || String(c.fecha_venta) >= limite);
+  const ventasConCobroVisible = new Set(cobrosVisibles.map(c => c.id_venta));
+
+  const ventasVisibles = [];
+  const historial = { desde: limite, ventas: 0, ingresos_dop: 0, ganancia_dop: 0, por_producto: {} };
+  ventas.forEach(v => {
+    if (String(v.fecha_venta) >= limite || ventasConCobroVisible.has(v.id_venta)) {
+      ventasVisibles.push(v);
+      return;
+    }
+    if (v.estado === 'Cancelada') return;
+    historial.ventas++;
+    historial.ingresos_dop = r2(historial.ingresos_dop + v.total_dop);
+    historial.ganancia_dop = r2(historial.ganancia_dop + v.ganancia_dop);
+    const nombre = v.nombre_articulo || 'Sin Nombre';
+    const acc = historial.por_producto[nombre] || { cantidad: 0, total: 0 };
+    acc.cantidad += v.cantidad;
+    acc.total = r2(acc.total + v.total_dop);
+    historial.por_producto[nombre] = acc;
+  });
+
   return {
     inventario: inventario,
-    ventas: ventas,
+    ventas: ventasVisibles,
     recepciones: obtenerRecepciones(),
-    cobros: cobros,
+    cobros: cobrosVisibles,
     configuracion: obtenerConfiguracion(),
     metricas: calcularMetricasGenerales(inventario, ventas, cobros),
+    historial: historial,
+    alias: obtenerAliasObjeto(),
     // El cliente descarta de su cola local las operaciones que ya están aplicadas aquí
     ops_aplicadas: obtenerOperacionesRecientes(500)
   };
@@ -878,7 +981,8 @@ function guardarOActualizarProducto(prod) {
   const data = sheet.getDataRange().getValues();
   const ahora = new Date();
 
-  const id = String(prod.id || '').trim() || generarId('PROD');
+  const idSolicitado = String(prod.id || '').trim();
+  const id = idSolicitado ? resolverIdProducto(idSolicitado) : generarId('PROD');
   const nombre = String(prod.nombre).trim();
   const categoria = String(prod.categoria || 'Variedades').trim();
   const descripcion = String(prod.descripcion || '').trim();
@@ -923,6 +1027,35 @@ function guardarOActualizarProducto(prod) {
     ]]);
     return { status: 'success', message: 'Producto actualizado exitosamente', id: id, cantidad: cantidadActual };
   } else {
+    // Alta de un producto cuyo nombre ya existe (p. ej. creado en dos equipos sin conexión):
+    // no se crea un duplicado; se suman las unidades al existente y se registra el alias del ID nuevo
+    const clave = normalizarNombre(nombre);
+    for (let i = 1; i < data.length; i++) {
+      if (!data[i][0] || String(data[i][10]) === 'Eliminado' || normalizarNombre(data[i][1]) !== clave) continue;
+      const idExistente = String(data[i][0]);
+      registrarAlias(idSolicitado, idExistente, 'Alta con un nombre que ya existía: "' + nombre + '"');
+      const stockActual = parseInt(data[i][4]) || 0;
+      const nuevoStock = stockActual + cantidad;
+      if (cantidad > 0) {
+        sheet.getRange(i + 1, 5).setValue(nuevoStock);
+        sheet.getRange(i + 1, 11).setValue(estadoPorStock(nuevoStock, stockMinimoDe(data[i][5])));
+        sheet.getRange(i + 1, 13).setValue(ahora);
+        registrarMovimientos([{
+          id: idExistente, nombre: data[i][1], tipo: 'ALTA', delta: cantidad, stock: nuevoStock,
+          referencia: idSolicitado, detalle: 'Alta manual unida al producto existente (mismo nombre)'
+        }]);
+      }
+      return {
+        status: 'success',
+        id: idExistente,
+        unido: true,
+        cantidad: nuevoStock,
+        message: 'Ya existía "' + data[i][1] + '": ' + (cantidad > 0
+          ? 'se sumaron ' + cantidad + ' unidad(es) (total ' + nuevoStock + ') en lugar de crear un duplicado.'
+          : 'no se creó un producto duplicado.')
+      };
+    }
+
     sheet.appendRow([
       id, nombre, categoria, descripcion, cantidad, stockMinimo,
       costoUsd, costoDop, precioVentaDop, ubicacion, estadoPorStock(cantidad, stockMinimo),
@@ -938,6 +1071,7 @@ function guardarOActualizarProducto(prod) {
 
 function eliminarProducto(id) {
   if (!id) return { status: 'error', message: 'ID de producto requerido' };
+  id = resolverIdProducto(id);
   const sheet = getSheet(SHEETS.INVENTARIO);
   const data = sheet.getDataRange().getValues();
 
@@ -967,6 +1101,7 @@ function eliminarProducto(id) {
  */
 function ajustarStockProducto(id, delta, motivo, tipo, referencia) {
   if (!id) return { status: 'error', message: 'ID de producto requerido' };
+  id = resolverIdProducto(id);
   const deltaN = parseInt(delta);
   if (isNaN(deltaN)) return { status: 'error', message: 'Delta de ajuste inválido' };
 
@@ -1023,8 +1158,9 @@ function registrarVenta(venta) {
   let producto = null;
   let filaProd = -1;
 
+  const idArticulo = resolverIdProducto(venta.id_articulo);
   for (let i = 1; i < invData.length; i++) {
-    if (String(invData[i][0]) === String(venta.id_articulo)) {
+    if (String(invData[i][0]) === idArticulo) {
       producto = invData[i];
       filaProd = i + 1;
       break;
@@ -1555,7 +1691,7 @@ function registrarRecepcionTanque(rec) {
     if (c > 0) totalUnidades += c;
   });
 
-  const norm = str => String(str || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const norm = normalizarNombre;
 
   // Flete prorrateado en el costo unitario (Configuracion › PRORRATEAR_FLETE = SI)
   const prorratearFlete = String(obtenerConfiguracion().PRORRATEAR_FLETE || 'NO').trim().toUpperCase() === 'SI';
@@ -1592,7 +1728,8 @@ function registrarRecepcionTanque(rec) {
       costoDop = r2(costoDop + fletePorUnidadUsd * tasaCambio);
     }
     const precioVentaDop = Math.max(0, parseFloat(art.precio_venta_dop) || 0);
-    const artId = String(art.id || '').trim();
+    const artIdOriginal = String(art.id || '').trim();
+    const artId = artIdOriginal ? resolverIdProducto(artIdOriginal) : '';
     const artNom = norm(art.nombre);
 
     let rowIdx = -1;
@@ -1600,6 +1737,11 @@ function registrarRecepcionTanque(rec) {
       rowIdx = idMap.get(artId);
     } else if (artNom && nomMap.has(artNom)) {
       rowIdx = nomMap.get(artNom);
+      // El dispositivo creó este producto con su propio ID: las ventas que haga con ese ID
+      // deben aplicarse al producto real
+      if (artIdOriginal && !todosLosIds.has(artIdOriginal)) {
+        registrarAlias(artIdOriginal, invData[rowIdx][0], 'Tanque ' + idRecepcion + ': unido por nombre con "' + invData[rowIdx][1] + '"');
+      }
     }
 
     if (rowIdx > 0) {
@@ -1947,7 +2089,7 @@ function purgarTodasLasHojas(confirmacion) {
     }
   });
   // El kardex y el diagnóstico se regeneran desde cero
-  [HOJA_MOVIMIENTOS, HOJA_DIAGNOSTICO].forEach(name => {
+  [HOJA_MOVIMIENTOS, HOJA_DIAGNOSTICO, HOJA_ALIAS].forEach(name => {
     const s = ss.getSheetByName(name);
     if (s) ss.deleteSheet(s);
   });
@@ -2039,8 +2181,16 @@ const COLUMNAS_DIAGNOSTICO = [
   'Vendido', 'Ajustes', 'Stock justificado', 'Diferencia', 'Confianza', 'Acción propuesta', 'Nuevo stock', 'Explicación'
 ];
 
+/**
+ * Nombre comparable: sin acentos, sin espacios repetidos y en minúsculas.
+ * "Crema  Coco", "crema coco" y "Créma Coco" son el mismo producto.
+ */
 function normalizarNombre(str) {
-  return String(str || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  return String(str || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 function diagnosticarInventario(escribirHoja) {
@@ -2104,7 +2254,8 @@ function diagnosticarInventario(escribirHoja) {
     const fecha = recData[i][1] ? new Date(recData[i][1]).getTime() : 0;
     recepciones.push({ id: String(recData[i][0]), fecha: fecha, tanque: String(recData[i][2] || ''), total: parseInt(recData[i][4]) || 0, articulos: articulos, firma: firma, duplicadaDe: null });
     articulos.forEach(a => {
-      if (a && a.id && productos.has(String(a.id))) agregarAlias(a.nombre, String(a.id));
+      const idResuelto = a && a.id ? resolverIdProducto(a.id) : '';
+      if (idResuelto && productos.has(idResuelto)) agregarAlias(a.nombre, idResuelto);
     });
   }
   recepciones.sort((a, b) => a.fecha - b.fecha);
@@ -2148,7 +2299,8 @@ function diagnosticarInventario(escribirHoja) {
     r.articulos.forEach(a => {
       const cant = parseInt(a && a.cantidad) || 0;
       if (cant <= 0) return;
-      let idProd = a.id && productos.has(String(a.id)) ? String(a.id) : null;
+      const idResuelto = a.id ? resolverIdProducto(a.id) : '';
+      let idProd = idResuelto && productos.has(idResuelto) ? idResuelto : null;
       if (!idProd) {
         const ids = alias.get(norm(a.nombre));
         if (ids && ids.size) idProd = Array.from(ids)[0];
@@ -2468,7 +2620,8 @@ function eliminarRecepcion(idRecepcion) {
   articulos.forEach(a => {
     const cant = parseInt(a && a.cantidad) || 0;
     if (cant <= 0) return;
-    const idx = (a.id && idMap.has(String(a.id))) ? idMap.get(String(a.id)) : nomMap.get(normalizarNombre(a.nombre));
+    const idReal = a.id ? resolverIdProducto(a.id) : '';
+    const idx = (idReal && idMap.has(idReal)) ? idMap.get(idReal) : nomMap.get(normalizarNombre(a.nombre));
     if (idx === undefined) {
       faltantes.push(a.nombre + ': producto no activo (' + cant + ' u.)');
       return;

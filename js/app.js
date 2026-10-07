@@ -30,7 +30,9 @@ const ThorApp = (function() {
       salesChart: null,
       categoryChart: null
     },
-    tankDraftItems: []
+    tankDraftItems: [],
+    historial: null,          // resumen de ventas anteriores a la ventana detallada (lo envía el servidor)
+    renderPendiente: false    // la sincronización llegó con un formulario abierto
   };
 
   /**
@@ -44,6 +46,12 @@ const ThorApp = (function() {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  // Mismo criterio que el servidor: sin acentos, sin espacios repetidos, en minúsculas
+  function mismoNombre(a, b) {
+    const na = ThorAPI.normalizarNombre(a);
+    return !!na && na === ThorAPI.normalizarNombre(b);
   }
 
   function textoSeguroCsv(valor) {
@@ -99,9 +107,27 @@ const ThorApp = (function() {
     // la app ya la deshizo en local; avisar y refrescar la pantalla
     window.addEventListener('thor:operacion-rechazada', (e) => {
       const d = e.detail || {};
-      Sonner.error(`${d.accion || 'Operación'} no se guardó en la nube: ${d.message || 'rechazada por el servidor'}`, 9000);
+      Sonner.error(`${d.accion || 'Operación'} no se guardó en la nube: ${d.message || 'rechazada por el servidor'}. Queda el detalle en "⚠️ Por revisar".`, 9000);
       cargarDatosDesdeCache();
       if (!hayFormularioAbierto()) renderAll();
+      else state.renderPendiente = true;
+    });
+
+    // Aviso persistente de operaciones rechazadas o en recuperación
+    window.addEventListener('thor:historial-sync', actualizarAvisoRevision);
+    window.addEventListener('thor:outbox-updated', actualizarAvisoRevision);
+    window.addEventListener('thor:almacenamiento-lleno', () => {
+      Sonner.warning('El almacenamiento de este navegador está lleno. La app sigue funcionando, pero conviene liberar espacio o avisar al administrador.', 10000);
+    });
+
+    // Redibujar lo que quedó pendiente en cuanto el usuario termina de escribir
+    document.addEventListener('focusout', () => {
+      setTimeout(() => {
+        if (state.renderPendiente && !hayFormularioAbierto()) {
+          state.renderPendiente = false;
+          renderAll();
+        }
+      }, 0);
     });
 
     // Escucha de actualización de la cola de salida Outbox
@@ -135,6 +161,7 @@ const ThorApp = (function() {
     // Cargar datos locales de inmediato para UI instantánea (0ms de latencia)
     cargarDatosDesdeCache();
     renderAll();
+    actualizarAvisoRevision();
 
     // Auto-autenticación de cortesía en servidor para Pamela (Zero-Config)
     if (!ThorAPI.isAuthenticated()) {
@@ -252,6 +279,7 @@ const ThorApp = (function() {
     state.cobros = cached.cobros || [];
     state.metrics = cached.metricas || {};
     state.config = cached.configuracion || {};
+    state.historial = cached.historial || null;
     state.exchangeRate = ThorAPI.getUsdRate();
 
     actualizarBadgeTasa();
@@ -314,6 +342,7 @@ const ThorApp = (function() {
         state.cobros = cloudCobros;
         state.metrics = res.data.metricas || {};
         state.config = res.data.configuracion || {};
+        state.historial = res.data.historial || null;
 
         ThorAPI.setCachedData(res.data);
 
@@ -321,6 +350,7 @@ const ThorApp = (function() {
         if (!hayFormularioAbierto()) {
           renderAll();
         } else {
+          state.renderPendiente = true;
           console.log('[Sync] Re-render diferido: usuario operando en modal o formulario activo');
         }
 
@@ -1298,6 +1328,18 @@ const ThorApp = (function() {
       ventasPorProducto[nom].total += t;
     });
 
+    const h = state.historial;
+    if (h && h.ventas > 0) {
+      totalIngresos += Number(h.ingresos_dop) || 0;
+      totalGanancia += Number(h.ganancia_dop) || 0;
+      totalCostos += (Number(h.ingresos_dop) || 0) - (Number(h.ganancia_dop) || 0);
+      Object.keys(h.por_producto || {}).forEach(nom => {
+        if (!ventasPorProducto[nom]) ventasPorProducto[nom] = { cantidad: 0, total: 0 };
+        ventasPorProducto[nom].cantidad += Number(h.por_producto[nom].cantidad) || 0;
+        ventasPorProducto[nom].total += Number(h.por_producto[nom].total) || 0;
+      });
+    }
+
     actualizarTexto('repTotalIngresos', `RD$ ${Math.round(totalIngresos).toLocaleString()}`);
     actualizarTexto('repTotalCostos', `RD$ ${Math.round(totalCostos).toLocaleString()}`);
     actualizarTexto('repTotalGanancia', `RD$ ${Math.round(totalGanancia).toLocaleString()}`);
@@ -1345,6 +1387,11 @@ const ThorApp = (function() {
 
   function closeAllModals() {
     document.querySelectorAll('.modal-container').forEach(m => m.classList.add('hidden'));
+    // Si llegaron datos nuevos mientras el formulario estaba abierto, mostrarlos ahora
+    if (state.renderPendiente) {
+      state.renderPendiente = false;
+      renderAll();
+    }
   }
 
   function openNewProductModal(preselectedOrigen = 'local') {
@@ -1411,7 +1458,7 @@ const ThorApp = (function() {
     const badge = document.getElementById('prodMatchBadge');
     const form = document.getElementById('formProduct');
     const cleanVal = (value || '').trim().toLowerCase();
-    const match = cleanVal ? (state.inventory || []).find(p => p.nombre && p.nombre.trim().toLowerCase() === cleanVal) : null;
+    const match = cleanVal ? (state.inventory || []).find(p => mismoNombre(p.nombre, value)) : null;
 
     if (match) {
       if (badge) {
@@ -1588,7 +1635,9 @@ const ThorApp = (function() {
         res = await ThorAPI.adjustStock(finalId, deltaStock, motivoAjuste);
       }
       if (res && res.status === 'success') {
-        if (matchedExistingId && !id) {
+        if (res.unido) {
+          Sonner.info(res.message, 7000);
+        } else if (matchedExistingId && !id) {
           const total = ThorAPI.getCachedData().inventario.find(p => p.id === finalId)?.cantidad ?? '?';
           Sonner.success(`Stock actualizado: Se sumaron ${cantidad} unidades a ${nombre} (Total: ${total} piezas)`);
         } else {
@@ -2228,7 +2277,7 @@ const ThorApp = (function() {
       const cleanNom = (item.nombre || '').trim().toLowerCase();
       const existingMatch = (state.inventory || []).find(p =>
         (item.id && p.id === item.id) ||
-        (cleanNom && p.nombre && p.nombre.trim().toLowerCase() === cleanNom)
+        (cleanNom && mismoNombre(p.nombre, item.nombre))
       );
 
       let badgeHtml = '<span class="tank-item-match-badge"></span>';
@@ -2295,7 +2344,7 @@ const ThorApp = (function() {
     if (field === 'nombre') {
       item.nombre = value;
       const cleanVal = (value || '').trim().toLowerCase();
-      const match = cleanVal ? (state.inventory || []).find(p => p.nombre && p.nombre.trim().toLowerCase() === cleanVal) : null;
+      const match = cleanVal ? (state.inventory || []).find(p => mismoNombre(p.nombre, value)) : null;
       const container = document.getElementById('tankDraftItemsContainer');
       const card = container ? container.querySelector(`[data-temp-id="${tempId}"]`) : null;
 
@@ -2420,7 +2469,7 @@ const ThorApp = (function() {
       item.costo_dop = item.costo_usd * tasa;
 
       const cleanNom = (item.nombre || '').trim().toLowerCase();
-      const match = cleanNom ? (state.inventory || []).find(p => p.nombre && p.nombre.trim().toLowerCase() === cleanNom) : null;
+      const match = cleanNom ? (state.inventory || []).find(p => mismoNombre(p.nombre, item.nombre)) : null;
       if (match) {
         item.id = match.id;
       }
@@ -3296,7 +3345,7 @@ const ThorApp = (function() {
       // 1. Verificar si hay elementos en Dead-Letter Queue (cola de recuperación)
       const dlq = ThorAPI.getDeadLetterQueue ? ThorAPI.getDeadLetterQueue() : [];
       if (dlq && dlq.length > 0) {
-        Sonner.warning(`Atención: Hay ${dlq.length} operación(es) retenida(s) en la cola de recuperación. Usa "Reintentar Recuperación" si deseas re-procesarlas.`, 7000);
+        Sonner.warning(`Atención: Hay ${dlq.length} operación(es) retenida(s) en la cola de recuperación. Ábrelas en "⚠️ Por revisar" para reintentarlas.`, 7000);
       }
 
       // 2. Vaciar cola Outbox si hay pendientes
@@ -3331,21 +3380,78 @@ const ThorApp = (function() {
   }
 
   async function reintentarColaRecuperacion() {
-    const dlq = ThorAPI.getDeadLetterQueue ? ThorAPI.getDeadLetterQueue() : [];
-    if (!dlq || dlq.length === 0) {
+    const pendientes = ThorAPI.getDeadLetterQueue().length;
+    if (!pendientes) {
       Sonner.info('No hay operaciones pendientes en la cola de recuperación.');
       return;
     }
-    const count = dlq.length;
-    dlq.forEach(item => {
-      item.retries = 0;
-      // Conservar el opId original: si el servidor ya la aplicó, no se duplica
-      if (ThorAPI.enqueueOutbox) ThorAPI.enqueueOutbox(item.action, item.data, item.opId);
-    });
-    if (ThorAPI.clearDeadLetterQueue) ThorAPI.clearDeadLetterQueue();
-    Sonner.success(`Se re-encolaron ${count} operaciones para sincronizar con la nube.`);
-    await ThorAPI.flushOutbox();
+    if (!navigator.onLine) {
+      Sonner.warning('Se necesita conexión a internet para reintentar.');
+      return;
+    }
+    Sonner.info(`Reintentando ${pendientes} operación(es)...`);
+    const r = await ThorAPI.reintentarRecuperacion();
+    const quedan = ThorAPI.getDeadLetterQueue().length;
+    if (quedan === 0 && r.resultado && r.resultado.pending === 0) {
+      Sonner.success(`Listo: ${r.reintentadas} operación(es) sincronizadas con la nube.`);
+    } else {
+      Sonner.warning('Algunas operaciones siguen pendientes. Se volverán a intentar automáticamente.');
+    }
     await sincronizarConNube(false);
+    renderHistorialSync();
+  }
+
+  /**
+   * Aviso "⚠️ N por revisar": operaciones rechazadas (no vistas) y en recuperación.
+   */
+  function actualizarAvisoRevision() {
+    const btn = document.getElementById('btnRevisionSync');
+    if (!btn) return;
+    const n = ThorAPI.contarPorRevisar();
+    btn.classList.toggle('hidden', n === 0);
+    actualizarTexto('btnRevisionSyncNum', String(n));
+  }
+
+  function abrirHistorialSync() {
+    renderHistorialSync();
+    const modal = document.getElementById('modalSyncLog');
+    if (modal) modal.classList.remove('hidden');
+  }
+
+  function cerrarHistorialSync() {
+    ThorAPI.marcarHistorialVisto('rechazada');
+    const modal = document.getElementById('modalSyncLog');
+    if (modal) modal.classList.add('hidden');
+    actualizarAvisoRevision();
+  }
+
+  function renderHistorialSync() {
+    const cont = document.getElementById('syncLogList');
+    const bloqueRecuperacion = document.getElementById('syncLogRecuperacion');
+    if (!cont) return;
+
+    const dlq = ThorAPI.getDeadLetterQueue();
+    if (bloqueRecuperacion) {
+      bloqueRecuperacion.classList.toggle('hidden', dlq.length === 0);
+      actualizarTexto('syncLogRecuperacionTexto',
+        `${dlq.length} operación(es) no pudieron subir por un error del servidor. Están guardadas en este equipo.`);
+    }
+
+    const lista = ThorAPI.getHistorialSync();
+    if (!lista.length) {
+      cont.innerHTML = `<p class="text-xs text-slate-400 text-center py-6">Todo se sincronizó correctamente. No hay operaciones por revisar.</p>`;
+      return;
+    }
+    cont.innerHTML = lista.map(e => `
+      <div class="p-3 rounded-xl border ${e.tipo === 'rechazada' ? 'border-rose-500/30 bg-rose-500/5' : 'border-amber-500/30 bg-amber-500/5'} ${e.visto ? 'opacity-70' : ''}">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-bold ${e.tipo === 'rechazada' ? 'text-rose-300' : 'text-amber-300'}">${esc(e.accion)} ${e.tipo === 'rechazada' ? 'no guardada' : 'en recuperación'}</span>
+          <span class="text-[10px] text-slate-500 font-mono">${esc(e.fecha)}</span>
+        </div>
+        <p class="text-xs text-slate-200 mt-1">${esc(e.resumen)}</p>
+        <p class="text-[11px] text-slate-400 mt-0.5">Motivo: ${esc(e.mensaje)}</p>
+        ${e.tipo === 'rechazada' ? '<p class="text-[10px] text-slate-500 mt-1">Si corresponde, vuelve a registrarla con los datos actuales.</p>' : ''}
+      </div>`).join('');
   }
 
   return {
@@ -3356,6 +3462,8 @@ const ThorApp = (function() {
     resetSystemData,
     ejecutarDiagnosticoYSalud,
     reintentarColaRecuperacion,
+    abrirHistorialSync,
+    cerrarHistorialSync,
     switchTab,
     openNewProductModal,
     openEditProductModal,

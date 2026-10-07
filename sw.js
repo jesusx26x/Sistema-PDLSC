@@ -13,7 +13,7 @@
  * IMPORTANTE: subir CACHE_NAME en cada despliegue del frontend.
  */
 
-const CACHE_NAME = 'thor-essence-cache-v6';
+const CACHE_NAME = 'thor-essence-cache-v7';
 const APP_SHELL = [
   './',
   './index.html',

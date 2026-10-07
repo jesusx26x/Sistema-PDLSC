@@ -79,7 +79,10 @@ const ThorAPI = (function() {
     USD_RATE: 'thor_usd_dop_rate',
     CACHE_DATA: 'thor_cached_system_data_v5',
     SERVER_SNAPSHOT: 'thor_server_snapshot_v1',
-    OUTBOX_QUEUE: 'thor_outbox_queue_v1'
+    OUTBOX_QUEUE: 'thor_outbox_queue_v1',
+    SYNC_LOG: 'thor_sync_log_v1',
+    DLQ: 'thor_dead_letter_queue_v1',
+    DLQ_AUTO: 'thor_dlq_reintento_auto'
   };
 
   const DEFAULT_RATE = (typeof THOR_CONFIG !== 'undefined' && THOR_CONFIG.DEFAULT_USD_RATE) ? THOR_CONFIG.DEFAULT_USD_RATE : 60.50;
@@ -214,7 +217,22 @@ const ThorAPI = (function() {
   return { success: false, rate: getUsdRate(), source: 'Local' };
   }
 
+  // Vista actual (foto del servidor + operaciones pendientes). Vive en memoria: en el dispositivo
+  // solo se guardan la foto del servidor y la cola, así el almacenamiento rinde el doble.
+  let cacheEnMemoria = null;
+
   function getCachedData() {
+    if (!cacheEnMemoria) cacheEnMemoria = cargarCacheInicial();
+    return JSON.parse(JSON.stringify(cacheEnMemoria));
+  }
+
+  function cargarCacheInicial() {
+    if (getSnapshot()) {
+      // Versiones anteriores guardaban también la vista: ya no hace falta
+      try { localStorage.removeItem(STORAGE_KEYS.CACHE_DATA); } catch (e) {}
+      return reconstruirSobre(getSnapshot());
+    }
+    // Instalación que aún no descargó una foto del servidor: la vista heredada ya incluye lo pendiente
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.CACHE_DATA);
       if (raw) return JSON.parse(raw);
@@ -225,13 +243,13 @@ const ThorAPI = (function() {
   }
 
   function setCachedData(data) {
-    try {
-      localStorage.setItem(STORAGE_KEYS.CACHE_DATA, JSON.stringify(data));
-    } catch (e) {
-      console.error('Error guardando en caché:', e);
-      // A7 FIX: Captura y alerta preventiva ante límite de almacenamiento superado
-      if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
-        Sonner.error('Límite de almacenamiento del navegador alcanzado. Sincroniza con Google Sheets para asegurar los datos.', 6000);
+    cacheEnMemoria = JSON.parse(JSON.stringify(data));
+    // Sin servidor configurado (modo solo local) la vista es la única copia: se guarda
+    if (!getConfig().isConfigured) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.CACHE_DATA, JSON.stringify(data));
+      } catch (e) {
+        console.error('Error guardando en caché:', e);
       }
     }
   }
@@ -401,13 +419,12 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
 
   function moveToDeadLetterQueue(item) {
     try {
-      const DLQ_KEY = 'thor_dead_letter_queue_v1';
-      const raw = localStorage.getItem(DLQ_KEY);
-      const dlq = raw ? JSON.parse(raw) : [];
+      const dlq = getDeadLetterQueue();
       item.failedAt = new Date().toISOString();
       dlq.push(item);
-      localStorage.setItem(DLQ_KEY, JSON.stringify(dlq));
+      localStorage.setItem(STORAGE_KEYS.DLQ, JSON.stringify(dlq));
       console.warn('Operación movida a dead-letter queue:', item.queueId, item.action);
+      registrarEnHistorial('recuperacion', item, 'El servidor falló 5 veces seguidas. Queda guardada para reintentar.');
     } catch (e) {
       console.error('Error guardando en dead-letter queue:', e);
     }
@@ -415,11 +432,109 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
 
   function getDeadLetterQueue() {
     try {
-      const raw = localStorage.getItem('thor_dead_letter_queue_v1');
+      const raw = localStorage.getItem(STORAGE_KEYS.DLQ);
       return raw ? JSON.parse(raw) : [];
     } catch (e) {
       return [];
     }
+  }
+
+  /**
+   * Devuelve a la cola las operaciones en recuperación (conservando su op_id: si el servidor
+   * ya las había aplicado, no se duplican) y las envía.
+   */
+  async function reintentarRecuperacion() {
+    const dlq = getDeadLetterQueue();
+    if (!dlq.length) return { reintentadas: 0 };
+    const queue = getOutbox();
+    dlq.forEach(item => {
+      queue.push(Object.assign({}, item, { retries: 0, failedAt: undefined }));
+    });
+    saveOutbox(queue);
+    localStorage.removeItem(STORAGE_KEYS.DLQ);
+    marcarHistorialVisto('recuperacion');
+    reconstruirCache();
+    window.dispatchEvent(new CustomEvent('thor:outbox-updated', { detail: { count: queue.length } }));
+    const r = await flushOutbox();
+    return { reintentadas: dlq.length, resultado: r };
+  }
+
+  /**
+   * Reintento automático una vez al día (p. ej. tras corregir un error del servidor).
+   */
+  async function reintentarRecuperacionAutomatica() {
+    if (!getDeadLetterQueue().length || !navigator.onLine || !sesionDisponible()) return null;
+    const hoy = fechaLocal().substring(0, 10);
+    if (localStorage.getItem(STORAGE_KEYS.DLQ_AUTO) === hoy) return null;
+    localStorage.setItem(STORAGE_KEYS.DLQ_AUTO, hoy);
+    return reintentarRecuperacion();
+  }
+
+  function getHistorialSync() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SYNC_LOG);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function guardarHistorialSync(lista) {
+    try {
+      localStorage.setItem(STORAGE_KEYS.SYNC_LOG, JSON.stringify(lista.slice(0, 100)));
+    } catch (e) {
+      console.warn('No se pudo guardar el historial de sincronización:', e);
+    }
+    window.dispatchEvent(new CustomEvent('thor:historial-sync'));
+  }
+
+  /**
+   * Describe una operación en palabras (para que Pamela sepa exactamente qué no se guardó).
+   */
+  function resumirOperacion(item) {
+    const d = item.data || {};
+    const inventario = (cacheEnMemoria && cacheEnMemoria.inventario) || [];
+    const nombreProducto = id => (inventario.find(p => p.id === id) || {}).nombre || id || 'producto';
+    switch (item.action) {
+      case 'registerSale':
+        return `${d.cantidad} × ${nombreProducto(d.id_articulo)} a RD$ ${Number(d.precio_unitario_dop || 0).toLocaleString()} — ${d.cliente || 'Consumidor Final'}${esVentaCredito(d) ? ' (fiado)' : ''}`;
+      case 'registerPayment':
+        return `Abono de RD$ ${Number(d.monto || 0).toLocaleString()} a la cuenta ${d.id_cobro}`;
+      case 'adjustStock':
+        return `${d.delta > 0 ? '+' : ''}${d.delta} unidad(es) a ${nombreProducto(d.id)}${d.motivo ? ' (' + d.motivo + ')' : ''}`;
+      case 'saveProduct':
+        return `Producto "${d.nombre || d.id}"`;
+      case 'deleteProduct':
+        return `Eliminar ${nombreProducto(typeof d === 'string' ? d : d.id)}`;
+      case 'cancelSale':
+        return `Anular la venta ${d.id_venta}`;
+      case 'registerReception':
+        return `Tanque "${d.nombre_tanque}" con ${(d.articulos || []).length} artículo(s)`;
+      default:
+        return item.action;
+    }
+  }
+
+  function registrarEnHistorial(tipo, item, mensaje, visto = false) {
+    const lista = getHistorialSync();
+    lista.unshift({
+      id: generarUuid(),
+      fecha: fechaLocal(),
+      tipo: tipo, // 'rechazada' | 'recuperacion'
+      accion: NOMBRES_ACCION[item.action] || item.action,
+      mensaje: mensaje,
+      resumen: resumirOperacion(item),
+      visto: visto
+    });
+    guardarHistorialSync(lista);
+  }
+
+  function marcarHistorialVisto(tipo) {
+    guardarHistorialSync(getHistorialSync().map(e => (!tipo || e.tipo === tipo) ? Object.assign(e, { visto: true }) : e));
+  }
+
+  function contarPorRevisar() {
+    return getHistorialSync().filter(e => !e.visto).length + getDeadLetterQueue().length;
   }
 
   async function silentRelogin() {
@@ -510,20 +625,41 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
   /**
    * Última foto de los datos tal como están en Google Sheets.
    */
+  // La foto más reciente también se conserva en memoria: si el almacenamiento se llenara,
+  // la sesión actual nunca vuelve a una foto vieja
+  let snapshotEnMemoria = null;
+
   function getSnapshot() {
+    if (snapshotEnMemoria) return snapshotEnMemoria;
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SERVER_SNAPSHOT);
-      return raw ? JSON.parse(raw) : null;
+      snapshotEnMemoria = raw ? JSON.parse(raw) : null;
     } catch (e) {
-      return null;
+      snapshotEnMemoria = null;
     }
+    return snapshotEnMemoria;
   }
 
+  let avisoAlmacenamientoMostrado = false;
+
+  /**
+   * Guarda la foto del servidor. Devuelve false si el almacenamiento del navegador está lleno
+   * (la foto queda igualmente en memoria para esta sesión y se avisa una vez).
+   */
   function setSnapshot(data) {
+    snapshotEnMemoria = data;
     try {
       localStorage.setItem(STORAGE_KEYS.SERVER_SNAPSHOT, JSON.stringify(data));
+      // Con una foto guardada, la vista completa que guardaban versiones anteriores sobra
+      if (getConfig().isConfigured) localStorage.removeItem(STORAGE_KEYS.CACHE_DATA);
+      return true;
     } catch (e) {
       console.warn('No se pudo guardar la foto del servidor:', e);
+      if (!avisoAlmacenamientoMostrado) {
+        avisoAlmacenamientoMostrado = true;
+        window.dispatchEvent(new CustomEvent('thor:almacenamiento-lleno'));
+      }
+      return false;
     }
   }
 
@@ -535,17 +671,73 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
   function reconstruirCache() {
     const snapshot = getSnapshot();
     if (!snapshot) return null;
+    const base = reconstruirSobre(snapshot);
+    setCachedData(base);
+    return base;
+  }
+
+  /**
+   * Reasigna IDs de producto que el servidor unió a otro producto (alias): así una venta
+   * pendiente hecha con el ID del dispositivo se ve sobre el producto real.
+   */
+  function remapearIds(data, alias) {
+    if (!alias || !data) return data;
+    const real = id => {
+      let actual = id;
+      const vistos = new Set();
+      while (actual && alias[actual] && !vistos.has(actual)) {
+        vistos.add(actual);
+        actual = alias[actual];
+      }
+      return actual;
+    };
+    if (typeof data === 'string') return real(data);
+    if (typeof data !== 'object') return data;
+    if (data.id) data.id = real(data.id);
+    if (data.id_articulo) data.id_articulo = real(data.id_articulo);
+    if (Array.isArray(data.articulos)) data.articulos.forEach(a => { if (a && a.id) a.id = real(a.id); });
+    return data;
+  }
+
+  /**
+   * Aplica a la foto guardada una operación que el servidor acaba de confirmar, para que al
+   * reabrir la app (incluso sin conexión) se vea el estado ya aceptado por la nube.
+   */
+  function aplicarEnFoto(item, respuesta) {
+    const snap = getSnapshot();
+    if (!snap) return;
+    const incluidas = snap.ops_aplicadas || [];
+    if (item.opId && incluidas.includes(item.opId)) return;
+    const copia = JSON.parse(JSON.stringify(snap));
+    copia.alias = copia.alias || {};
+    if (respuesta && respuesta.unido && respuesta.id && item.data && item.data.id && item.data.id !== respuesta.id) {
+      // El servidor lo unió a un producto existente: la próxima descarga trae las cantidades exactas
+      copia.alias[item.data.id] = respuesta.id;
+    } else {
+      try {
+        aplicarOperacion(copia, item.action, remapearIds(JSON.parse(JSON.stringify(item.data)), copia.alias));
+        recalcularMetricasLocales(copia);
+      } catch (e) {
+        console.warn('No se pudo aplicar a la foto la operación confirmada', item.action, e);
+      }
+    }
+    copia.ops_aplicadas = incluidas.concat(item.opId ? [item.opId] : []).slice(-500);
+    setSnapshot(copia);
+  }
+
+  function reconstruirSobre(snapshot) {
     const base = JSON.parse(JSON.stringify(snapshot));
-    const pendientes = getOutbox();
+    const incluidas = new Set(snapshot.ops_aplicadas || []);
+    const pendientes = getOutbox().filter(item => !incluidas.has(item.opId));
     pendientes.forEach(item => {
       try {
-        aplicarOperacion(base, item.action, JSON.parse(JSON.stringify(item.data)));
+        const datos = remapearIds(JSON.parse(JSON.stringify(item.data)), snapshot.alias);
+        aplicarOperacion(base, item.action, datos);
       } catch (e) {
         console.warn('No se pudo re-aplicar la operación pendiente', item.action, e);
       }
     });
     if (pendientes.length) recalcularMetricasLocales(base);
-    setCachedData(base);
     return base;
   }
 
@@ -594,12 +786,16 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       const tipo = clasificarRespuesta(json);
       if (tipo === 'ok') {
         removeFromOutbox(item.queueId);
+        aplicarEnFoto(item, json);
         resultados[item.queueId] = json;
         processed++;
       } else if (tipo === 'rechazada') {
         removeFromOutbox(item.queueId);
         resultados[item.queueId] = json;
         rechazadas.push({ item, json });
+        // Queda registrada para que no "desaparezca" en silencio (la de apiPost ya se ve en pantalla)
+        registrarEnHistorial('rechazada', item, (json && json.message) || 'El servidor rechazó la operación',
+          item.queueId === opciones.hasta);
       } else if (tipo === 'sesion') {
         motivo = 'sesion';
         notificarSesionVencida();
@@ -721,11 +917,11 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     // 2. Encolar la mutación en OutboxQueue persistente (con op_id de idempotencia)
     const outboxItem = enqueueOutbox(action, data);
 
-    const respuestaEncolada = () => ({
+    // Respuesta inmediata con el resultado local (p. ej. "unido" a un producto existente)
+    const respuestaEncolada = () => Object.assign({}, localResult, {
       status: 'success',
       isQueued: true,
-      message: localResult.message || 'Operación guardada localmente y encolada para sincronización',
-      total_unidades: localResult.total_unidades
+      message: localResult.message || 'Operación guardada localmente y encolada para sincronización'
     });
 
     if (!navigator.onLine || !sesionDisponible()) {
@@ -780,10 +976,11 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     [
       'thor_cached_system_data', 'thor_cached_system_data_v2', 'thor_cached_system_data_v3',
       'thor_cached_system_data_v4', STORAGE_KEYS.CACHE_DATA, STORAGE_KEYS.SERVER_SNAPSHOT,
-      STORAGE_KEYS.OUTBOX_QUEUE, 'thor_dead_letter_queue_v1'
+      STORAGE_KEYS.OUTBOX_QUEUE, STORAGE_KEYS.DLQ, STORAGE_KEYS.SYNC_LOG
     ].forEach(k => {
       try { localStorage.removeItem(k); } catch (e) {}
     });
+    snapshotEnMemoria = null;
     setCachedData(JSON.parse(JSON.stringify(INITIAL_DEMO_DATA)));
     window.dispatchEvent(new CustomEvent('thor:outbox-updated', { detail: { count: 0 } }));
   }
@@ -845,6 +1042,17 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     }
 
     return cuotas;
+  }
+
+  /**
+   * Nombre comparable igual que en el servidor: sin acentos, sin espacios repetidos, en minúsculas.
+   */
+  function normalizarNombre(str) {
+    return String(str || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
   }
 
   // Redondeo a centavos para montos de dinero
@@ -940,6 +1148,12 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
         Object.assign(existente, campos);
         existente.estado = estadoPorStock(existente.cantidad, existente.stock_minimo);
         return { status: 'success', message: 'Producto actualizado', id: id };
+      }
+      const mismoNombre = current.inventario.find(x => normalizarNombre(x.nombre) === normalizarNombre(campos.nombre));
+      if (mismoNombre) {
+        mismoNombre.cantidad = (parseInt(mismoNombre.cantidad) || 0) + cantidadNueva;
+        mismoNombre.estado = estadoPorStock(mismoNombre.cantidad, mismoNombre.stock_minimo);
+        return { status: 'success', message: `Ya existía "${mismoNombre.nombre}": se sumaron ${cantidadNueva} unidad(es)`, id: mismoNombre.id, unido: true };
       }
       current.inventario.unshift(Object.assign(campos, {
         cantidad: cantidadNueva,
@@ -1153,7 +1367,7 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       const items = rec.articulos || [];
       const tasa = parseFloat(rec.tasa_cambio) || getUsdRate();
       // Misma normalización de nombres que registrarRecepcionTanque() en el backend
-      const norm = str => String(str || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const norm = normalizarNombre;
 
       let totalUnidades = 0;
       items.forEach(item => {
@@ -1350,7 +1564,6 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
           if (res && res.status === 'success' && res.data) {
             // Operaciones que el servidor ya aplicó (p. ej. respuesta perdida): no deben re-aplicarse
             const aplicadas = new Set(res.data.ops_aplicadas || []);
-            delete res.data.ops_aplicadas;
             if (aplicadas.size) {
               const queue = getOutbox();
               const restantes = queue.filter(q => !aplicadas.has(q.opId));
@@ -1361,6 +1574,7 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
             }
             setSnapshot(res.data);
             res.data = reconstruirCache();
+            reintentarRecuperacionAutomatica();
           }
           return res;
         } finally {
@@ -1389,7 +1603,12 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     reconcileWithCloud: () => apiDirecto('reconcileInventory', {}),
     resetSystemData: purgarTodo,
     getDeadLetterQueue,
-    clearDeadLetterQueue: () => localStorage.removeItem('thor_dead_letter_queue_v1'),
+    clearDeadLetterQueue: () => localStorage.removeItem(STORAGE_KEYS.DLQ),
+    reintentarRecuperacion,
+    getHistorialSync,
+    marcarHistorialVisto,
+    contarPorRevisar,
+    normalizarNombre,
     enqueueOutbox,
     generarId,
     DEFAULT_CATEGORIES
