@@ -40,17 +40,27 @@ Si prefieres verificarlo o configurarlo directamente en el panel de activadores 
 
 ## 🔐 Credenciales del Sistema & Seguridad RLS
 
-Para ingresar al sistema Thor Essence:
+> [!CAUTION]
+> El repositorio es **público**. Nunca escribas usuarios, contraseñas ni tokens en el código ni en esta documentación.
 
-- **Usuario:** `Pameladlsantos`
-- **Contraseña:** `Thorayka2419`
+### 🔑 Definir o cambiar el usuario y la contraseña
+
+1. Abre la hoja de cálculo de Google Sheets vinculada.
+2. Menú 👉 **`🌸 Thor Essence Admin`** > **`🔑 Cambiar Usuario y Contraseña`**.
+3. Escribe el usuario, la contraseña nueva (mínimo 10 caracteres) y confírmala.
+4. Entrega la contraseña a Pamela por un canal privado.
+
+Al cambiar la contraseña **se cierran todas las sesiones abiertas** en todos los dispositivos. Para cerrar sesiones sin cambiar la contraseña (por ejemplo, si se pierde un teléfono) usa **`🚪 Cerrar Todas las Sesiones Activas`**.
+
+Si el servidor todavía tiene una contraseña antigua en texto plano (`AUTH_PASS`), se convierte automáticamente a hash en el primer inicio de sesión correcto.
 
 ### 🛡️ Medidas de Seguridad Implementadas:
 
-1. **Clave de Servicio Oculta (No visible en el navegador):**
-   - No existen llaves maestras ni contraseñas grabadas en el código JavaScript del navegador (`config.js`).
-   - Las credenciales maestras y llaves de servicio residen **exclusivamente en el servidor** (`PropertiesService` de Google Apps Script).
-   - El cliente solo maneja tokens temporales generados al autenticarse.
+1. **Credenciales solo en el servidor:**
+   - No existen llaves maestras ni contraseñas grabadas en el código (ni del navegador ni de Apps Script).
+   - El usuario y el hash SHA-256 con sal de la contraseña residen **exclusivamente** en `PropertiesService` (`AUTH_USER`, `AUTH_PASS_HASH`, `AUTH_SALT`).
+   - Tras 5 intentos fallidos, el inicio de sesión se bloquea 15 minutos.
+   - El cliente solo maneja tokens temporales generados al autenticarse (válidos 30 días, máximo 20 sesiones activas).
 
 2. **RLS (Row Level Security) Activo:**
    - La API de Apps Script bloquea cualquier lectura o mutación anónima (`getAllData`, `saveProduct`, `registerSale`, etc.).

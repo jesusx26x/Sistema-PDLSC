@@ -63,7 +63,7 @@
 - [x] **Test de Conectividad HTTP 200**: Backend responde exitosamente.
 - [x] **Test de `getAllData`**: 4 productos leídos y métricas calculadas.
 - [x] Disparador (Trigger) programable para **Respaldos Automáticos diarios en Google Drive** a las 2:00 AM.
-- [x] Token de seguridad validado (`THOR_SECURE_2026`).
+- [x] Token de seguridad validado.
 
 ### Fase 5: Zero-Config para Pamela (Completado)
 - [x] Precableado de la URL activa en `js/config.js`.
@@ -71,8 +71,8 @@
 
 ### Fase 6: Autenticación en Servidor, RLS, Signout & Glassmorphism (Completado)
 - [x] **Credenciales del Sistema**:
-  - [x] Usuario oficial: `Pameladlsantos`
-  - [x] Contraseña oficial: `Thorayka2419`
+  - [x] Usuario y contraseña definidos solo en el servidor (`ScriptProperties`, contraseña con hash SHA-256 + sal).
+  - [x] Se cambian desde Google Sheets: `🌸 Thor Essence Admin › 🔑 Cambiar Usuario y Contraseña`. **Nunca** se escriben en el repositorio.
 - [x] **Protección de Llaves (Zero Service Key in Browser)**:
   - [x] Eliminada cualquier llave maestra o service key del navegador (`js/config.js`, `js/api.js`, `index.html`).
   - [x] La llave y credenciales maestras residen exclusivamente en `PropertiesService` del backend Google Apps Script.

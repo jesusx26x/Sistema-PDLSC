@@ -9,7 +9,9 @@
  * con la hoja de cálculo de Google Sheets bajo arquitectura de seguridad RLS.
  * 
  * Medidas de Seguridad Implementadas:
- * 1. Clave de Servicio protegida: Ninguna clave maestra está expuesta en el navegador.
+ * 1. Credenciales fuera del código: usuario y hash SHA-256 con sal de la contraseña viven solo
+ *    en ScriptProperties y se cambian desde el menú "🔑 Cambiar Usuario y Contraseña".
+ *    Login con bloqueo temporal tras intentos fallidos.
  * 2. RLS (Row Level Security): Todas las consultas de lectura y mutación de la base de datos
  *    requieren un token de sesión activo y validado en el servidor.
  * 3. Signout en el Servidor: Al cerrar sesión se destruye el token en CacheService y
@@ -26,10 +28,15 @@ const SHEETS = {
   COBROS: 'Cobros'
 };
 
-// Credenciales oficiales predeterminadas para Pamela
-const CREDENCIALES_SISTEMA = {
-  usuario: 'Pameladlsantos',
-  contrasena: 'Thorayka2419'
+// Las credenciales NUNCA se escriben en el código: viven solo en ScriptProperties
+// (AUTH_USER, AUTH_PASS_HASH, AUTH_SALT) y se definen desde el menú de administración.
+const AUTH_CONFIG = {
+  MIN_LONGITUD_CONTRASENA: 10,
+  MAX_INTENTOS_FALLIDOS: 5,
+  BLOQUEO_SEGUNDOS: 900, // 15 minutos
+  DURACION_SESION_MS: 30 * 24 * 60 * 60 * 1000, // 30 días
+  CACHE_SESION_SEGUNDOS: 21600, // 6 horas (máximo de CacheService)
+  MAX_SESIONES_ACTIVAS: 20
 };
 
 /**
@@ -46,7 +53,8 @@ function onOpen() {
       .addItem('💾 Crear Copia de Respaldo en Drive', 'crearRespaldoEnDrive')
       .addItem('⏰ Configurar Respaldo Automático Diario', 'configurarDisparadorRespaldo')
       .addSeparator()
-      .addItem('🔑 Sincronizar Credenciales de Pamela', 'menuRestablecerCredenciales')
+      .addItem('🔑 Cambiar Usuario y Contraseña', 'menuCambiarCredenciales')
+      .addItem('🚪 Cerrar Todas las Sesiones Activas', 'menuCerrarTodasLasSesiones')
       .addToUi();
   } catch (e) {
     console.log('No se pudo crear el menú en ejecución sin interfaz: ' + e);
@@ -55,7 +63,10 @@ function onOpen() {
 
 function menuInicializar() {
   inicializarHojasSiNoExisten(true);
-  SpreadsheetApp.getUi().alert('✅ Estructura de Thor Essence verificada y lista para operar con RLS activo.');
+  const aviso = credencialesConfiguradas()
+    ? ''
+    : '\n\n⚠️ Aún no hay usuario y contraseña configurados. Usa "🔑 Cambiar Usuario y Contraseña" para habilitar el acceso.';
+  SpreadsheetApp.getUi().alert('✅ Estructura de Thor Essence verificada y lista para operar con RLS activo.' + aviso);
 }
 
 function menuConciliarInventario() {
@@ -63,11 +74,47 @@ function menuConciliarInventario() {
   SpreadsheetApp.getUi().alert('🔄 Conciliación y Reparación de Inventario:\n\n' + res.message);
 }
 
-function menuRestablecerCredenciales() {
-  const props = PropertiesService.getScriptProperties();
-  props.setProperty('AUTH_USER', CREDENCIALES_SISTEMA.usuario);
-  props.setProperty('AUTH_PASS', CREDENCIALES_SISTEMA.contrasena);
-  SpreadsheetApp.getUi().alert('✅ Credenciales de acceso sincronizadas con el servidor:\n\nUsuario: ' + CREDENCIALES_SISTEMA.usuario + '\nContraseña: ' + CREDENCIALES_SISTEMA.contrasena);
+/**
+ * Solicita usuario y contraseña nuevos desde Google Sheets.
+ * La contraseña nunca se muestra ni se guarda en texto plano.
+ */
+function menuCambiarCredenciales() {
+  const ui = SpreadsheetApp.getUi();
+  const usuarioActual = PropertiesService.getScriptProperties().getProperty('AUTH_USER') || '';
+
+  const rUser = ui.prompt('🔑 Usuario de acceso',
+    'Escribe el usuario para iniciar sesión' + (usuarioActual ? ' (actual: ' + usuarioActual + ')' : '') + ':',
+    ui.ButtonSet.OK_CANCEL);
+  if (rUser.getSelectedButton() !== ui.Button.OK) return;
+  const usuario = rUser.getResponseText().trim() || usuarioActual;
+
+  const rPass = ui.prompt('🔑 Nueva contraseña',
+    'Escribe la nueva contraseña (mínimo ' + AUTH_CONFIG.MIN_LONGITUD_CONTRASENA + ' caracteres):',
+    ui.ButtonSet.OK_CANCEL);
+  if (rPass.getSelectedButton() !== ui.Button.OK) return;
+
+  const rPass2 = ui.prompt('🔑 Confirmar contraseña', 'Escribe la contraseña otra vez:', ui.ButtonSet.OK_CANCEL);
+  if (rPass2.getSelectedButton() !== ui.Button.OK) return;
+
+  if (rPass.getResponseText() !== rPass2.getResponseText()) {
+    ui.alert('❌ Las contraseñas no coinciden. No se realizó ningún cambio.');
+    return;
+  }
+
+  const res = establecerCredenciales(usuario, rPass.getResponseText());
+  ui.alert(res.status === 'success'
+    ? '✅ Credenciales actualizadas para el usuario "' + usuario + '".\n\nTodas las sesiones abiertas fueron cerradas: será necesario iniciar sesión de nuevo en cada dispositivo.'
+    : '❌ ' + res.message);
+}
+
+function menuCerrarTodasLasSesiones() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.alert('🚪 Cerrar todas las sesiones',
+    '¿Cerrar la sesión en TODOS los dispositivos? Será necesario volver a iniciar sesión.',
+    ui.ButtonSet.YES_NO);
+  if (r !== ui.Button.YES) return;
+  const cerradas = revocarTodasLasSesiones();
+  ui.alert('✅ Se cerraron ' + cerradas + ' sesión(es) activas.');
 }
 
 /**
@@ -121,40 +168,188 @@ function configurarDisparadorRespaldo() {
  * =========================================================================
  */
 
+function credencialesConfiguradas() {
+  const props = PropertiesService.getScriptProperties();
+  return !!(props.getProperty('AUTH_USER') && (props.getProperty('AUTH_PASS_HASH') || props.getProperty('AUTH_PASS')));
+}
+
+function bytesAHex(bytes) {
+  return bytes.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
+}
+
+function hashContrasena(pass, salt) {
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + ':' + pass, Utilities.Charset.UTF_8);
+  return bytesAHex(digest);
+}
+
+/**
+ * Comparación en tiempo constante para no filtrar información por tiempos de respuesta.
+ */
+function compararSeguro(a, b) {
+  a = String(a);
+  b = String(b);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return diff === 0;
+}
+
+/**
+ * Verifica usuario y contraseña contra ScriptProperties.
+ * Si encuentra una contraseña heredada en texto plano (AUTH_PASS), la migra a hash tras un login correcto.
+ */
 function verificarCredenciales(user, pass) {
   if (!user || !pass) return false;
   const props = PropertiesService.getScriptProperties();
-  const usuarioConfigurado = props.getProperty('AUTH_USER') || CREDENCIALES_SISTEMA.usuario;
-  const claveConfigurada = props.getProperty('AUTH_PASS') || CREDENCIALES_SISTEMA.contrasena;
+  const usuarioConfigurado = props.getProperty('AUTH_USER');
+  if (!usuarioConfigurado) return false;
 
-  return (user.trim() === usuarioConfigurado.trim() && pass === claveConfigurada);
+  const usuarioOk = compararSeguro(String(user).trim(), usuarioConfigurado.trim());
+  const hash = props.getProperty('AUTH_PASS_HASH');
+  const salt = props.getProperty('AUTH_SALT');
+
+  if (hash && salt) {
+    const passOk = compararSeguro(hashContrasena(pass, salt), hash);
+    return usuarioOk && passOk;
+  }
+
+  const legado = props.getProperty('AUTH_PASS');
+  if (!legado) return false;
+  const passOk = compararSeguro(pass, legado);
+  if (usuarioOk && passOk) {
+    const nuevaSal = Utilities.getUuid();
+    props.setProperties({ AUTH_SALT: nuevaSal, AUTH_PASS_HASH: hashContrasena(pass, nuevaSal) });
+    props.deleteProperty('AUTH_PASS');
+  }
+  return usuarioOk && passOk;
+}
+
+/**
+ * Define (o rota) las credenciales de acceso y revoca todas las sesiones existentes.
+ */
+function establecerCredenciales(usuario, pass) {
+  usuario = String(usuario || '').trim();
+  pass = String(pass || '').trim();
+  if (!usuario) {
+    return { status: 'error', message: 'El usuario no puede estar vacío.' };
+  }
+  if (pass.length < AUTH_CONFIG.MIN_LONGITUD_CONTRASENA) {
+    return { status: 'error', message: 'La contraseña debe tener al menos ' + AUTH_CONFIG.MIN_LONGITUD_CONTRASENA + ' caracteres.' };
+  }
+
+  const props = PropertiesService.getScriptProperties();
+  const salt = Utilities.getUuid();
+  props.setProperties({
+    AUTH_USER: usuario,
+    AUTH_SALT: salt,
+    AUTH_PASS_HASH: hashContrasena(pass, salt)
+  });
+  props.deleteProperty('AUTH_PASS');
+  props.deleteProperty('MASTER_SERVICE_KEY');
+  revocarTodasLasSesiones();
+
+  return { status: 'success', message: 'Credenciales actualizadas.' };
+}
+
+function claveIntentosLogin(username) {
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(username || '').trim().toLowerCase(), Utilities.Charset.UTF_8);
+  return 'LOGIN_FAIL_' + bytesAHex(digest);
+}
+
+function obtenerIntentosFallidos(username) {
+  try {
+    return parseInt(CacheService.getScriptCache().get(claveIntentosLogin(username))) || 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function registrarIntentoFallido(username) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const clave = claveIntentosLogin(username);
+    const intentos = (parseInt(cache.get(clave)) || 0) + 1;
+    cache.put(clave, String(intentos), AUTH_CONFIG.BLOQUEO_SEGUNDOS);
+    return intentos;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function limpiarIntentosFallidos(username) {
+  try {
+    CacheService.getScriptCache().remove(claveIntentosLogin(username));
+  } catch (e) {}
+}
+
+function manejarLogin(payload) {
+  const username = String(payload.username || (payload.data && payload.data.username) || '').trim();
+  const password = String(payload.password || (payload.data && payload.data.password) || '').trim();
+
+  if (!credencialesConfiguradas()) {
+    return jsonResponse({
+      status: 'error',
+      code: 'AUTH_NOT_CONFIGURED',
+      message: 'El acceso aún no está configurado en el servidor. Contacta al administrador.'
+    });
+  }
+
+  if (obtenerIntentosFallidos(username) >= AUTH_CONFIG.MAX_INTENTOS_FALLIDOS) {
+    return jsonResponse({
+      status: 'error',
+      code: 'TOO_MANY_ATTEMPTS',
+      message: 'Demasiados intentos fallidos. Espera ' + Math.round(AUTH_CONFIG.BLOQUEO_SEGUNDOS / 60) + ' minutos e inténtalo de nuevo.'
+    });
+  }
+
+  if (!verificarCredenciales(username, password)) {
+    registrarIntentoFallido(username);
+    return jsonResponse({
+      status: 'error',
+      code: 'INVALID_CREDENTIALS',
+      message: 'Usuario o contraseña incorrectos. Verifique sus credenciales.'
+    }, 401);
+  }
+
+  limpiarIntentosFallidos(username);
+  purgarSesionesInvalidas();
+  const token = crearSesionEnServidor(username);
+  return jsonResponse({
+    status: 'success',
+    message: 'Inicio de sesión exitoso',
+    token: token,
+    user: {
+      username: username,
+      nombre: 'Pamela De Los Santos',
+      rol: 'Administradora'
+    }
+  });
 }
 
 function crearSesionEnServidor(username) {
   const token = 'THOR_SES_' + Utilities.getUuid().replace(/-/g, '') + '_' + Date.now();
-  const duracionMs = 30 * 24 * 60 * 60 * 1000; // 30 días de validez para comodidad de Pamela
+  const ahora = Date.now();
   const sessionData = {
     username: username,
-    creadoEn: Date.now(),
-    expiraEn: Date.now() + duracionMs
+    creadoEn: ahora,
+    expiraEn: ahora + AUTH_CONFIG.DURACION_SESION_MS
   };
-  
+
   // Guardar en CacheService para respuestas ultra rápidas
   try {
-    const cache = CacheService.getScriptCache();
-    cache.put(token, JSON.stringify(sessionData), 21600); // 6 horas
+    CacheService.getScriptCache().put(token, JSON.stringify(sessionData), AUTH_CONFIG.CACHE_SESION_SEGUNDOS);
   } catch (e) {
     console.warn('CacheService warning:', e);
   }
-  
-  // Persistir en PropertiesService para que dure 24 horas
+
+  // Persistir en PropertiesService durante toda la vigencia de la sesión
   try {
-    const props = PropertiesService.getScriptProperties();
-    props.setProperty('SESSION_' + token, JSON.stringify(sessionData));
+    PropertiesService.getScriptProperties().setProperty('SESSION_' + token, JSON.stringify(sessionData));
   } catch (e) {
     console.error('PropertiesService error:', e);
   }
-  
+
   return token;
 }
 
@@ -163,16 +358,74 @@ function invalidarSesionEnServidor(token) {
   token = String(token).trim();
 
   try {
-    const cache = CacheService.getScriptCache();
-    cache.remove(token);
+    CacheService.getScriptCache().remove(token);
   } catch (e) {}
 
   try {
-    const props = PropertiesService.getScriptProperties();
-    props.deleteProperty('SESSION_' + token);
+    PropertiesService.getScriptProperties().deleteProperty('SESSION_' + token);
   } catch (e) {}
 
   return true;
+}
+
+/**
+ * Revoca todas las sesiones: las persistidas se eliminan y cualquier token creado
+ * antes de este momento (incluso si sigue en CacheService) deja de ser válido.
+ */
+function revocarTodasLasSesiones() {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('AUTH_SESIONES_DESDE', String(Date.now()));
+
+  const tokens = Object.keys(props.getProperties())
+    .filter(k => k.indexOf('SESSION_') === 0)
+    .map(k => k.substring('SESSION_'.length));
+
+  tokens.forEach(t => props.deleteProperty('SESSION_' + t));
+  try {
+    if (tokens.length) CacheService.getScriptCache().removeAll(tokens);
+  } catch (e) {}
+
+  return tokens.length;
+}
+
+/**
+ * Elimina sesiones expiradas o revocadas y conserva solo las más recientes
+ * para no agotar la cuota de ScriptProperties.
+ */
+function purgarSesionesInvalidas() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const todas = props.getProperties();
+    const desde = parseInt(todas.AUTH_SESIONES_DESDE) || 0;
+    const ahora = Date.now();
+    const vigentes = [];
+    const eliminar = [];
+
+    Object.keys(todas).forEach(k => {
+      if (k.indexOf('SESSION_') !== 0) return;
+      let data = null;
+      try { data = JSON.parse(todas[k]); } catch (e) {}
+      if (!data || !(data.expiraEn > ahora) || !(data.creadoEn >= desde)) {
+        eliminar.push(k);
+      } else {
+        vigentes.push({ key: k, creadoEn: data.creadoEn });
+      }
+    });
+
+    // Dejar espacio para la sesión que se está creando
+    vigentes.sort((a, b) => b.creadoEn - a.creadoEn);
+    vigentes.slice(AUTH_CONFIG.MAX_SESIONES_ACTIVAS - 1).forEach(s => eliminar.push(s.key));
+
+    eliminar.forEach(k => props.deleteProperty(k));
+    const tokens = eliminar.map(k => k.substring('SESSION_'.length));
+    if (tokens.length) CacheService.getScriptCache().removeAll(tokens);
+  } catch (e) {
+    console.warn('No se pudieron purgar sesiones:', e);
+  }
+}
+
+function sesionVigente(data, desde) {
+  return !!(data && data.expiraEn > Date.now() && data.creadoEn >= desde);
 }
 
 /**
@@ -184,40 +437,28 @@ function validarSesionRLS(token) {
   if (!token || typeof token !== 'string') return false;
   token = token.trim();
 
+  const props = PropertiesService.getScriptProperties();
+  const desde = parseInt(props.getProperty('AUTH_SESIONES_DESDE')) || 0;
+
   // 1. Validar en CacheService
   try {
-    const cache = CacheService.getScriptCache();
-    const cachedStr = cache.get(token);
-    if (cachedStr) {
-      const data = JSON.parse(cachedStr);
-      if (data && data.expiraEn > Date.now()) {
-        return true;
-      }
+    const cachedStr = CacheService.getScriptCache().get(token);
+    if (cachedStr && sesionVigente(JSON.parse(cachedStr), desde)) {
+      return true;
     }
   } catch (e) {}
 
   // 2. Validar en ScriptProperties (persistencia en servidor)
   try {
-    const props = PropertiesService.getScriptProperties();
     const propStr = props.getProperty('SESSION_' + token);
     if (propStr) {
-      const data = JSON.parse(propStr);
-      if (data && data.expiraEn > Date.now()) {
+      if (sesionVigente(JSON.parse(propStr), desde)) {
         try {
-          CacheService.getScriptCache().put(token, propStr, 21600);
+          CacheService.getScriptCache().put(token, propStr, AUTH_CONFIG.CACHE_SESION_SEGUNDOS);
         } catch (ce) {}
         return true;
-      } else {
-        props.deleteProperty('SESSION_' + token);
       }
-    }
-  } catch (e) {}
-
-  // 3. Clave maestra interna de servicio (exclusiva del backend para tareas de mantenimiento)
-  try {
-    const masterKey = PropertiesService.getScriptProperties().getProperty('MASTER_SERVICE_KEY');
-    if (masterKey && token === masterKey) {
-      return true;
+      props.deleteProperty('SESSION_' + token);
     }
   } catch (e) {}
 
@@ -309,54 +550,28 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  const lock = LockService.getScriptLock();
-  const lockAcquired = lock.tryLock(30000);
+  let payload = {};
+  if (e && e.postData && e.postData.contents) {
+    try {
+      payload = JSON.parse(e.postData.contents);
+    } catch (parseErr) {
+      payload = e.parameter || {};
+    }
+  } else {
+    payload = (e && e.parameter) || {};
+  }
 
+  const action = payload.action;
+
+  // Login, logout y validación de sesión no tocan las hojas: se atienden sin el bloqueo
+  // global para no hacer esperar a nadie detrás de una transacción de inventario.
   try {
-    if (!lockAcquired) {
-      return jsonResponse({ status: 'error', message: 'El servidor está ocupado procesando otra transacción. Reintenta en unos segundos.' }, 503);
-    }
-
-    let payload = {};
-    if (e && e.postData && e.postData.contents) {
-      try {
-        payload = JSON.parse(e.postData.contents);
-      } catch (parseErr) {
-        payload = e.parameter || {};
-      }
-    } else {
-      payload = e ? e.parameter : {};
-    }
-
-    const action = payload.action;
-
     // =========================================================================
     // 1. ENDPOINT PÚBLICO: INICIO DE SESIÓN (LOGIN)
     // Valida credenciales en el servidor y genera token temporal de sesión
     // =========================================================================
     if (action === 'login') {
-      const username = (payload.username || (payload.data && payload.data.username) || '').trim();
-      const password = (payload.password || (payload.data && payload.data.password) || '').trim();
-
-      if (verificarCredenciales(username, password)) {
-        const token = crearSesionEnServidor(username);
-        return jsonResponse({
-          status: 'success',
-          message: 'Inicio de sesión exitoso',
-          token: token,
-          user: {
-            username: username,
-            nombre: 'Pamela De Los Santos',
-            rol: 'Administradora'
-          }
-        });
-      } else {
-        return jsonResponse({
-          status: 'error',
-          code: 'INVALID_CREDENTIALS',
-          message: 'Usuario o contraseña incorrectos. Verifique sus credenciales.'
-        }, 401);
-      }
+      return manejarLogin(payload);
     }
 
     // =========================================================================
@@ -383,68 +598,185 @@ function doPost(e) {
         message: 'Acceso denegado por RLS: Sesión no autorizada, inválida o expirada.'
       }, 401);
     }
+  } catch (err) {
+    console.error('doPost (' + action + '):', err);
+    return jsonResponse({ status: 'error', message: err.toString() }, 500);
+  }
+
+  const lock = LockService.getScriptLock();
+  const lockAcquired = lock.tryLock(30000);
+
+  try {
+    if (!lockAcquired) {
+      return jsonResponse({ status: 'error', message: 'El servidor está ocupado procesando otra transacción. Reintenta en unos segundos.' }, 503);
+    }
 
     inicializarHojasSiNoExisten();
 
-    switch (action) {
-      case 'saveProduct':
-        return jsonResponse(guardarOActualizarProducto(payload.data));
-
-      case 'deleteProduct': {
-        const delId = payload.id || (payload.data && (payload.data.id || payload.data));
-        return jsonResponse(eliminarProducto(delId));
+    // Idempotencia: si esta operación ya se procesó (reintento de la cola offline o respuesta
+    // perdida en la red), se devuelve el resultado original sin volver a aplicar la mutación.
+    const opId = idCliente(payload.op_id);
+    if (opId) {
+      const previo = buscarOperacionProcesada(opId);
+      if (previo) {
+        previo.duplicado = true;
+        return jsonResponse(previo);
       }
-
-      case 'adjustStock': {
-        const adjId = payload.id || (payload.data && payload.data.id);
-        const adjDelta = payload.delta !== undefined ? payload.delta : (payload.data && payload.data.delta);
-        const adjMotivo = payload.motivo || (payload.data && payload.data.motivo);
-        return jsonResponse(ajustarStockProducto(adjId, adjDelta, adjMotivo));
-      }
-
-      case 'registerSale':
-        return jsonResponse(registrarVenta(payload.data));
-
-      case 'cancelSale': {
-        const cancelId = payload.id_venta || (payload.data && (payload.data.id_venta || payload.data));
-        return jsonResponse(cancelarVenta(cancelId));
-      }
-
-      case 'registerReception':
-        return jsonResponse(registrarRecepcionTanque(payload.data));
-
-      case 'registerPayment':
-        return jsonResponse(registrarAbono(payload.data));
-
-      case 'saveConfig':
-        return jsonResponse(guardarConfiguracion(payload.data));
-
-      case 'initSetup':
-        inicializarHojasSiNoExisten(true);
-        return jsonResponse({ status: 'success', message: 'Estructura de hojas inicializada con éxito' });
-
-      case 'resetAllData': {
-        const conf = payload.confirmacion || (payload.data && payload.data.confirmacion);
-        return jsonResponse(purgarTodasLasHojas(conf));
-      }
-
-      case 'reconcileInventory':
-        return jsonResponse(conciliarInventarioConRecepciones());
-
-      case 'deleteReception': {
-        const delRecId = payload.id_recepcion || (payload.data && (payload.data.id_recepcion || payload.data));
-        return jsonResponse(eliminarRecepcion(delRecId));
-      }
-
-      default:
-        return jsonResponse({ status: 'error', message: 'Acción POST no reconocida: ' + action }, 400);
     }
 
+    const resultado = ejecutarAccion(action, payload);
+    if (opId && resultado && resultado.status === 'success') {
+      registrarOperacionProcesada(opId, action, resultado);
+    }
+    return jsonResponse(resultado);
+
   } catch (err) {
-    return jsonResponse({ status: 'error', message: err.toString(), stack: err.stack }, 500);
+    console.error('doPost (' + action + '):', err);
+    return jsonResponse({ status: 'error', message: err.toString() }, 500);
   } finally {
-    lock.releaseLock();
+    if (lockAcquired) lock.releaseLock();
   }
+}
+
+function ejecutarAccion(action, payload) {
+  switch (action) {
+    case 'saveProduct':
+      return guardarOActualizarProducto(payload.data);
+
+    case 'deleteProduct': {
+      const delId = payload.id || (payload.data && (payload.data.id || payload.data));
+      return eliminarProducto(delId);
+    }
+
+    case 'adjustStock': {
+      const adjId = payload.id || (payload.data && payload.data.id);
+      const adjDelta = payload.delta !== undefined ? payload.delta : (payload.data && payload.data.delta);
+      const adjMotivo = payload.motivo || (payload.data && payload.data.motivo);
+      return ajustarStockProducto(adjId, adjDelta, adjMotivo);
+    }
+
+    case 'registerSale':
+      return registrarVenta(payload.data);
+
+    case 'cancelSale': {
+      const cancelId = payload.id_venta || (payload.data && (payload.data.id_venta || payload.data));
+      return cancelarVenta(cancelId);
+    }
+
+    case 'registerReception':
+      return registrarRecepcionTanque(payload.data);
+
+    case 'registerPayment':
+      return registrarAbono(payload.data);
+
+    case 'saveConfig':
+      return guardarConfiguracion(payload.data);
+
+    case 'initSetup':
+      inicializarHojasSiNoExisten(true);
+      return { status: 'success', message: 'Estructura de hojas inicializada con éxito' };
+
+    case 'resetAllData': {
+      const conf = payload.confirmacion || (payload.data && payload.data.confirmacion);
+      return purgarTodasLasHojas(conf);
+    }
+
+    case 'reconcileInventory':
+      return conciliarInventarioConRecepciones();
+
+    case 'deleteReception': {
+      const delRecId = payload.id_recepcion || (payload.data && (payload.data.id_recepcion || payload.data));
+      return eliminarRecepcion(delRecId);
+    }
+
+    default:
+      return { status: 'error', message: 'Acción POST no reconocida: ' + action };
+  }
+}
+
+/**
+ * =========================================================================
+ * IDENTIFICADORES ÚNICOS E IDEMPOTENCIA
+ * =========================================================================
+ */
+
+/**
+ * ID legible y único: PREFIJO-yyyyMMdd-XXXXXXXX (8 hex aleatorios de un UUID).
+ * El frontend genera el mismo formato para que el ID local y el de la nube coincidan.
+ */
+function generarId(prefijo) {
+  const fecha = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyyMMdd');
+  return prefijo + '-' + fecha + '-' + Utilities.getUuid().replace(/-/g, '').substring(0, 8).toUpperCase();
+}
+
+/**
+ * Acepta un ID enviado por el cliente solo si tiene un formato seguro; si no, devuelve ''.
+ */
+function idCliente(id) {
+  const s = String(id === undefined || id === null ? '' : id).trim();
+  return /^[A-Za-z0-9_-]{3,64}$/.test(s) ? s : '';
+}
+
+/**
+ * Indica si un ID ya existe en la primera columna de una hoja (sin leerla completa).
+ */
+function existeIdEnHoja(sheet, id) {
+  const ultima = sheet.getLastRow();
+  if (!id || ultima < 2) return false;
+  return !!sheet.getRange(2, 1, ultima - 1, 1)
+    .createTextFinder(String(id))
+    .matchEntireCell(true)
+    .findNext();
+}
+
+const HOJA_OPERACIONES = 'Operaciones';
+
+function hojaOperaciones() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(HOJA_OPERACIONES);
+  if (!sheet) {
+    sheet = ss.insertSheet(HOJA_OPERACIONES);
+    sheet.getRange(1, 1, 1, 4).setValues([['Op ID', 'Fecha', 'Acción', 'Resultado (JSON)']]);
+    estilarCabecera(sheet, 4, '#0B132B', '#D4AF37');
+    sheet.setFrozenRows(1);
+    sheet.hideSheet();
+  }
+  return sheet;
+}
+
+function buscarOperacionProcesada(opId) {
+  const claveCache = 'OP_' + opId;
+  try {
+    const enCache = CacheService.getScriptCache().get(claveCache);
+    if (enCache) return JSON.parse(enCache);
+  } catch (e) {}
+
+  const sheet = hojaOperaciones();
+  const ultima = sheet.getLastRow();
+  if (ultima < 2) return null;
+  const celda = sheet.getRange(2, 1, ultima - 1, 1)
+    .createTextFinder(opId)
+    .matchEntireCell(true)
+    .findNext();
+  if (!celda) return null;
+
+  try {
+    return JSON.parse(sheet.getRange(celda.getRow(), 4).getValue());
+  } catch (e) {
+    return { status: 'success', message: 'Operación ya procesada anteriormente' };
+  }
+}
+
+function registrarOperacionProcesada(opId, action, resultado) {
+  let json = JSON.stringify(resultado);
+  // Límite de 50.000 caracteres por celda en Google Sheets
+  if (json.length > 45000) {
+    json = JSON.stringify({ status: resultado.status, message: resultado.message });
+  }
+  hojaOperaciones().appendRow([opId, new Date(), action, json]);
+  try {
+    CacheService.getScriptCache().put('OP_' + opId, json, 21600);
+  } catch (e) {}
 }
 
 /**
@@ -504,7 +836,7 @@ function guardarOActualizarProducto(prod) {
   const data = sheet.getDataRange().getValues();
   const ahora = new Date();
 
-  const id = prod.id || ('PROD-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss'));
+  const id = String(prod.id || '').trim() || generarId('PROD');
   const nombre = String(prod.nombre).trim();
   const categoria = String(prod.categoria || 'Variedades').trim();
   const descripcion = String(prod.descripcion || '').trim();
@@ -619,6 +951,16 @@ function registrarVenta(venta) {
     return { status: 'error', message: 'Datos de venta incompletos' };
   }
 
+  const idVentaCliente = String(venta.id_venta || '').trim();
+  if (idVentaCliente && existeIdEnHoja(getSheet(SHEETS.VENTAS), idVentaCliente)) {
+    return {
+      status: 'success',
+      duplicado: true,
+      id_venta: idVentaCliente,
+      message: 'La venta ' + idVentaCliente + ' ya estaba registrada.'
+    };
+  }
+
   const invSheet = getSheet(SHEETS.INVENTARIO);
   const invData = invSheet.getDataRange().getValues();
   let producto = null;
@@ -650,7 +992,7 @@ function registrarVenta(venta) {
   }
 
   const ahora = new Date();
-  const idVenta = venta.id_venta || ('VTA-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss'));
+  const idVenta = String(venta.id_venta || '').trim() || generarId('VTA');
   const precioUnitarioDop = parseFloat(venta.precio_unitario_dop) || parseFloat(producto[8]) || 0;
   const totalVentaDop = precioUnitarioDop * cantidadVenta;
   const costoUnitarioDop = parseFloat(producto[7]) || 0;
@@ -685,6 +1027,8 @@ function registrarVenta(venta) {
   let cobroCreado = null;
   if (esCredito) {
     cobroCreado = crearRegistroCobro({
+      id_cobro: venta.id_cobro,
+      id_abono_inicial: venta.id_abono_inicial,
       id_venta: idVenta,
       cliente: clienteNombre,
       telefono: clienteTelefono,
@@ -721,7 +1065,7 @@ function crearRegistroCobro(info) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const cobSheet = getSheet(SHEETS.COBROS);
   const ahora = info.fecha_venta || new Date();
-  const idCobro = 'COB-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss');
+  const idCobro = String(info.id_cobro || '').trim() || generarId('COB');
   
   const totalDop = parseFloat(info.total_dop) || 0;
   const abonoInicial = parseFloat(info.abono_inicial) || 0;
@@ -734,7 +1078,7 @@ function crearRegistroCobro(info) {
   const historialAbonos = [];
   if (abonoInicial > 0) {
     historialAbonos.push({
-      id_abono: 'ABN-INI-' + Date.now(),
+      id_abono: String(info.id_abono_inicial || '').trim() || generarId('ABN'),
       fecha: Utilities.formatDate(ahora, Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd HH:mm:ss'),
       monto: abonoInicial,
       metodo_pago: 'Efectivo',
@@ -875,6 +1219,26 @@ function registrarAbono(pago) {
   let totalCobrado = parseFloat(filaData[8]) || 0;
   let saldoPendiente = parseFloat(filaData[9]) || 0;
 
+  let historialAbonos = [];
+  try {
+    if (filaData[14]) historialAbonos = JSON.parse(filaData[14]);
+  } catch (e) {}
+
+  // Un reintento del mismo abono (mismo id_abono) no se vuelve a aplicar
+  const idAbono = String(pago.id_abono || '').trim() || generarId('ABN');
+  if (historialAbonos.some(a => a && String(a.id_abono) === idAbono)) {
+    return {
+      status: 'success',
+      duplicado: true,
+      id_cobro: pago.id_cobro,
+      id_abono: idAbono,
+      saldo_pendiente_dop: saldoPendiente,
+      total_cobrado_dop: totalCobrado,
+      estado: String(filaData[12] || ''),
+      message: 'El abono ' + idAbono + ' ya estaba registrado.'
+    };
+  }
+
   if (saldoPendiente <= 0) {
     return { status: 'error', message: 'Esta cuenta ya está totalmente saldada' };
   }
@@ -883,15 +1247,10 @@ function registrarAbono(pago) {
   totalCobrado += abonoEfectivo;
   saldoPendiente = Math.max(0, totalDop - totalCobrado);
 
-  let historialAbonos = [];
-  try {
-    if (filaData[14]) historialAbonos = JSON.parse(filaData[14]);
-  } catch (e) {}
-
   const ahora = new Date();
   const fechaStr = Utilities.formatDate(ahora, Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd HH:mm:ss');
   historialAbonos.push({
-    id_abono: 'ABN-' + Date.now(),
+    id_abono: idAbono,
     fecha: fechaStr,
     monto: abonoEfectivo,
     metodo_pago: pago.metodo_pago || 'Efectivo',
@@ -949,6 +1308,7 @@ function registrarAbono(pago) {
       ? '¡Cuenta saldada en su totalidad! Saldo restante: RD$ 0.00' 
       : 'Abono de RD$ ' + abonoEfectivo.toFixed(2) + ' registrado. Saldo pendiente: RD$ ' + saldoPendiente.toFixed(2),
     id_cobro: pago.id_cobro,
+    id_abono: idAbono,
     saldo_pendiente_dop: saldoPendiente,
     total_cobrado_dop: totalCobrado,
     estado: nuevoEstado,
@@ -1023,7 +1383,7 @@ function cancelarVenta(idVenta) {
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(idVenta)) {
       if (data[i][13] === 'Cancelada') {
-        return { status: 'error', message: 'Esta venta ya se encuentra cancelada' };
+        return { status: 'success', duplicado: true, message: 'La venta ' + idVenta + ' ya se encontraba cancelada' };
       }
 
       const idProd = String(data[i][2]);
@@ -1092,8 +1452,18 @@ function registrarRecepcionTanque(rec) {
     return { status: 'error', message: 'La recepción de tanque debe contener al menos un artículo' };
   }
 
+  const idRecepcionCliente = String(rec.id_recepcion || '').trim();
+  if (idRecepcionCliente && existeIdEnHoja(getSheet(SHEETS.RECEPCIONES), idRecepcionCliente)) {
+    return {
+      status: 'success',
+      duplicado: true,
+      id_recepcion: idRecepcionCliente,
+      message: 'El tanque ' + idRecepcionCliente + ' ya estaba registrado.'
+    };
+  }
+
   const ahora = new Date();
-  const idRecepcion = rec.id_recepcion || ('TANQ-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss'));
+  const idRecepcion = String(rec.id_recepcion || '').trim() || generarId('TANQ');
   const nombreTanque = String(rec.nombre_tanque || 'Tanque Importado de EE.UU.').replace(/\s+/g, ' ').trim();
   const origen = String(rec.origen || 'Miami, FL - EE.UU.').trim();
   const fleteUsd = parseFloat(rec.flete_usd) || 0;
@@ -1141,6 +1511,7 @@ function registrarRecepcionTanque(rec) {
     }
 
     if (rowIdx > 0) {
+      art.id = String(invData[rowIdx][0]);
       // PRODUCTO EXISTENTE: SUMAR EXISTENCIA ACUMULATIVAMENTE (NUNCA SOBREESCRIBIR)
       const stockAnterior = parseInt(invData[rowIdx][4]) || 0;
       const nuevoStock = stockAnterior + cant;
@@ -1157,7 +1528,8 @@ function registrarRecepcionTanque(rec) {
       invData[rowIdx][12] = ahora;
     } else {
       // PRODUCTO NUEVO: REGISTRAR EN INVENTARIO
-      const nuevoId = artId || ('PROD-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss') + Math.floor(Math.random() * 100));
+      const nuevoId = artId || generarId('PROD');
+      art.id = nuevoId;
       const estado = cant === 0 ? 'Agotado' : (cant <= 3 ? 'Stock Bajo' : 'En Stock');
       const newRowIdx = invData.length;
       invData.push([
@@ -1341,9 +1713,8 @@ function guardarConfiguracion(nuevaCfg) {
   }
 
   for (let key in nuevaCfg) {
-    if (key === 'AUTH_USER' || key === 'AUTH_PASS' || key === 'MASTER_SERVICE_KEY') {
-      // Guardar en ScriptProperties privadas para máxima seguridad
-      PropertiesService.getScriptProperties().setProperty(key, String(nuevaCfg[key]));
+    // Credenciales y sesiones solo se gestionan desde el menú de administración de la hoja
+    if (/^(AUTH_|SESSION_|MASTER_SERVICE_KEY$)/.test(key)) {
       continue;
     }
 
@@ -1421,13 +1792,6 @@ function inicializarHojasSiNoExisten(forzar) {
     cobSheet.getRange(1, 1, 1, cabecerasCob[0].length).setValues(cabecerasCob);
     estilarCabecera(cobSheet, cabecerasCob[0].length, '#0B132B', '#D4AF37');
     cobSheet.setFrozenRows(1);
-  }
-
-  // Asegurar que las credenciales de Pamela estén en PropertiesService en el servidor
-  const props = PropertiesService.getScriptProperties();
-  if (!props.getProperty('AUTH_USER')) {
-    props.setProperty('AUTH_USER', CREDENCIALES_SISTEMA.usuario);
-    props.setProperty('AUTH_PASS', CREDENCIALES_SISTEMA.contrasena);
   }
 }
 
@@ -1623,7 +1987,7 @@ function conciliarInventarioConRecepciones() {
       const meta = metaMap.get(nomKey) || {};
       const stockMin = 3;
       const estado = stockCalculado === 0 ? 'Agotado' : (stockCalculado <= stockMin ? 'Stock Bajo' : 'En Stock');
-      const nuevoId = 'PROD-REST-' + Utilities.formatDate(ahora, 'GMT', 'yyyyMMddHHmmss') + Math.floor(Math.random() * 100);
+      const nuevoId = generarId('PROD-REST');
 
       const nuevaFila = [
         nuevoId,

@@ -1,0 +1,106 @@
+# 🛠️ Plan de Corrección por Fases — Auditoría Octubre 2026
+
+Origen: auditoría completa de `backend/Codigo.gs`, `js/api.js`, `js/app.js`, `sw.js` e `index.html`.
+Los códigos (C1, A3, M5…) refieren a los hallazgos de esa auditoría.
+
+> **Despliegue del backend**: cada fase que toque `backend/Codigo.gs` requiere pegar el archivo en el editor de Apps Script
+> y publicar **Implementar › Gestionar implementaciones › Editar › Nueva versión** (la URL se mantiene).
+> Si el frontend y el backend cambian juntos, publicar primero el backend.
+> **Regla:** publicar el backend en Apps Script antes de hacer push a `main` (GitHub Pages publica el frontend al instante).
+> Subir `CACHE_NAME` en `sw.js` en cada despliegue del frontend para que los dispositivos no sigan usando JS viejo.
+
+---
+
+## Fase 1 — Credenciales y sesiones (C1, M6, bajos de seguridad) · 🔴 URGENTE
+
+| # | Cambio | Archivos |
+|---|---|---|
+| 1.1 | Eliminar la contraseña escrita en código y documentación. Las credenciales viven **solo** en `ScriptProperties`. | `Codigo.gs`, `TASKME.md`, `INSTRUCCIONES_CONFIGURACION.md` |
+| 1.2 | Guardar la contraseña como hash SHA-256 con sal (`AUTH_PASS_HASH` + `AUTH_SALT`). Migración automática desde `AUTH_PASS` en texto plano al primer login correcto. | `Codigo.gs` |
+| 1.3 | Menú **🔑 Cambiar usuario y contraseña** (pide los datos con `prompt`, nunca los muestra) y **🚪 Cerrar todas las sesiones**. Cambiar la contraseña revoca todas las sesiones existentes. | `Codigo.gs` |
+| 1.4 | Bloqueo temporal tras 5 intentos fallidos de login (15 min). | `Codigo.gs` |
+| 1.5 | Limpieza de sesiones expiradas en `ScriptProperties` y tope de sesiones activas. | `Codigo.gs` |
+| 1.6 | Eliminar la puerta trasera `MASTER_SERVICE_KEY` y bloquear que `saveConfig` escriba claves `AUTH_*`/`SESSION_*`. | `Codigo.gs` |
+| 1.7 | Login/logout fuera del `LockService` global; respuestas de error sin `stack`. | `Codigo.gs` |
+
+**Acciones manuales (fuera del código):**
+1. Desplegar la nueva versión del backend.
+2. Desde Google Sheets: `🌸 Thor Essence Admin › 🔑 Cambiar usuario y contraseña` → **contraseña nueva** (la anterior está publicada y debe darse por comprometida).
+3. Regenerar `assets/Manual_de_Usuario_Thor_Essence.pdf` sin credenciales (el PDF actual las contiene).
+4. Decidir sobre el historial de git: la contraseña vieja sigue en commits anteriores. Rotarla la neutraliza; reescribir el historial es opcional.
+5. Valorar quitar del repo público `Solicitud de sistema Pamela.ogg` y `backend/Thor_Essence_Base_De_Datos.xlsx`.
+
+**Criterio de aceptación:** `grep` del repo sin contraseñas; login con credenciales migradas funciona; tras rotar, los tokens anteriores reciben `UNAUTHORIZED_RLS`; 6.º intento fallido devuelve `TOO_MANY_ATTEMPTS`.
+
+---
+
+## Fase 2 — Idempotencia e IDs únicos (C2, C4, A1, M5) · 🔴
+
+- Cada operación del outbox lleva un `opId` (UUID) generado en el cliente.
+- El servidor registra los `opId` procesados (hoja `OPERACIONES` + caché) y ante un reintento devuelve el resultado original sin volver a aplicar la mutación.
+- El cliente genera los IDs definitivos (`VTA-`, `COB-`, `TANQ-`, `PROD-` con UUID) y el servidor los respeta → anular/abonar/vender antes de sincronizar funciona.
+- Marcar ítems "en vuelo" para que `flushOutbox` no reenvíe lo que `apiPost` está enviando.
+- Sustituir IDs por segundo + `random(100)` del servidor por `Utilities.getUuid()`.
+
+**Aceptación:** reenviar el mismo payload 3 veces produce 1 venta; tanque con 30 productos nuevos → 30 IDs distintos.
+
+**Implementado:**
+- Backend: `ejecutarAccion()` + hoja oculta `Operaciones` (op_id → resultado, con caché de 6 h). Solo se registran operaciones exitosas.
+- Backend: deduplicación por entidad aunque cambie el op_id: `id_venta` (antes de validar stock), `id_recepcion`, `id_abono`; anular una venta ya anulada es éxito idempotente.
+- Backend: `generarId()` → `PREFIJO-yyyyMMdd-XXXXXXXX`; respeta `id_venta`, `id_cobro`, `id_abono_inicial`, `id_abono`, `id_recepcion` y `art.id` enviados por el cliente; el detalle del tanque guarda el ID real de cada artículo.
+- Cliente: `prepararIdsOperacion()` asigna los IDs antes de aplicar en local; cada ítem del outbox lleva `opId` (también los heredados y los re-encolados desde la cola de recuperación).
+- Cliente: todos los envíos pasan por una cadena en serie (`enSerie`) con timeout de 45 s; las operaciones en vuelo de `apiPost` no se reenvían desde `flushOutbox`; `flushOutbox` ya no devuelve `{inProgress}` sin conteo de pendientes.
+- Cliente: el abono ya no se aplica dos veces en `app.js` (se recarga desde la caché).
+- Compatibilidad: backend nuevo + frontend viejo y frontend nuevo + backend viejo siguen funcionando.
+
+**Notas para fases siguientes:**
+- Fase 3: en el backend la búsqueda por nombre en tanques incluye filas `Eliminado` (revive el producto con su ID viejo), mientras que el cliente crea uno nuevo → decidir la regla al rehacer la conciliación.
+- Fase 4: al sacar del outbox los rechazos de negocio, tener en cuenta que un rechazo puede deberse a una operación anterior aún pendiente (p. ej. venta de un producto cuyo alta falló).
+
+## Fase 3 — Conciliación de inventario (C3, A4, A8) · 🔴
+
+- Eliminar `autoConciliarInventarioConRecepciones` del cliente (no más reversión de mermas ni productos resucitados).
+- Reescribir la conciliación del servidor **por ID** y con registro de movimientos (kardex: recepción, venta, anulación, ajuste, edición), corrigiendo: doble conteo de anulaciones, que solo suba stock, borrado de filas activas tras una "Eliminado", y `clearContents` no atómico.
+- `eliminarRecepcion` descuenta realmente las unidades del tanque.
+- Ningún ajuste, anulación ni recepción revive un producto `Eliminado` sin intención explícita.
+- Conciliación solo bajo demanda y con vista previa de cambios.
+
+## Fase 4 — Robustez de la cola y sincronización (A2, A5, A6, A7, M7) · 🟠
+
+- Distinguir fallo de red (reintentar) de rechazo de negocio (sacar del outbox, revertir el cambio local, mostrar el error).
+- No vaciar la cola sin sesión; un 401 no cuenta como reintento.
+- Tras descargar datos del servidor, re-aplicar las operaciones pendientes sobre la instantánea (rebase) en lugar de descartarlas.
+- Quitar la doble aplicación local de `quickAdjustStock`.
+- `resetAllData`/`reconcileInventory` nunca pasan por el outbox; arreglar la clave duplicada `resetSystemData`; la purga limpia también `AJUSTES`.
+
+## Fase 5 — Integridad de producto y reglas de negocio (A3, M4, M9, M10) · 🟠
+
+- `saveProduct` en modo edición no modifica `cantidad`; el stock solo cambia por movimientos (delta).
+- Validación en servidor: sin cantidades/precios negativos, `stock_minimo` 0 permitido.
+- Redondeo a centavos en abonos/saldos; deudas canceladas fuera de las métricas por cobrar.
+- Prorrateo opcional del flete del tanque en el costo unitario; mismo precio por defecto en cliente y servidor.
+
+## Fase 6 — Métricas y fechas (M2, M3) · 🟡
+
+- Formato único de fecha `yyyy-MM-dd HH:mm:ss` en zona `America/Santo_Domingo` en cliente y servidor.
+- `recalcularMetricasLocales` calcula ventas de hoy/mes reales con fecha local (no UTC).
+
+## Fase 7 — PWA offline, XSS y rendimiento (M1, M8, bajos) · 🟡
+
+- Compilar Tailwind a CSS estático, alojar Chart.js con versión fija, versionar `CACHE_NAME` por despliegue, network-first para el app shell.
+- Función `escapeHtml` aplicada a todo texto de usuario en `innerHTML` y en Sonner.
+- Token por POST en lugar de query string; evitar `inicializarHojasSiNoExisten` en cada request y la doble lectura en `getAllData`.
+
+---
+
+## Estado
+
+| Fase | Estado |
+|---|---|
+| 1 — Credenciales y sesiones | ✅ Desplegado (pendiente: regenerar el manual PDF sin credenciales) |
+| 2 — Idempotencia e IDs | ✅ Desplegado |
+| 3 — Conciliación | ⏳ Pendiente |
+| 4 — Cola y sincronización | ⏳ Pendiente |
+| 5 — Reglas de negocio | ⏳ Pendiente |
+| 6 — Métricas y fechas | ⏳ Pendiente |
+| 7 — PWA, XSS, rendimiento | ⏳ Pendiente |

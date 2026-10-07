@@ -316,10 +316,68 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     }
   }
 
-  function enqueueOutbox(action, data) {
+  function generarUuid() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  /**
+   * ID definitivo generado en el dispositivo: PREFIJO-yyyyMMdd-XXXXXXXX.
+   * Mismo formato que generarId() del backend; el servidor lo respeta, así el ID local
+   * y el de Google Sheets coinciden aunque la operación se suba horas después.
+   */
+  function generarId(prefijo) {
+    const d = new Date();
+    const fecha = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    return `${prefijo}-${fecha}-${generarUuid().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
+  }
+
+  function esVentaCredito(v) {
+    return !!v && (v.tipo_venta === 'credito' || v.metodo_pago === 'Crédito' || v.metodo_pago === 'Fiado' || v.es_credito === true);
+  }
+
+  /**
+   * Asigna los IDs definitivos antes de aplicar la operación en local y encolarla.
+   */
+  function prepararIdsOperacion(action, data) {
+    if (!data || typeof data !== 'object') return;
+
+    if (action === 'saveProduct' && !data.id) {
+      data.id = generarId('PROD');
+    }
+
+    if (action === 'registerSale') {
+      if (!data.id_venta) data.id_venta = generarId('VTA');
+      if (esVentaCredito(data)) {
+        if (!data.id_cobro) data.id_cobro = generarId('COB');
+        if ((parseFloat(data.abono_inicial) || 0) > 0 && !data.id_abono_inicial) {
+          data.id_abono_inicial = generarId('ABN');
+        }
+      }
+    }
+
+    if (action === 'registerPayment' && !data.id_abono) {
+      data.id_abono = generarId('ABN');
+    }
+
+    if (action === 'registerReception' && !data.id_recepcion) {
+      data.id_recepcion = generarId('TANQ');
+    }
+  }
+
+  function enqueueOutbox(action, data, opId) {
     const queue = getOutbox();
     const item = {
       queueId: 'OUTBOX_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      // Clave de idempotencia: el servidor no aplica dos veces la misma operación
+      opId: opId || generarUuid(),
       action: action,
       data: data,
       timestamp: Date.now(),
@@ -379,9 +437,64 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
 
   let inFlightFetchAll = null;
   let lastFetchAllTimestamp = 0;
-  let isFlushingOutbox = false;
-  async function flushOutbox() {
-    if (isFlushingOutbox) return { inProgress: true };
+
+  // Operaciones que apiPost está enviando en este momento: flushOutbox no las reenvía
+  const operacionesEnVuelo = new Set();
+
+  // Todos los envíos de mutaciones pasan por esta cadena y se ejecutan de uno en uno,
+  // en el mismo orden en que se registraron.
+  let cadenaEnvios = Promise.resolve();
+  function enSerie(tarea) {
+    const resultado = cadenaEnvios.then(tarea, tarea);
+    cadenaEnvios = resultado.catch(() => {});
+    return resultado;
+  }
+
+  const TIMEOUT_ENVIO_MS = 45000;
+  async function fetchConTimeout(url, opciones) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_ENVIO_MS);
+    try {
+      return await fetch(url, Object.assign({}, opciones, { signal: controller.signal }));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Envía una operación de la cola al servidor (con su op_id) y devuelve el JSON de respuesta.
+   * Lanza excepción ante fallos de red o timeout.
+   */
+  async function enviarOperacion(cfg, item) {
+    const payload = {
+      action: item.action,
+      token: getSessionToken(),
+      op_id: item.opId,
+      data: item.data
+    };
+
+    const post = () => fetchConTimeout(cfg.gasUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    }).then(r => r.json());
+
+    let json = await post();
+    if (json && json.code === 'UNAUTHORIZED_RLS') {
+      const renewed = await silentRelogin();
+      if (renewed) {
+        payload.token = getSessionToken();
+        json = await post();
+      }
+    }
+    return json;
+  }
+
+  function flushOutbox() {
+    return enSerie(flushOutboxEnSerie);
+  }
+
+  async function flushOutboxEnSerie() {
     const cfg = getConfig();
     if (!cfg.isConfigured || !navigator.onLine) {
       const remaining = getOutbox().length;
@@ -399,76 +512,55 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       Sonner.warning(`Hay ${queue.length} operaciones pendientes de sincronizar. Verifique su conexión a internet.`, 6000);
     }
 
-    isFlushingOutbox = true;
+    // Operaciones encoladas antes de existir op_id: asignarles uno estable desde ahora
+    if (queue.some(q => !q.opId)) {
+      queue.forEach(q => { if (!q.opId) q.opId = generarUuid(); });
+      saveOutbox(queue);
+    }
+
     let processed = 0;
     let failed = 0;
 
-    try {
-      const batch = queue.slice(0, 10);
-      for (const item of batch) {
-        try {
-          let token = getSessionToken();
-          if (!token || token.startsWith('OFFLINE_') || token.startsWith('LOCAL_')) {
-            await silentRelogin();
-            token = getSessionToken();
-          }
+    const batch = queue.slice(0, 10);
+    for (const item of batch) {
+      if (operacionesEnVuelo.has(item.queueId)) continue;
+      // Pudo haberse confirmado mientras esperábamos turno
+      if (!getOutbox().some(q => q.queueId === item.queueId)) continue;
 
-          const payload = {
-            action: item.action,
-            token: token,
-            data: item.data
-          };
-
-          let response = await fetch(cfg.gasUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload)
-          });
-
-          let json = await response.json();
-
-          if (json && json.code === 'UNAUTHORIZED_RLS') {
-            const renewed = await silentRelogin();
-            if (renewed) {
-              payload.token = getSessionToken();
-              response = await fetch(cfg.gasUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload)
-              });
-              json = await response.json();
-            }
-          }
-
-          if (json && json.status === 'success') {
-            removeFromOutbox(item.queueId);
-            processed++;
-          } else {
-            item.retries = (item.retries || 0) + 1;
-            if (item.retries >= 5) {
-              // Mover a dead-letter queue en vez de borrar — NUNCA perder datos
-              moveToDeadLetterQueue(item);
-              removeFromOutbox(item.queueId);
-              Sonner.error(`Error persistente sincronizando operación. Se guardó en cola de recuperación.`, 5000);
-            } else {
-              // Actualizar contador de reintentos en la cola
-              let currentQueue = getOutbox();
-              const idx = currentQueue.findIndex(q => q.queueId === item.queueId);
-              if (idx >= 0) {
-                currentQueue[idx].retries = item.retries;
-                saveOutbox(currentQueue);
-              }
-            }
-            failed++;
-          }
-        } catch (itemErr) {
-          console.warn('Error subiendo elemento outbox:', itemErr);
-          failed++;
-          break;
+      try {
+        let token = getSessionToken();
+        if (!token || token.startsWith('OFFLINE_') || token.startsWith('LOCAL_')) {
+          await silentRelogin();
         }
+
+        const json = await enviarOperacion(cfg, item);
+
+        if (json && json.status === 'success') {
+          removeFromOutbox(item.queueId);
+          processed++;
+        } else {
+          item.retries = (item.retries || 0) + 1;
+          if (item.retries >= 5) {
+            // Mover a dead-letter queue en vez de borrar — NUNCA perder datos
+            moveToDeadLetterQueue(item);
+            removeFromOutbox(item.queueId);
+            Sonner.error(`Error persistente sincronizando operación. Se guardó en cola de recuperación.`, 5000);
+          } else {
+            // Actualizar contador de reintentos en la cola
+            let currentQueue = getOutbox();
+            const idx = currentQueue.findIndex(q => q.queueId === item.queueId);
+            if (idx >= 0) {
+              currentQueue[idx].retries = item.retries;
+              saveOutbox(currentQueue);
+            }
+          }
+          failed++;
+        }
+      } catch (itemErr) {
+        console.warn('Error subiendo elemento outbox:', itemErr);
+        failed++;
+        break;
       }
-    } finally {
-      isFlushingOutbox = false;
     }
 
     const remaining = getOutbox().length;
@@ -556,7 +648,7 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
         // Producto huérfano en recepciones que falta en inventario: recrearlo
         const meta = metaMap.get(nomKey) || {};
         const nuevoProd = {
-          id: 'PROD-REST-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100),
+          id: generarId('PROD-REST'),
           nombre: meta.nombre || nomKey.toUpperCase(),
           categoria: meta.categoria || 'Variedades',
           descripcion: 'Tanque: ' + (meta.ubicacion || 'Tanque Importado'),
@@ -639,6 +731,9 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
   async function apiPost(action, data = {}) {
     const cfg = getConfig();
 
+    // 0. IDs definitivos generados en el dispositivo (iguales en local y en la nube)
+    prepararIdsOperacion(action, data);
+
     // 1. Ejecutar de inmediato en caché local para respuesta ultra-rápida (0ms)
     const localResult = operarEnLocal(action, data);
 
@@ -646,55 +741,38 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       return localResult;
     }
 
-    // 2. Encolar la mutación en OutboxQueue persistente
+    // 2. Encolar la mutación en OutboxQueue persistente (con op_id de idempotencia)
+    //    y marcarla en vuelo para que flushOutbox no la envíe en paralelo
     const outboxItem = enqueueOutbox(action, data);
+    operacionesEnVuelo.add(outboxItem.queueId);
 
-    // 3. Si hay red, sincronizar de inmediato
-    if (navigator.onLine) {
+    const respuestaEncolada = () => ({
+      status: 'success',
+      isQueued: true,
+      message: localResult.message || 'Operación guardada localmente y encolada para sincronización',
+      total_unidades: localResult.total_unidades
+    });
+
+    // 3. Si hay red, sincronizar de inmediato (en serie con el resto de envíos)
+    if (!navigator.onLine) {
+      operacionesEnVuelo.delete(outboxItem.queueId);
+      return respuestaEncolada();
+    }
+
+    return enSerie(async () => {
       try {
-        let token = getSessionToken();
-        const payload = {
-          action: action,
-          token: token,
-          data: data
-        };
-
-        let response = await fetch(cfg.gasUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(payload)
-        });
-
-        let json = await response.json();
-
-        if (json && json.code === 'UNAUTHORIZED_RLS') {
-          const renewed = await silentRelogin();
-          if (renewed) {
-            payload.token = getSessionToken();
-            response = await fetch(cfg.gasUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify(payload)
-            });
-            json = await response.json();
-          }
-        }
-
+        const json = await enviarOperacion(cfg, outboxItem);
         if (json && json.status === 'success') {
           removeFromOutbox(outboxItem.queueId);
           return json;
         }
       } catch (e) {
         console.warn('apiPost no pudo conectar de inmediato con la nube, resguardado en OutboxQueue:', e);
+      } finally {
+        operacionesEnVuelo.delete(outboxItem.queueId);
       }
-    }
-
-    return {
-      status: 'success',
-      isQueued: true,
-      message: localResult.message || 'Operación guardada localmente y encolada para sincronización',
-      total_unidades: localResult.total_unidades
-    };
+      return respuestaEncolada();
+    });
   }
 
   function obtenerProximaQuincenaJS(baseDate, step) {
@@ -761,7 +839,7 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
 
     if (action === 'saveProduct') {
       const p = data;
-      const id = p.id || ('PROD-' + Date.now().toString().slice(-6));
+      const id = p.id || generarId('PROD');
       p.id = id;
       p.costo_usd = parseFloat(p.costo_usd) || 0;
       p.costo_dop = parseFloat(p.costo_dop) || (p.costo_usd * getUsdRate());
@@ -818,14 +896,14 @@ return { status: 'error', message: 'Producto no encontrado' };
       const costo = (prod.costo_dop || 0) * cant;
       const ganancia = total - costo;
 
-      const esCredito = (v.tipo_venta === 'credito' || v.metodo_pago === 'Crédito' || v.metodo_pago === 'Fiado' || v.es_credito === true);
+      const esCredito = esVentaCredito(v);
       const estadoVenta = esCredito ? 'Pendiente de Cobro' : 'Completada';
       const metodoPago = esCredito ? 'Crédito / Fiado' : (v.metodo_pago || 'Efectivo');
       const clienteNombre = v.cliente || 'Cliente General';
       const clienteTel = v.telefono || '';
 
       const nuevaVenta = {
-        id_venta: 'VTA-' + Date.now().toString().slice(-6),
+        id_venta: v.id_venta || generarId('VTA'),
         fecha_venta: new Date().toLocaleString(),
         id_articulo: prod.id,
         nombre_articulo: prod.nombre,
@@ -856,7 +934,7 @@ return { status: 'error', message: 'Producto no encontrado' };
         const historialAbonos = [];
         if (abonoInicial > 0) {
           historialAbonos.push({
-            id_abono: 'ABN-INI-' + Date.now(),
+            id_abono: v.id_abono_inicial || generarId('ABN'),
             fecha: new Date().toLocaleString(),
             monto: abonoInicial,
             metodo_pago: 'Efectivo',
@@ -869,7 +947,7 @@ return { status: 'error', message: 'Producto no encontrado' };
         if (primerPendiente) proximoVencimiento = primerPendiente.fecha_vencimiento;
 
         nuevoCobro = {
-          id_cobro: 'COB-' + Date.now().toString().slice(-6),
+          id_cobro: v.id_cobro || generarId('COB'),
           id_venta: nuevaVenta.id_venta,
           fecha_venta: nuevaVenta.fecha_venta,
           cliente: clienteNombre,
@@ -906,7 +984,7 @@ return {
 
     if (action === 'registerPayment') {
       if (!current.cobros) current.cobros = [];
-      const { id_cobro, monto, metodo_pago, nota } = data;
+      const { id_cobro, id_abono, monto, metodo_pago, nota } = data;
       const cobro = current.cobros.find(x => x.id_cobro === id_cobro);
       if (!cobro) return { status: 'error', message: 'Cuenta por cobrar no encontrada' };
 
@@ -920,7 +998,7 @@ return {
       const fechaStr = new Date().toLocaleString();
       if (!cobro.historial_abonos) cobro.historial_abonos = [];
       cobro.historial_abonos.push({
-        id_abono: 'ABN-' + Date.now(),
+        id_abono: id_abono || generarId('ABN'),
         fecha: fechaStr,
         monto: abonoEfectivo,
         metodo_pago: metodo_pago || 'Efectivo',
@@ -996,6 +1074,8 @@ return { status: 'error', message: 'Venta no encontrada o ya cancelada' };
       const items = rec.articulos || [];
       const tasa = parseFloat(rec.tasa_cambio) || getUsdRate();
       let totalUnidades = 0;
+      // Misma normalización de nombres que registrarRecepcionTanque() en el backend
+      const norm = str => String(str || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
       items.forEach(item => {
         const cant = parseInt(item.cantidad) || 0;
@@ -1006,9 +1086,12 @@ return { status: 'error', message: 'Venta no encontrada o ya cancelada' };
         const costoDop = parseFloat(item.costo_dop) || (costoUsd * tasa);
         const precioVentaDop = parseFloat(item.precio_venta_dop) || (costoDop * 1.5);
 
-        let existing = current.inventario.find(x => x.id === item.id || (item.nombre && x.nombre.trim().toLowerCase() === item.nombre.trim().toLowerCase()));
+        const existing = (item.id && current.inventario.find(x => x.id === item.id)) ||
+          (item.nombre && current.inventario.find(x => norm(x.nombre) === norm(item.nombre)));
 
         if (existing) {
+          // El servidor recibe el ID del producto existente y suma sobre él
+          item.id = existing.id;
           existing.cantidad += cant;
           if (costoUsd > 0) existing.costo_usd = costoUsd;
           if (costoDop > 0) existing.costo_dop = costoDop;
@@ -1018,8 +1101,10 @@ return { status: 'error', message: 'Venta no encontrada o ya cancelada' };
           existing.ubicacion = rec.nombre_tanque;
           existing.fecha_actualizacion = new Date().toLocaleString();
         } else {
+          // Producto nuevo: el ID se genera aquí y el servidor lo respeta
+          if (!item.id) item.id = generarId('PROD');
           current.inventario.unshift({
-            id: 'PROD-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100),
+            id: item.id,
             nombre: item.nombre,
             categoria: item.categoria || 'Variedades',
             descripcion: item.descripcion || '',
@@ -1036,26 +1121,18 @@ return { status: 'error', message: 'Venta no encontrada o ya cancelada' };
         }
       });
 
-      let existingRec = current.recepciones.find(r => (r.nombre_tanque || '').trim().toLowerCase() === (rec.nombre_tanque || '').trim().toLowerCase());
-      if (existingRec) {
-        existingRec.total_unidades = (existingRec.total_unidades || 0) + totalUnidades;
-        existingRec.flete_usd = (existingRec.flete_usd || 0) + (parseFloat(rec.flete_usd) || 0);
-        existingRec.articulos = (existingRec.articulos || []).concat(items);
-        if (rec.notas) existingRec.notas = (existingRec.notas ? existingRec.notas + ' | ' : '') + rec.notas;
-      } else {
-        const nuevaRec = {
-          id_recepcion: 'TANQ-' + Date.now().toString().slice(-6),
-          fecha: rec.fecha || new Date().toISOString().substring(0, 10),
-          nombre_tanque: rec.nombre_tanque,
-          origen: rec.origen || 'EE.UU.',
-          total_unidades: totalUnidades,
-          flete_usd: parseFloat(rec.flete_usd) || 0,
-          tasa_cambio: tasa,
-          notas: rec.notas || '',
-          articulos: items
-        };
-        current.recepciones.unshift(nuevaRec);
-      }
+      // Igual que en el servidor: cada envío es una recepción propia (la UI agrupa por nombre de tanque)
+      current.recepciones.unshift({
+        id_recepcion: rec.id_recepcion || generarId('TANQ'),
+        fecha: rec.fecha || new Date().toISOString().substring(0, 10),
+        nombre_tanque: rec.nombre_tanque,
+        origen: rec.origen || 'EE.UU.',
+        total_unidades: totalUnidades,
+        flete_usd: parseFloat(rec.flete_usd) || 0,
+        tasa_cambio: tasa,
+        notas: rec.notas || '',
+        articulos: items
+      });
       recalcularMetricasLocales(current);
       setCachedData(current);
 
@@ -1227,6 +1304,7 @@ return {
     getDeadLetterQueue,
     clearDeadLetterQueue: () => localStorage.removeItem('thor_dead_letter_queue_v1'),
     enqueueOutbox,
+    generarId,
     DEFAULT_CATEGORIES
   };
 })();

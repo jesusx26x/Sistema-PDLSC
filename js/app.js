@@ -2977,52 +2977,21 @@ const ThorApp = (function() {
       });
 
       if (res && res.status === 'success') {
-        const nuevoCobrado = cobro.total_cobrado_dop + monto;
-        const nuevoSaldo = Math.max(0, cobro.saldo_pendiente_dop - monto);
-        cobro.total_cobrado_dop = nuevoCobrado;
-        cobro.saldo_pendiente_dop = nuevoSaldo;
-        cobro.estado = nuevoSaldo <= 0 ? 'Saldada' : 'Parcial';
-
-        let restanteParaCuotas = monto;
-        for (let c of (cobro.plan_cuotas || [])) {
-          if (c.estado !== 'Cobrada' && restanteParaCuotas > 0) {
-            const faltaPorCuota = c.monto - (c.monto_abonado || 0);
-            if (restanteParaCuotas >= faltaPorCuota) {
-              c.monto_abonado = c.monto;
-              c.estado = 'Cobrada';
-              c.fecha_pago = new Date().toISOString().substring(0, 10);
-              restanteParaCuotas -= faltaPorCuota;
-            } else {
-              c.monto_abonado = (c.monto_abonado || 0) + restanteParaCuotas;
-              restanteParaCuotas = 0;
-            }
-          }
+        // operarEnLocal (api.js) ya aplicó el abono en caché con su id_abono definitivo:
+        // recargar desde ahí en lugar de aplicarlo una segunda vez con otro ID
+        const fresh = ThorAPI.getCachedData();
+        if (fresh) {
+          state.cobros = fresh.cobros || [];
+          state.sales = fresh.ventas || [];
         }
-
-        const primerPendiente = (cobro.plan_cuotas || []).find(c => c.estado === 'Pendiente');
-        cobro.proximo_vencimiento = primerPendiente ? primerPendiente.fecha_vencimiento : 'Saldada';
-
-        if (!cobro.historial_abonos) cobro.historial_abonos = [];
-        cobro.historial_abonos.push({
-          id_abono: 'ABN-' + Date.now().toString().slice(-6),
-          fecha: new Date().toLocaleString(),
-          monto: monto,
-          metodo_pago: metodo,
-          nota: nota
-        });
-
-        const cached = ThorAPI.getCachedData();
-        if (cached && cached.cobros) {
-          const idx = cached.cobros.findIndex(x => x.id_cobro === idCobro);
-          if (idx >= 0) cached.cobros[idx] = cobro;
-          ThorAPI.setCachedData(cached);
-        }
+        const cobroActual = state.cobros.find(c => c.id_cobro === idCobro) || cobro;
+        const nuevoSaldo = Number(cobroActual.saldo_pendiente_dop) || 0;
 
         closeAllModals();
         renderAll();
 
         if (nuevoSaldo <= 0) {
-          Sonner.success(`¡Cuenta saldada por completo! ${cobro.cliente} ha completado el pago de RD$ ${Number(cobro.monto_total_dop).toLocaleString()}.`, 6000);
+          Sonner.success(`¡Cuenta saldada por completo! ${cobroActual.cliente} ha completado el pago de RD$ ${Number(cobroActual.monto_total_dop).toLocaleString()}.`, 6000);
         } else {
           Sonner.success(`Abono de RD$ ${Number(monto).toLocaleString()} registrado con éxito. Resta: RD$ ${Number(nuevoSaldo).toLocaleString()}`, 4500);
         }
@@ -3337,7 +3306,8 @@ const ThorApp = (function() {
     const count = dlq.length;
     dlq.forEach(item => {
       item.retries = 0;
-      if (ThorAPI.enqueueOutbox) ThorAPI.enqueueOutbox(item.action, item.data);
+      // Conservar el opId original: si el servidor ya la aplicó, no se duplica
+      if (ThorAPI.enqueueOutbox) ThorAPI.enqueueOutbox(item.action, item.data, item.opId);
     });
     if (ThorAPI.clearDeadLetterQueue) ThorAPI.clearDeadLetterQueue();
     Sonner.success(`Se re-encolaron ${count} operaciones para sincronizar con la nube.`);
