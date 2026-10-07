@@ -114,7 +114,7 @@ async function test(nombre, fn) { await fn(); ok++; console.log('✔ ' + nombre)
   // ---------------- H12: versión ----------------
   await test('El backend informa su versión y la app avisa si el servidor quedó desactualizado', async () => {
     const env = entorno();
-    assert.strictEqual(env.backend.get({ action: 'ping' }).version, 9);
+    assert.ok(env.backend.get({ action: 'ping' }).version >= 9);
     const eventos = [];
     env.ctx.dispatchEvent = e => { eventos.push(e.type); return true; };
     await sincronizar(env);

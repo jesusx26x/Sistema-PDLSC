@@ -263,6 +263,17 @@ Cada operación añade una fila y la búsqueda de duplicados recorre toda la col
 | H15 | El respaldo diario conserva las últimas 30 copias. |
 | H16 | Depuración de `Operaciones` y `Registro de Errores` de más de 180 días. |
 
+### Fase 10 — ✅ desplegada
+
+| Hallazgo | Resultado |
+|---|---|
+| H6 | Un abono mayor que el saldo, o que llega a una cuenta ya saldada o anulada (p. ej. dos equipos cobraron el mismo fiado sin conexión), aplica lo justo y **registra el excedente** en el historial del fiado; aparece en "⚠️ Por revisar" y en el correo del administrador. Antes: RD$ 400 sin registro. |
+| H7 | Al anular un fiado con abonos, la confirmación muestra lo abonado y queda anotado "a devolver" en la cuenta. |
+| H19 | El servidor rechaza una venta a crédito cuyo abono inicial cubre el total ("regístrala al contado"). |
+| M2 | Reportes con **Dinero Cobrado** (contado + abonos), **Pendiente por Cobrar** y **A Devolver a Clientes**; la ganancia indica que incluye ventas a crédito. |
+
+**Pruebas:** 109 automatizadas en verde (7 nuevas) + verificación en navegador.
+
 ## 7. Criterios de "cero quejas"
 
 Al cerrar las Fases 8 y 9, el sistema debería cumplir lo siguiente:

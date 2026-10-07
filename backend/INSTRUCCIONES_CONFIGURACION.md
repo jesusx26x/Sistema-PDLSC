@@ -155,3 +155,9 @@ El respaldo diario conserva las **últimas 30 copias** en la carpeta `Respaldos 
 
 La sesión dura 30 días y **se renueva sola** mientras se use la app (cuando le quedan menos de 7 días). Solo se vuelve a pedir la contraseña si la app no se usa en un mes o si se cambia la contraseña.
 
+## 💵 Fiados: excedentes y dinero a devolver
+
+- Si un cliente paga de más, o si dos teléfonos registran el mismo cobro sin conexión, el sistema aplica al saldo solo lo que se debía y anota el **excedente** en el historial del fiado ("devolver al cliente o dejar a favor"). Aparece en **⚠️ Por revisar** y en el correo diario.
+- Al **anular** una venta a crédito que ya tenía abonos, la app avisa cuánto se había cobrado y lo anota en la cuenta como dinero a devolver.
+- En **Reportes**: *Dinero Cobrado* (contado + abonos), *Pendiente por Cobrar* y *A Devolver a Clientes*.
+

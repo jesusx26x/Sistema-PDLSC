@@ -22,7 +22,7 @@
 
 // Versión del backend. Subirla en cada cambio de este archivo; el frontend exige una mínima
 // y avisa si el código publicado en Apps Script quedó atrás.
-const VERSION_BACKEND = 9;
+const VERSION_BACKEND = 10;
 
 // Zona horaria del negocio: fechas, "ventas de hoy" y vencimientos siempre en hora de RD,
 // sin depender de la zona configurada en el proyecto de Apps Script.
@@ -953,7 +953,7 @@ function obtenerTodosLosDatos() {
   const ventasConCobroVisible = new Set(cobrosVisibles.map(c => c.id_venta));
 
   const ventasVisibles = [];
-  const historial = { desde: limite, ventas: 0, ingresos_dop: 0, ganancia_dop: 0, por_producto: {} };
+  const historial = { desde: limite, ventas: 0, ingresos_dop: 0, ganancia_dop: 0, cobrado_dop: 0, a_devolver_dop: 0, por_producto: {} };
   ventas.forEach(v => {
     if (String(v.fecha_venta) >= limite || ventasConCobroVisible.has(v.id_venta)) {
       ventasVisibles.push(v);
@@ -963,11 +963,19 @@ function obtenerTodosLosDatos() {
     historial.ventas++;
     historial.ingresos_dop = r2(historial.ingresos_dop + v.total_dop);
     historial.ganancia_dop = r2(historial.ganancia_dop + v.ganancia_dop);
+    if (v.metodo_pago !== 'Crédito / Fiado') historial.cobrado_dop = r2(historial.cobrado_dop + v.total_dop);
     const nombre = v.nombre_articulo || 'Sin Nombre';
     const acc = historial.por_producto[nombre] || { cantidad: 0, total: 0 };
     acc.cantidad += v.cantidad;
     acc.total = r2(acc.total + v.total_dop);
     historial.por_producto[nombre] = acc;
+  });
+
+  // Abonos de fiados que ya no viajan al dispositivo (cerrados hace más de 180 días)
+  cobros.forEach(c => {
+    if (cobrosVisibles.indexOf(c) >= 0) return;
+    if (c.estado !== 'Cancelada') historial.cobrado_dop = r2(historial.cobrado_dop + c.total_cobrado_dop);
+    historial.a_devolver_dop = r2(historial.a_devolver_dop + (c.a_devolver_dop || 0));
   });
 
   return {
@@ -1255,6 +1263,11 @@ function registrarVenta(venta) {
   const costoUnitarioDop = parseFloat(producto[7]) || 0;
   const gananciaNetaDop = r2(totalVentaDop - (costoUnitarioDop * cantidadVenta));
 
+  const ventaACredito = (venta.tipo_venta === 'credito' || venta.metodo_pago === 'Crédito' || venta.metodo_pago === 'Fiado' || venta.es_credito === true);
+  if (ventaACredito && totalVentaDop > 0 && (parseFloat(venta.abono_inicial) || 0) >= totalVentaDop) {
+    return { status: 'error', code: 'VALIDACION', message: 'El abono inicial cubre el total de la venta: regístrala al contado.' };
+  }
+
   // Modalidad: Contado vs Crédito / Fiado
   const esCredito = (venta.tipo_venta === 'credito' || venta.metodo_pago === 'Crédito' || venta.metodo_pago === 'Fiado' || venta.es_credito === true);
   const estadoVenta = esCredito ? 'Pendiente de Cobro' : 'Completada';
@@ -1500,14 +1513,39 @@ function registrarAbono(pago) {
     };
   }
 
-  if (String(filaData[12]) === 'Cancelada') {
-    return { status: 'error', code: 'VALIDACION', message: 'Esta cuenta fue anulada junto con su venta' };
-  }
-  if (saldoPendiente <= 0) {
-    return { status: 'error', code: 'VALIDACION', message: 'Esta cuenta ya está totalmente saldada' };
+  const ahoraAbono = new Date();
+  const fechaAbonoStr = Utilities.formatDate(ahoraAbono, ZONA_HORARIA, 'yyyy-MM-dd HH:mm:ss');
+  const cuentaAnulada = String(filaData[12]) === 'Cancelada';
+
+  // Dinero recibido para una cuenta ya saldada o anulada (p. ej. dos equipos cobraron el mismo
+  // fiado sin conexión): no se aplica al saldo, pero se registra para devolverlo o dejarlo a favor
+  if (cuentaAnulada || saldoPendiente <= 0) {
+    const excedenteTotal = r2(montoAbono);
+    historialAbonos.push({
+      id_abono: idAbono,
+      fecha: fechaAbonoStr,
+      monto: 0,
+      excedente: excedenteTotal,
+      metodo_pago: pago.metodo_pago || 'Efectivo',
+      nota: 'Excedente RD$ ' + excedenteTotal.toFixed(2) + ': la cuenta ya estaba ' + (cuentaAnulada ? 'anulada' : 'saldada') +
+        '. Devolver al cliente o dejar a favor.'
+    });
+    cobSheet.getRange(filaEncontrada, 15).setValue(JSON.stringify(historialAbonos));
+    return {
+      status: 'success',
+      id_cobro: pago.id_cobro,
+      id_abono: idAbono,
+      excedente: excedenteTotal,
+      saldo_pendiente_dop: saldoPendiente,
+      total_cobrado_dop: totalCobrado,
+      estado: String(filaData[12]),
+      message: 'La cuenta de ' + filaData[3] + ' ya estaba ' + (cuentaAnulada ? 'anulada' : 'saldada') +
+        ': se recibieron RD$ ' + excedenteTotal.toFixed(2) + ' de más. Devuélvelos al cliente o déjalos a favor.'
+    };
   }
 
   const abonoEfectivo = r2(Math.min(montoAbono, saldoPendiente));
+  const excedente = r2(montoAbono - abonoEfectivo);
   totalCobrado = r2(totalCobrado + abonoEfectivo);
   saldoPendiente = r2(Math.max(0, totalDop - totalCobrado));
 
@@ -1517,8 +1555,10 @@ function registrarAbono(pago) {
     id_abono: idAbono,
     fecha: fechaStr,
     monto: abonoEfectivo,
+    excedente: excedente,
     metodo_pago: pago.metodo_pago || 'Efectivo',
-    nota: pago.nota || 'Abono a cuenta'
+    nota: (pago.nota || 'Abono a cuenta') +
+      (excedente > 0 ? ' — Excedente RD$ ' + excedente.toFixed(2) + ': devolver al cliente o dejar a favor.' : '')
   });
 
   let planCuotas = [];
@@ -1569,9 +1609,11 @@ function registrarAbono(pago) {
 
   return {
     status: 'success',
-    message: saldoPendiente <= 0 
-      ? '¡Cuenta saldada en su totalidad! Saldo restante: RD$ 0.00' 
-      : 'Abono de RD$ ' + abonoEfectivo.toFixed(2) + ' registrado. Saldo pendiente: RD$ ' + saldoPendiente.toFixed(2),
+    message: (saldoPendiente <= 0
+      ? '¡Cuenta saldada en su totalidad! Saldo restante: RD$ 0.00'
+      : 'Abono de RD$ ' + abonoEfectivo.toFixed(2) + ' registrado. Saldo pendiente: RD$ ' + saldoPendiente.toFixed(2)) +
+      (excedente > 0 ? ' Se recibieron RD$ ' + excedente.toFixed(2) + ' de más: devuélvelos al cliente o déjalos a favor.' : ''),
+    excedente: excedente,
     id_cobro: pago.id_cobro,
     id_abono: idAbono,
     saldo_pendiente_dop: saldoPendiente,
@@ -1633,7 +1675,11 @@ function obtenerCobros() {
       estado: String(row[12] || 'Pendiente'),
       proximo_vencimiento: String(row[13] || ''),
       historial_abonos: historialAbonos,
-      plan_cuotas: planCuotas
+      plan_cuotas: planCuotas,
+      excedente_dop: r2(historialAbonos.reduce((t, a) => t + (parseFloat(a && a.excedente) || 0), 0)),
+      // Dinero ya cobrado que hay que devolver: abonos de una venta anulada + excedentes
+      a_devolver_dop: r2((String(row[12]) === 'Cancelada' ? (Number(row[8]) || 0) : 0) +
+        historialAbonos.reduce((t, a) => t + (parseFloat(a && a.excedente) || 0), 0))
     });
   }
   return items.reverse();
@@ -1661,6 +1707,7 @@ function cancelarVenta(idVenta) {
       venSheet.getRange(i + 1, 14).setValue('Cancelada');
 
       // A2 FIX: Si la venta era a crédito, anular también la cuenta por cobrar en COBROS
+      let avisoDevolucion = '';
       try {
         const cobSheet = getSheet(SHEETS.COBROS);
         const cobData = cobSheet.getDataRange().getValues();
@@ -1668,6 +1715,21 @@ function cancelarVenta(idVenta) {
           if (String(cobData[c][1]) === String(idVenta)) {
             cobSheet.getRange(c + 1, 10).setValue(0); // Saldo pendiente = 0
             cobSheet.getRange(c + 1, 13).setValue('Cancelada'); // Estado = Cancelada
+            const cobrado = r2(parseFloat(cobData[c][8]) || 0);
+            if (cobrado > 0) {
+              let hist = [];
+              try { hist = JSON.parse(cobData[c][14] || '[]') || []; } catch (e) {}
+              hist.push({
+                id_abono: generarId('ANU'),
+                fecha: Utilities.formatDate(new Date(), ZONA_HORARIA, 'yyyy-MM-dd HH:mm:ss'),
+                monto: 0,
+                a_devolver: cobrado,
+                metodo_pago: '',
+                nota: 'Venta anulada con RD$ ' + cobrado.toFixed(2) + ' ya abonados: devolver al cliente.'
+              });
+              cobSheet.getRange(c + 1, 15).setValue(JSON.stringify(hist));
+              avisoDevolucion = ' El cliente había abonado RD$ ' + cobrado.toFixed(2) + ': hay que devolvérselos.';
+            }
             break;
           }
         }
@@ -1677,9 +1739,9 @@ function cancelarVenta(idVenta) {
 
       return {
         status: 'success',
-        message: resStock.status === 'success'
-          ? 'Venta ' + idVenta + ' cancelada, stock repuesto y cuenta por cobrar anulada'
-          : 'Venta ' + idVenta + ' cancelada. ' + resStock.message
+        message: (resStock.status === 'success'
+          ? 'Venta ' + idVenta + ' cancelada, stock repuesto y cuenta por cobrar anulada.'
+          : 'Venta ' + idVenta + ' cancelada. ' + resStock.message) + avisoDevolucion
       };
     }
   }

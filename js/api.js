@@ -87,8 +87,8 @@ const ThorAPI = (function() {
   };
 
   // Versión de esta app y versión mínima del backend con la que funciona correctamente
-  const VERSION_APP = '2026.10-f9';
-  const VERSION_BACKEND_REQUERIDA = 9;
+  const VERSION_APP = '2026.10-f10';
+  const VERSION_BACKEND_REQUERIDA = 10;
 
   const DEFAULT_RATE = (typeof THOR_CONFIG !== 'undefined' && THOR_CONFIG.DEFAULT_USD_RATE) ? THOR_CONFIG.DEFAULT_USD_RATE : 60.50;
   const DEFAULT_CATEGORIES = [
@@ -584,7 +584,7 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     lista.unshift({
       id: generarUuid(),
       fecha: fechaLocal(),
-      tipo: tipo, // 'rechazada' | 'recuperacion'
+      tipo: tipo, // 'rechazada' | 'recuperacion' | 'excedente'
       accion: NOMBRES_ACCION[item.action] || item.action,
       mensaje: mensaje,
       resumen: resumirOperacion(item),
@@ -599,6 +599,10 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
 
   function contarPorRevisar() {
     return getHistorialSync().filter(e => !e.visto).length + getDeadLetterQueue().length;
+  }
+
+  function marcarTodoVisto() {
+    marcarHistorialVisto();
   }
 
   async function silentRelogin() {
@@ -852,6 +856,9 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       if (tipo === 'ok') {
         removeFromOutbox(item.queueId);
         aplicarEnFoto(item, json);
+        if (json && parseFloat(json.excedente) > 0) {
+          registrarEnHistorial('excedente', item, json.message, item.queueId === opciones.hasta);
+        }
         resultados[item.queueId] = json;
         processed++;
       } else if (tipo === 'rechazada') {
@@ -1261,6 +1268,9 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       const abonoInicial = parseFloat(v.abono_inicial) || 0;
       if (precioUnitario < 0) return { status: 'error', message: 'El precio no puede ser negativo' };
       if (abonoInicial < 0) return { status: 'error', message: 'El abono inicial no puede ser negativo' };
+      if (esVentaCredito(v) && precioUnitario * cant > 0 && abonoInicial >= precioUnitario * cant) {
+        return { status: 'error', message: 'El abono inicial cubre el total de la venta: regístrala al contado.' };
+      }
 
       prod.cantidad -= cant;
       prod.estado = estadoPorStock(prod.cantidad, prod.stock_minimo);
@@ -1357,6 +1367,7 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       if ((parseFloat(cobro.saldo_pendiente_dop) || 0) <= 0) return { status: 'error', message: 'Esta cuenta ya está totalmente saldada' };
 
       const abonoEfectivo = r2(Math.min(montoAbono, cobro.saldo_pendiente_dop));
+      const excedente = r2(montoAbono - abonoEfectivo);
       cobro.total_cobrado_dop = r2((parseFloat(cobro.total_cobrado_dop) || 0) + abonoEfectivo);
       cobro.saldo_pendiente_dop = r2(Math.max(0, cobro.monto_total_dop - cobro.total_cobrado_dop));
 
@@ -1366,9 +1377,11 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
         id_abono: id_abono || generarId('ABN'),
         fecha: fechaStr,
         monto: abonoEfectivo,
+        excedente: excedente,
         metodo_pago: metodo_pago || 'Efectivo',
-        nota: nota || 'Abono a cuenta'
+        nota: (nota || 'Abono a cuenta') + (excedente > 0 ? ` — Excedente RD$ ${excedente.toFixed(2)}: devolver al cliente o dejar a favor.` : '')
       });
+      if (excedente > 0) cobro.excedente_dop = r2((parseFloat(cobro.excedente_dop) || 0) + excedente);
 
       // Distribuir entre cuotas (con tolerancia de medio centavo)
       let rem = abonoEfectivo;
@@ -1420,6 +1433,7 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       if (cob) {
         cob.estado = 'Cancelada';
         cob.saldo_pendiente_dop = 0;
+        cob.a_devolver_dop = r2((parseFloat(cob.total_cobrado_dop) || 0) + (parseFloat(cob.excedente_dop) || 0));
       }
       return { status: 'success', message: 'Venta anulada y stock devuelto' };
     }
@@ -1674,6 +1688,7 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     reintentarRecuperacion,
     getHistorialSync,
     marcarHistorialVisto,
+    marcarTodoVisto,
     contarPorRevisar,
     normalizarNombre,
     registrarEventoCliente,

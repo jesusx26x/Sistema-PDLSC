@@ -1361,6 +1361,22 @@ const ThorApp = (function() {
     const margen = totalIngresos > 0 ? Math.round((totalGanancia / totalIngresos) * 100) : 0;
     actualizarTexto('repMargenGeneral', `${margen}%`);
 
+    // Dinero real: ventas al contado + abonos de fiados (los fiados sin pagar no son dinero en mano)
+    let cobrado = (h && Number(h.cobrado_dop)) || 0;
+    let aDevolver = (h && Number(h.a_devolver_dop)) || 0;
+    let porCobrar = 0;
+    state.sales.forEach(v => {
+      if (v.estado !== 'Cancelada' && v.metodo_pago !== 'Crédito / Fiado') cobrado += parseFloat(v.total_dop) || 0;
+    });
+    (state.cobros || []).forEach(c => {
+      if (c.estado !== 'Cancelada') cobrado += parseFloat(c.total_cobrado_dop) || 0;
+      if (c.estado !== 'Cancelada' && c.estado !== 'Saldada') porCobrar += parseFloat(c.saldo_pendiente_dop) || 0;
+      aDevolver += parseFloat(c.a_devolver_dop) || (c.estado === 'Cancelada' ? parseFloat(c.total_cobrado_dop) || 0 : parseFloat(c.excedente_dop) || 0);
+    });
+    actualizarTexto('repTotalCobrado', `RD$ ${Math.round(cobrado).toLocaleString()}`);
+    actualizarTexto('repPorCobrar', `RD$ ${Math.round(porCobrar).toLocaleString()}`);
+    actualizarTexto('repADevolver', `RD$ ${Math.round(aDevolver).toLocaleString()}`);
+
     const topList = document.getElementById('repTopProductsList');
     if (topList) {
       const sorted = Object.keys(ventasPorProducto)
@@ -2625,13 +2641,19 @@ const ThorApp = (function() {
   function confirmCancelSale(idVenta) {
     const v = state.sales.find(x => x.id_venta === idVenta);
     if (!v || v.estado === 'Cancelada') return;
-    if (!confirm('¿Anular esta venta y devolver las unidades al inventario automáticamente?')) return;
+    const fiado = state.cobros.find(c => c.id_venta === idVenta);
+    const abonado = fiado ? (parseFloat(fiado.total_cobrado_dop) || 0) : 0;
+    const aviso = abonado > 0
+      ? `\n\n⚠️ Este fiado de ${fiado.cliente} tiene RD$ ${abonado.toLocaleString()} ya abonados. Al anular, ese dinero debe devolverse al cliente (quedará anotado en la cuenta).`
+      : '';
+    if (!confirm('¿Anular esta venta y devolver las unidades al inventario automáticamente?' + aviso)) return;
 
     // api.js aplica la anulación en la caché de forma síncrona (una sola vez) y la encola
     const envio = ThorAPI.cancelSale(idVenta);
     cargarDatosDesdeCache();
     renderAll();
     Sonner.success(`Venta ${idVenta} anulada y ${v.cantidad} unidades devueltas al inventario`);
+    if (abonado > 0) Sonner.warning(`Recuerda devolver RD$ ${abonado.toLocaleString()} a ${fiado.cliente}.`, 9000);
 
     envio.then(res => {
       if (res && res.status === 'error') {
@@ -3078,7 +3100,9 @@ const ThorApp = (function() {
         closeAllModals();
         renderAll();
 
-        if (nuevoSaldo <= 0) {
+        if (parseFloat(res.excedente) > 0) {
+          Sonner.warning(res.message, 10000);
+        } else if (nuevoSaldo <= 0) {
           Sonner.success(`¡Cuenta saldada por completo! ${cobroActual.cliente} ha completado el pago de RD$ ${Number(cobroActual.monto_total_dop).toLocaleString()}.`, 6000);
         } else {
           Sonner.success(`Abono de RD$ ${Number(monto).toLocaleString()} registrado con éxito. Resta: RD$ ${Number(nuevoSaldo).toLocaleString()}`, 4500);
@@ -3433,7 +3457,7 @@ const ThorApp = (function() {
   }
 
   function cerrarHistorialSync() {
-    ThorAPI.marcarHistorialVisto('rechazada');
+    ThorAPI.marcarTodoVisto();
     const modal = document.getElementById('modalSyncLog');
     if (modal) modal.classList.add('hidden');
     actualizarAvisoRevision();
@@ -3457,13 +3481,13 @@ const ThorApp = (function() {
       return;
     }
     cont.innerHTML = lista.map(e => `
-      <div class="p-3 rounded-xl border ${e.tipo === 'rechazada' ? 'border-rose-500/30 bg-rose-500/5' : 'border-amber-500/30 bg-amber-500/5'} ${e.visto ? 'opacity-70' : ''}">
+      <div class="p-3 rounded-xl border ${e.tipo === 'rechazada' ? 'border-rose-500/30 bg-rose-500/5' : (e.tipo === 'excedente' ? 'border-sky-500/30 bg-sky-500/5' : 'border-amber-500/30 bg-amber-500/5')} ${e.visto ? 'opacity-70' : ''}">
         <div class="flex items-center justify-between gap-2">
-          <span class="text-xs font-bold ${e.tipo === 'rechazada' ? 'text-rose-300' : 'text-amber-300'}">${esc(e.accion)} ${e.tipo === 'rechazada' ? 'no guardada' : 'en recuperación'}</span>
+          <span class="text-xs font-bold ${e.tipo === 'rechazada' ? 'text-rose-300' : (e.tipo === 'excedente' ? 'text-sky-300' : 'text-amber-300')}">${esc(e.accion)} ${({ rechazada: 'no guardada', excedente: 'con dinero de más', recuperacion: 'en recuperación' })[e.tipo] || ''}</span>
           <span class="text-[10px] text-slate-500 font-mono">${esc(e.fecha)}</span>
         </div>
         <p class="text-xs text-slate-200 mt-1">${esc(e.resumen)}</p>
-        <p class="text-[11px] text-slate-400 mt-0.5">Motivo: ${esc(e.mensaje)}</p>
+        <p class="text-[11px] text-slate-400 mt-0.5">${e.tipo === 'excedente' ? '' : 'Motivo: '}${esc(e.mensaje)}</p>
         ${e.tipo === 'rechazada' ? '<p class="text-[10px] text-slate-500 mt-1">Si corresponde, vuelve a registrarla con los datos actuales.</p>' : ''}
       </div>`).join('');
   }

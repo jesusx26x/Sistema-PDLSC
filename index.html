@@ -732,13 +732,32 @@
           <div class="bento-card p-4 sm:p-5 space-y-1">
             <span class="text-xs text-slate-400 block font-medium">Ganancia Neta</span>
             <p id="repTotalGanancia" class="text-xl sm:text-2xl font-bold text-emerald-400 font-mono">RD$ 0</p>
-            <span class="text-[10px] text-emerald-400 font-semibold">Beneficio en mano</span>
+            <span class="text-[10px] text-emerald-400 font-semibold">Incluye ventas a crédito</span>
           </div>
 
           <div class="bento-card p-4 sm:p-5 space-y-1">
             <span class="text-xs text-slate-400 block font-medium">Margen General de Beneficio</span>
             <p id="repMargenGeneral" class="text-xl sm:text-2xl font-bold text-amber-400 font-mono">0%</p>
             <span class="text-[10px] text-slate-400">Rentabilidad media</span>
+          </div>
+        </div>
+
+        <!-- Dinero real: lo vendido a crédito no es dinero en mano hasta que se cobra -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <div class="bento-card p-4 sm:p-5 space-y-1">
+            <span class="text-xs text-slate-400 block font-medium">Dinero Cobrado</span>
+            <p id="repTotalCobrado" class="text-xl sm:text-2xl font-bold text-emerald-400 font-mono">RD$ 0</p>
+            <span class="text-[10px] text-slate-400">Ventas al contado + abonos de fiados</span>
+          </div>
+          <div class="bento-card p-4 sm:p-5 space-y-1">
+            <span class="text-xs text-slate-400 block font-medium">Pendiente por Cobrar</span>
+            <p id="repPorCobrar" class="text-xl sm:text-2xl font-bold text-amber-400 font-mono">RD$ 0</p>
+            <span class="text-[10px] text-slate-400">Saldo de fiados abiertos</span>
+          </div>
+          <div class="bento-card p-4 sm:p-5 space-y-1">
+            <span class="text-xs text-slate-400 block font-medium">A Devolver a Clientes</span>
+            <p id="repADevolver" class="text-xl sm:text-2xl font-bold text-rose-400 font-mono">RD$ 0</p>
+            <span class="text-[10px] text-slate-400">Abonos de fiados anulados y cobros de más</span>
           </div>
         </div>
 
