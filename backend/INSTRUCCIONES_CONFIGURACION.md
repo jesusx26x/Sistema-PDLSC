@@ -106,3 +106,13 @@ El botón de diagnóstico de la app ejecuta el mismo análisis (sin aplicar nada
 
 ### 📒 Hoja `Movimientos` (kardex)
 Cada cambio de stock queda registrado: `SALDO_INICIAL`, `ALTA`, `EDICION`, `AJUSTE`, `VENTA`, `ANULACION`, `RECEPCION`, `REVERSION_RECEPCION`, `ELIMINACION` y `CORRECCION`, con la cantidad (+/−), el stock resultante y la referencia (venta, tanque). La suma de los movimientos de un producto debe ser igual a su stock; el diagnóstico avisa si no coincide (por ejemplo, por una edición directa en la hoja Inventario). **No edites ni borres esta hoja.** La hoja `AJUSTES` queda como historial y ya no se escribe.
+
+## ⚙️ Opciones de la hoja `Configuracion`
+
+| Clave | Valores | Efecto |
+|:---|:---|:---|
+| `TASA_CAMBIO_USD_DOP` | número | Tasa por defecto para convertir costos en USD. |
+| `PRORRATEAR_FLETE` | `SI` / `NO` (por defecto `NO`) | Con `SI`, el flete del tanque se reparte entre todas sus unidades y se suma al costo de cada producto recibido (la ganancia refleja el costo real puesto en RD). Solo afecta a tanques registrados después del cambio. Si la fila no existe, agrégala manualmente. |
+
+**Edición de productos:** al editar un producto se guardan nombre, precio, costo, categoría, etc., pero **la cantidad no se sobrescribe**. Si se cambia la cantidad en el formulario, la app registra la diferencia como un ajuste (queda en `Movimientos`). Así, dos dispositivos con datos desactualizados no se pisan las ventas.
+

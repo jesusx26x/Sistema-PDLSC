@@ -77,6 +77,15 @@ const ThorApp = (function() {
       }
     }, 90000);
 
+    // Una operación hecha sin conexión fue rechazada al subirla (p. ej. ya no había stock):
+    // la app ya la deshizo en local; avisar y refrescar la pantalla
+    window.addEventListener('thor:operacion-rechazada', (e) => {
+      const d = e.detail || {};
+      Sonner.error(`${d.accion || 'Operación'} no se guardó en la nube: ${d.message || 'rechazada por el servidor'}`, 9000);
+      cargarDatosDesdeCache();
+      if (!hayFormularioAbierto()) renderAll();
+    });
+
     // Escucha de actualización de la cola de salida Outbox
     window.addEventListener('thor:outbox-updated', (e) => {
       const syncIndicator = document.getElementById('syncIndicator');
@@ -241,16 +250,22 @@ const ThorApp = (function() {
       return;
     }
 
+    // Sin sesión no se sube ni se descarga nada (la cola se conserva hasta volver a iniciar sesión)
+    if (!ThorAPI.isAuthenticated()) {
+      showLoginView();
+      return;
+    }
+
     // 1. Primero vaciar cola de salida (Outbox) hacia Google Sheets
     const pendingCount = ThorAPI.getPendingOutboxCount();
     if (pendingCount > 0) {
       if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
       if (syncText) syncText.textContent = `Subiendo ${pendingCount} pendiente(s)...`;
       const flushResult = await ThorAPI.flushOutbox();
-      
-      // A6 FIX: Si la subida no pudo completarse (ej. red intermitente), no descargar para no sobreescribir datos locales
-      if (flushResult && flushResult.pending > 0) {
-        console.warn('Operaciones locales pendientes de subir. Pospuesto pull para no sobreescribir datos.');
+
+      // Sin conexión o sin sesión no tiene sentido descargar. Si quedan pendientes por otro motivo,
+      // la descarga es segura: lo pendiente se vuelve a aplicar encima de los datos de la nube.
+      if (flushResult && (flushResult.offline || flushResult.authRequired)) {
         if (syncIndicator) syncIndicator.className = 'w-2 h-2 rounded-full bg-amber-400';
         if (syncText) syncText.textContent = `${flushResult.pending} pendiente(s) local`;
         return;
@@ -285,10 +300,7 @@ const ThorApp = (function() {
         ThorAPI.setCachedData(res.data);
 
         // A12 FIX: Si un modal está abierto o el usuario escribe activamente, diferir renderAll para no borrar inputs
-        const modalAbierto = document.querySelector('#modalSale:not(.hidden), #modalTank:not(.hidden), #modalProduct:not(.hidden), #modalPayment:not(.hidden), #modalQuickAdjust:not(.hidden)');
-        const inputEnUso = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
-
-        if (!modalAbierto && !inputEnUso) {
+        if (!hayFormularioAbierto()) {
           renderAll();
         } else {
           console.log('[Sync] Re-render diferido: usuario operando en modal o formulario activo');
@@ -321,6 +333,12 @@ const ThorApp = (function() {
         Sonner.warning('Usando datos locales protegidos en este dispositivo');
       }
     }
+  }
+
+  function hayFormularioAbierto() {
+    const modalAbierto = document.querySelector('#modalSale:not(.hidden), #modalTank:not(.hidden), #modalProduct:not(.hidden), #modalPayment:not(.hidden), #modalQuickAdjust:not(.hidden)');
+    const inputEnUso = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+    return !!(modalAbierto || inputEnUso);
   }
 
   async function actualizarTasaCambio(forzarEnVivo = false) {
@@ -1320,6 +1338,7 @@ const ThorApp = (function() {
     if (form) {
       delete form.dataset.matchedExistingId;
       delete form.dataset.previousStock;
+      delete form.dataset.stockAlAbrir;
     }
     const badge = document.getElementById('prodMatchBadge');
     if (badge) badge.classList.add('hidden');
@@ -1339,6 +1358,8 @@ const ThorApp = (function() {
     if (form) {
       delete form.dataset.matchedExistingId;
       delete form.dataset.previousStock;
+      // Stock que se mostró al abrir: si se cambia la cantidad, se envía la diferencia como ajuste
+      form.dataset.stockAlAbrir = prod.cantidad;
     }
     const badge = document.getElementById('prodMatchBadge');
     if (badge) badge.classList.add('hidden');
@@ -1498,15 +1519,23 @@ const ThorApp = (function() {
 
     const form = document.getElementById('formProduct');
     const matchedExistingId = form?.dataset?.matchedExistingId;
-    const previousStock = parseInt(form?.dataset?.previousStock) || 0;
+    const stockAlAbrir = parseInt(form?.dataset?.stockAlAbrir) || 0;
 
+    // Nuevo: se crea con su cantidad. Editar o sumar a uno existente: los datos se guardan
+    // sin tocar el stock, y las unidades se registran como un ajuste (no se pisan ventas de otro equipo).
     let finalId = id || undefined;
-    let finalCantidad = cantidad;
-
-    if (matchedExistingId && !id) {
+    let deltaStock = 0;
+    let motivoAjuste = '';
+    if (id) {
+      deltaStock = cantidad - stockAlAbrir;
+      motivoAjuste = `Cantidad corregida en el formulario (${stockAlAbrir} → ${cantidad})`;
+    } else if (matchedExistingId) {
       finalId = matchedExistingId;
-      finalCantidad = previousStock + cantidad;
+      deltaStock = cantidad;
+      motivoAjuste = `Ingreso manual de ${cantidad} unidad(es)`;
     }
+    // En edición el servidor ignora la cantidad; se envía la actual (nunca 0) por compatibilidad con backends anteriores
+    const finalCantidad = finalId ? (state.inventory.find(p => p.id === finalId)?.cantidad ?? 0) : cantidad;
 
     const prodData = {
       id: finalId,
@@ -1536,10 +1565,14 @@ const ThorApp = (function() {
     }
 
     try {
-      const res = await ThorAPI.saveProduct(prodData);
+      let res = await ThorAPI.saveProduct(prodData);
+      if (res && res.status === 'success' && finalId && deltaStock !== 0) {
+        res = await ThorAPI.adjustStock(finalId, deltaStock, motivoAjuste);
+      }
       if (res && res.status === 'success') {
         if (matchedExistingId && !id) {
-          Sonner.success(`Stock actualizado: Se sumaron ${cantidad} unidades a ${nombre} (Total: ${finalCantidad} piezas)`);
+          const total = ThorAPI.getCachedData().inventario.find(p => p.id === finalId)?.cantidad ?? '?';
+          Sonner.success(`Stock actualizado: Se sumaron ${cantidad} unidades a ${nombre} (Total: ${total} piezas)`);
         } else {
           const origenLabel = (origen === 'Compra Local' || origen === 'local') ? 'Compra Local' : 'Tanque EE.UU.';
           Sonner.success(id ? 'Producto actualizado' : `Producto guardado correctamente (${origenLabel})`);
@@ -2472,30 +2505,28 @@ const ThorApp = (function() {
 
     const deltaN = parseInt(delta) || 0;
     if (deltaN === 0) return;
-
-    const nuevoStock = Math.max(0, prod.cantidad + deltaN);
-    prod.cantidad = nuevoStock;
-    const min = parseInt(prod.stock_minimo) || 3;
-    prod.estado = nuevoStock === 0 ? 'Agotado' : (nuevoStock <= min ? 'Stock Bajo' : 'En Stock');
-
-    // M1 FIX: Actualizar también en caché local
-    const cached = ThorAPI.getCachedData();
-    if (cached && cached.inventario) {
-      const cp = cached.inventario.find(p => p.id === id);
-      if (cp) {
-        cp.cantidad = nuevoStock;
-        cp.estado = prod.estado;
-      }
-      ThorAPI.setCachedData(cached);
+    if (deltaN < 0 && (parseInt(prod.cantidad) || 0) === 0) {
+      Sonner.info(`"${prod.nombre}" ya está en 0 unidades`);
+      return;
     }
 
+    // api.js aplica el cambio en la caché de forma síncrona (una sola vez) y lo encola
+    const motivoAudit = deltaN > 0 ? `Entrada manual rápida (+${deltaN})` : `Merma/Ajuste manual (${deltaN})`;
+    const envio = ThorAPI.adjustStock(id, deltaN, motivoAudit);
+    cargarDatosDesdeCache();
     renderInventory();
     renderDashboard();
 
-    // M1 FIX: Motivo descriptivo para la hoja de auditoría AJUSTES
-    const motivoAudit = deltaN > 0 ? `Entrada manual rápida (+${deltaN})` : `Merma/Ajuste manual (${deltaN})`;
-    ThorAPI.adjustStock(id, deltaN, motivoAudit);
+    const nuevoStock = state.inventory.find(p => p.id === id)?.cantidad ?? '?';
     Sonner.info(`Stock de "${prod.nombre}": ${nuevoStock} un. (${motivoAudit})`);
+
+    const res = await envio;
+    if (res && res.status === 'error') {
+      Sonner.error(`No se pudo ajustar "${prod.nombre}": ${res.message}`);
+      cargarDatosDesdeCache();
+      renderInventory();
+      renderDashboard();
+    }
   }
 
   function confirmDeleteProduct(id) {
@@ -2504,56 +2535,32 @@ const ThorApp = (function() {
 
     if (confirm(`¿Eliminar "${prod.nombre}" del inventario?`)) {
       ThorAPI.deleteProduct(id);
-      state.inventory = state.inventory.filter(p => p.id !== id);
+      cargarDatosDesdeCache();
       renderAll();
       Sonner.success('Producto eliminado');
     }
   }
 
   function confirmCancelSale(idVenta) {
-    if (confirm('¿Anular esta venta y devolver las unidades al inventario automáticamente?')) {
-      const v = state.sales.find(x => x.id_venta === idVenta);
-      if (v && v.estado !== 'Cancelada') {
-        v.estado = 'Cancelada';
-        const p = state.inventory.find(x => x.id === v.id_articulo);
-        if (p) {
-          p.cantidad += (parseInt(v.cantidad) || 0);
-          const min = parseInt(p.stock_minimo) || 3;
-          p.estado = p.cantidad > min ? 'En Stock' : (p.cantidad > 0 ? 'Stock Bajo' : 'Agotado');
-        }
+    const v = state.sales.find(x => x.id_venta === idVenta);
+    if (!v || v.estado === 'Cancelada') return;
+    if (!confirm('¿Anular esta venta y devolver las unidades al inventario automáticamente?')) return;
 
-        // Si tenía cuenta por cobrar asociada, anularla también
-        const cobro = state.cobros.find(c => c.id_venta === idVenta);
-        if (cobro) {
-          cobro.estado = 'Cancelada';
-          cobro.saldo_pendiente_dop = 0;
-        }
+    // api.js aplica la anulación en la caché de forma síncrona (una sola vez) y la encola
+    const envio = ThorAPI.cancelSale(idVenta);
+    cargarDatosDesdeCache();
+    renderAll();
+    Sonner.success(`Venta ${idVenta} anulada y ${v.cantidad} unidades devueltas al inventario`);
 
-        const cached = ThorAPI.getCachedData();
-        if (cached) {
-          if (cached.inventario && p) {
-            const cp = cached.inventario.find(x => x.id === v.id_articulo);
-            if (cp) {
-              cp.cantidad = p.cantidad;
-              cp.estado = p.estado;
-            }
-          }
-          const cv = (cached.ventas || []).find(x => x.id_venta === idVenta);
-          if (cv) cv.estado = 'Cancelada';
-          if (cached.cobros && cobro) {
-            const cc = cached.cobros.find(x => x.id_venta === idVenta);
-            if (cc) {
-              cc.estado = 'Cancelada';
-              cc.saldo_pendiente_dop = 0;
-            }
-          }
-          ThorAPI.setCachedData(cached);
-        }
+    envio.then(res => {
+      if (res && res.status === 'error') {
+        Sonner.error(`No se pudo anular la venta: ${res.message}`);
+        cargarDatosDesdeCache();
         renderAll();
-        Sonner.success(`Venta ${idVenta} anulada y ${v.cantidad} unidades devueltas al inventario`);
-        ThorAPI.cancelSale(idVenta).then(() => sincronizarConNube(false));
+      } else {
+        sincronizarConNube(false);
       }
-    }
+    });
   }
 
   function exportInventoryToExcel() {
@@ -3245,7 +3252,7 @@ const ThorApp = (function() {
     if (modal) modal.classList.add('hidden');
   }
 
-  function resetSystemData(confirmPrompt = true) {
+  async function resetSystemData(confirmPrompt = true) {
     // B2 FIX: Confirmación estricta por palabra clave antes de vaciar tablas
     const confirmText = prompt('⚠️ ATENCIÓN: Esta acción limpiará todo el inventario, ventas, recepciones y cobros.\n\nPara confirmar, escribe exactamente: BORRAR TODO');
     if (confirmText !== 'BORRAR TODO') {
@@ -3253,11 +3260,12 @@ const ThorApp = (function() {
       return;
     }
 
-    ThorAPI.resetSystemData('CONFIRMAR_PURGA_TOTAL_THOR');
-    state.inventory = [];
-    state.sales = [];
-    state.receptions = [];
-    state.cobros = [];
+    const res = await ThorAPI.resetSystemData('CONFIRMAR_PURGA_TOTAL_THOR');
+    if (!res || res.status !== 'success') {
+      Sonner.error(`No se borró nada: ${res?.message || 'error desconocido'}`);
+      return;
+    }
+    cargarDatosDesdeCache();
     state.metrics = {};
     renderAll();
     closeAllModals();

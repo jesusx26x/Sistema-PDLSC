@@ -76,6 +76,7 @@ const ThorAPI = (function() {
     CURRENT_USER: 'thor_current_user',
     USD_RATE: 'thor_usd_dop_rate',
     CACHE_DATA: 'thor_cached_system_data_v5',
+    SERVER_SNAPSHOT: 'thor_server_snapshot_v1',
     OUTBOX_QUEUE: 'thor_outbox_queue_v1'
   };
 
@@ -218,7 +219,7 @@ const ThorAPI = (function() {
     } catch (e) {
       console.error('Error leyendo caché:', e);
     }
-    return INITIAL_DEMO_DATA;
+    return JSON.parse(JSON.stringify(INITIAL_DEMO_DATA));
   }
 
   function setCachedData(data) {
@@ -420,26 +421,14 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
   }
 
   async function silentRelogin() {
-    const cfg = getConfig();
-    if (!cfg.isConfigured) return false;
-    // Intentar renovar token usando credenciales almacenadas en sesión (nunca hardcodeadas)
-    const savedUser = getCurrentUser();
-    if (!savedUser || !savedUser.username) {
-      clearSession();
-      window.dispatchEvent(new CustomEvent('thor:session-expired'));
-      return false;
-    }
-    // El token expiró pero tenemos sesión guardada: pedir al usuario que re-ingrese
-    clearSession();
-    window.dispatchEvent(new CustomEvent('thor:session-expired'));
+    // No hay renovación silenciosa: las credenciales nunca se guardan en el dispositivo.
+    // Si había un token, se descarta y se pide iniciar sesión de nuevo.
+    if (getSessionToken()) notificarSesionVencida();
     return false;
   }
 
   let inFlightFetchAll = null;
   let lastFetchAllTimestamp = 0;
-
-  // Operaciones que apiPost está enviando en este momento: flushOutbox no las reenvía
-  const operacionesEnVuelo = new Set();
 
   // Todos los envíos de mutaciones pasan por esta cadena y se ejecutan de uno en uno,
   // en el mismo orden en que se registraron.
@@ -461,111 +450,212 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     }
   }
 
+  function sesionDisponible() {
+    const token = getSessionToken();
+    return !!token && !token.startsWith('OFFLINE_') && !token.startsWith('LOCAL_');
+  }
+
+  function notificarSesionVencida() {
+    clearSession();
+    window.dispatchEvent(new CustomEvent('thor:session-expired'));
+  }
+
   /**
    * Envía una operación de la cola al servidor (con su op_id) y devuelve el JSON de respuesta.
-   * Lanza excepción ante fallos de red o timeout.
+   * Lanza excepción ante fallos de red, timeout o respuesta no JSON.
    */
   async function enviarOperacion(cfg, item) {
-    const payload = {
-      action: item.action,
-      token: getSessionToken(),
-      op_id: item.opId,
-      data: item.data
-    };
-
-    const post = () => fetchConTimeout(cfg.gasUrl, {
+    const respuesta = await fetchConTimeout(cfg.gasUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    }).then(r => r.json());
+      body: JSON.stringify({
+        action: item.action,
+        token: getSessionToken(),
+        op_id: item.opId,
+        data: item.data
+      })
+    });
+    return respuesta.json();
+  }
 
-    let json = await post();
-    if (json && json.code === 'UNAUTHORIZED_RLS') {
-      const renewed = await silentRelogin();
-      if (renewed) {
-        payload.token = getSessionToken();
-        json = await post();
-      }
+  const NOMBRES_ACCION = {
+    saveProduct: 'Guardar producto',
+    deleteProduct: 'Eliminar producto',
+    adjustStock: 'Ajuste de stock',
+    registerSale: 'Venta',
+    cancelSale: 'Anulación de venta',
+    registerReception: 'Recepción de tanque',
+    registerPayment: 'Abono',
+    saveConfig: 'Configuración'
+  };
+  const MAX_REINTENTOS_ERROR_SERVIDOR = 5;
+
+  /**
+   * 'ok'          → aplicada (o ya lo estaba)
+   * 'sesion'      → sesión vencida: se conserva en la cola hasta volver a iniciar sesión
+   * 'transitorio' → servidor ocupado o error interno: se reintenta más tarde, sin saltarse el orden
+   * 'rechazada'   → el servidor la rechazó por una regla de negocio: se descarta y se revierte en local
+   */
+  function clasificarRespuesta(json) {
+    if (json && json.status === 'success') return 'ok';
+    if (!json || typeof json !== 'object') return 'transitorio';
+    if (json.code === 'UNAUTHORIZED_RLS') return 'sesion';
+    if (json.code === 'SERVER_BUSY' || json.code === 'SERVER_ERROR') return 'transitorio';
+    if (!json.code && /ocupado/i.test(json.message || '')) return 'transitorio';
+    return 'rechazada';
+  }
+
+  /**
+   * Última foto de los datos tal como están en Google Sheets.
+   */
+  function getSnapshot() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SERVER_SNAPSHOT);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
     }
-    return json;
+  }
+
+  function setSnapshot(data) {
+    try {
+      localStorage.setItem(STORAGE_KEYS.SERVER_SNAPSHOT, JSON.stringify(data));
+    } catch (e) {
+      console.warn('No se pudo guardar la foto del servidor:', e);
+    }
+  }
+
+  /**
+   * Caché local = última foto del servidor + operaciones pendientes re-aplicadas encima, en orden.
+   * Así una descarga nunca borra de la pantalla lo que aún no subió, y una operación rechazada
+   * desaparece sin dejar rastro.
+   */
+  function reconstruirCache() {
+    const snapshot = getSnapshot();
+    if (!snapshot) return null;
+    const base = JSON.parse(JSON.stringify(snapshot));
+    const pendientes = getOutbox();
+    pendientes.forEach(item => {
+      try {
+        aplicarOperacion(base, item.action, JSON.parse(JSON.stringify(item.data)));
+      } catch (e) {
+        console.warn('No se pudo re-aplicar la operación pendiente', item.action, e);
+      }
+    });
+    if (pendientes.length) recalcularMetricasLocales(base);
+    setCachedData(base);
+    return base;
+  }
+
+  /**
+   * Envía la cola en orden. Se detiene ante fallos de red, sesión vencida o error transitorio
+   * (para no saltarse el orden); las operaciones rechazadas se descartan y se revierten en local.
+   * opciones.hasta: queueId cuya respuesta espera apiPost (no se notifica por evento).
+   */
+  async function procesarCola(opciones = {}) {
+    const cfg = getConfig();
+    const resultados = {};
+    const rechazadas = [];
+    let processed = 0;
+    let motivo = null;
+
+    if (!cfg.isConfigured || !navigator.onLine) motivo = 'offline';
+    else if (!sesionDisponible()) motivo = 'sesion';
+
+    // Operaciones encoladas antes de existir op_id: asignarles uno estable desde ahora
+    const inicial = getOutbox();
+    if (inicial.some(q => !q.opId)) {
+      inicial.forEach(q => { if (!q.opId) q.opId = generarUuid(); });
+      saveOutbox(inicial);
+    }
+
+    if (!motivo && inicial.length > 50) {
+      Sonner.warning(`Hay ${inicial.length} operaciones pendientes de sincronizar. Verifique su conexión a internet.`, 6000);
+    }
+
+    const limite = opciones.limite || 25;
+    let enviados = 0;
+    while (!motivo && enviados < limite) {
+      const item = getOutbox()[0];
+      if (!item) break;
+      enviados++;
+
+      let json;
+      try {
+        json = await enviarOperacion(cfg, item);
+      } catch (e) {
+        console.warn('Sin respuesta del servidor; la operación queda en cola:', e);
+        motivo = 'red';
+        break;
+      }
+
+      const tipo = clasificarRespuesta(json);
+      if (tipo === 'ok') {
+        removeFromOutbox(item.queueId);
+        resultados[item.queueId] = json;
+        processed++;
+      } else if (tipo === 'rechazada') {
+        removeFromOutbox(item.queueId);
+        resultados[item.queueId] = json;
+        rechazadas.push({ item, json });
+      } else if (tipo === 'sesion') {
+        motivo = 'sesion';
+        notificarSesionVencida();
+      } else {
+        resultados[item.queueId] = json;
+        motivo = 'servidor';
+        // Solo los errores internos cuentan como reintento; "servidor ocupado" no
+        if (!json || json.code === 'SERVER_ERROR') {
+          const queue = getOutbox();
+          const q = queue.find(x => x.queueId === item.queueId);
+          if (q) {
+            q.retries = (q.retries || 0) + 1;
+            if (q.retries >= MAX_REINTENTOS_ERROR_SERVIDOR) {
+              // Mover a dead-letter queue en vez de borrar — NUNCA perder datos
+              moveToDeadLetterQueue(q);
+              removeFromOutbox(q.queueId);
+              reconstruirCache();
+              Sonner.error('Error persistente sincronizando una operación. Se guardó en la cola de recuperación.', 6000);
+              motivo = null; // las siguientes pueden continuar
+            } else {
+              saveOutbox(queue);
+            }
+          }
+        }
+      }
+
+      if (opciones.hasta && !getOutbox().some(q => q.queueId === opciones.hasta)) break;
+    }
+
+    if (rechazadas.length) {
+      reconstruirCache();
+      rechazadas
+        .filter(r => r.item.queueId !== opciones.hasta)
+        .forEach(r => window.dispatchEvent(new CustomEvent('thor:operacion-rechazada', {
+          detail: {
+            accion: NOMBRES_ACCION[r.item.action] || r.item.action,
+            message: (r.json && r.json.message) || 'El servidor rechazó la operación',
+            item: r.item
+          }
+        })));
+    }
+
+    const pending = getOutbox().length;
+    window.dispatchEvent(new CustomEvent('thor:outbox-updated', { detail: { count: pending } }));
+    return {
+      success: !motivo,
+      processed,
+      rejected: rechazadas.length,
+      pending,
+      motivo,
+      offline: motivo === 'offline',
+      authRequired: motivo === 'sesion',
+      resultados
+    };
   }
 
   function flushOutbox() {
-    return enSerie(flushOutboxEnSerie);
-  }
-
-  async function flushOutboxEnSerie() {
-    const cfg = getConfig();
-    if (!cfg.isConfigured || !navigator.onLine) {
-      const remaining = getOutbox().length;
-      return { success: false, pending: remaining, offline: true };
-    }
-
-    let queue = getOutbox();
-    if (queue.length === 0) {
-      return { success: true, processed: 0, pending: 0 };
-    }
-
-    // Protección contra cola excesiva: alertar pero NUNCA descartar operaciones
-    if (queue.length > 50) {
-      console.warn(`Cola de sincronización grande: ${queue.length} operaciones pendientes`);
-      Sonner.warning(`Hay ${queue.length} operaciones pendientes de sincronizar. Verifique su conexión a internet.`, 6000);
-    }
-
-    // Operaciones encoladas antes de existir op_id: asignarles uno estable desde ahora
-    if (queue.some(q => !q.opId)) {
-      queue.forEach(q => { if (!q.opId) q.opId = generarUuid(); });
-      saveOutbox(queue);
-    }
-
-    let processed = 0;
-    let failed = 0;
-
-    const batch = queue.slice(0, 10);
-    for (const item of batch) {
-      if (operacionesEnVuelo.has(item.queueId)) continue;
-      // Pudo haberse confirmado mientras esperábamos turno
-      if (!getOutbox().some(q => q.queueId === item.queueId)) continue;
-
-      try {
-        let token = getSessionToken();
-        if (!token || token.startsWith('OFFLINE_') || token.startsWith('LOCAL_')) {
-          await silentRelogin();
-        }
-
-        const json = await enviarOperacion(cfg, item);
-
-        if (json && json.status === 'success') {
-          removeFromOutbox(item.queueId);
-          processed++;
-        } else {
-          item.retries = (item.retries || 0) + 1;
-          if (item.retries >= 5) {
-            // Mover a dead-letter queue en vez de borrar — NUNCA perder datos
-            moveToDeadLetterQueue(item);
-            removeFromOutbox(item.queueId);
-            Sonner.error(`Error persistente sincronizando operación. Se guardó en cola de recuperación.`, 5000);
-          } else {
-            // Actualizar contador de reintentos en la cola
-            let currentQueue = getOutbox();
-            const idx = currentQueue.findIndex(q => q.queueId === item.queueId);
-            if (idx >= 0) {
-              currentQueue[idx].retries = item.retries;
-              saveOutbox(currentQueue);
-            }
-          }
-          failed++;
-        }
-      } catch (itemErr) {
-        console.warn('Error subiendo elemento outbox:', itemErr);
-        failed++;
-        break;
-      }
-    }
-
-    const remaining = getOutbox().length;
-    window.dispatchEvent(new CustomEvent('thor:outbox-updated', { detail: { count: remaining } }));
-    return { success: failed === 0, processed, pending: remaining };
+    return enSerie(() => procesarCola({ limite: 25 }));
   }
 
   async function apiGet(action, extraParams = {}) {
@@ -573,42 +663,25 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     if (!cfg.isConfigured) {
       return { status: 'success', data: getCachedData() };
     }
-
-    let token = getSessionToken();
-    if (!token || token.startsWith('OFFLINE_') || token.startsWith('LOCAL_')) {
-      await silentRelogin();
-      token = getSessionToken();
+    if (!sesionDisponible()) {
+      return { status: 'error', code: 'UNAUTHORIZED_RLS', authRequired: true, message: 'Sesión no iniciada' };
     }
 
-    const buildUrl = (tokenVal) => {
-      const url = new URL(cfg.gasUrl);
-      url.searchParams.append('action', action);
-      url.searchParams.append('token', tokenVal || getSessionToken());
-      for (let k in extraParams) {
-        url.searchParams.append(k, extraParams[k]);
-      }
-      return url.toString();
-    };
+    const url = new URL(cfg.gasUrl);
+    url.searchParams.append('action', action);
+    url.searchParams.append('token', getSessionToken());
+    for (let k in extraParams) {
+      url.searchParams.append(k, extraParams[k]);
+    }
 
     try {
-      let response = await fetch(buildUrl(token), {
+      const response = await fetchConTimeout(url.toString(), {
         method: 'GET',
         headers: { 'Accept': 'application/json' }
       });
-
-      let json = await response.json();
+      const json = await response.json();
       if (json && json.code === 'UNAUTHORIZED_RLS') {
-        const renewed = await silentRelogin();
-        if (renewed) {
-          response = await fetch(buildUrl(getSessionToken()), {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' }
-          });
-          json = await response.json();
-        } else {
-          clearSession();
-          window.dispatchEvent(new CustomEvent('thor:session-expired'));
-        }
+        notificarSesionVencida();
       }
       return json;
     } catch (e) {
@@ -629,11 +702,13 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     if (!cfg.isConfigured) {
       return localResult;
     }
+    // Lo que ya es inválido en local no se encola (p. ej. stock insuficiente, cuenta saldada)
+    if (localResult && localResult.status === 'error') {
+      return localResult;
+    }
 
     // 2. Encolar la mutación en OutboxQueue persistente (con op_id de idempotencia)
-    //    y marcarla en vuelo para que flushOutbox no la envíe en paralelo
     const outboxItem = enqueueOutbox(action, data);
-    operacionesEnVuelo.add(outboxItem.queueId);
 
     const respuestaEncolada = () => ({
       status: 'success',
@@ -642,26 +717,64 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
       total_unidades: localResult.total_unidades
     });
 
-    // 3. Si hay red, sincronizar de inmediato (en serie con el resto de envíos)
-    if (!navigator.onLine) {
-      operacionesEnVuelo.delete(outboxItem.queueId);
+    if (!navigator.onLine || !sesionDisponible()) {
       return respuestaEncolada();
     }
 
+    // 3. Enviar la cola en orden hasta procesar esta operación
+    const r = await enSerie(() => procesarCola({ hasta: outboxItem.queueId, limite: 50 }));
+    const propia = r.resultados[outboxItem.queueId];
+    if (propia && clasificarRespuesta(propia) === 'ok') return propia;
+    if (propia && clasificarRespuesta(propia) === 'rechazada') {
+      return Object.assign({}, propia, { status: 'error', rechazada: true });
+    }
+    return respuestaEncolada();
+  }
+
+  /**
+   * Acciones administrativas que nunca pasan por la cola offline (purga, diagnóstico):
+   * requieren conexión y se ejecutan una sola vez, en orden con el resto de envíos.
+   */
+  async function apiDirecto(action, data = {}) {
+    const cfg = getConfig();
+    if (!cfg.isConfigured || !navigator.onLine) {
+      return { status: 'error', message: 'Se necesita conexión a internet para esta acción.' };
+    }
+    if (!sesionDisponible()) {
+      return { status: 'error', code: 'UNAUTHORIZED_RLS', message: 'Inicia sesión nuevamente.' };
+    }
     return enSerie(async () => {
       try {
-        const json = await enviarOperacion(cfg, outboxItem);
-        if (json && json.status === 'success') {
-          removeFromOutbox(outboxItem.queueId);
-          return json;
-        }
+        const json = await enviarOperacion(cfg, { action, data, opId: generarUuid() });
+        if (json && json.code === 'UNAUTHORIZED_RLS') notificarSesionVencida();
+        return json;
       } catch (e) {
-        console.warn('apiPost no pudo conectar de inmediato con la nube, resguardado en OutboxQueue:', e);
-      } finally {
-        operacionesEnVuelo.delete(outboxItem.queueId);
+        return { status: 'error', message: 'No se pudo conectar con el servidor: ' + e.message };
       }
-      return respuestaEncolada();
     });
+  }
+
+  /**
+   * Borra todos los datos en Google Sheets y, si el servidor confirma, también en este dispositivo.
+   */
+  async function purgarTodo(confirmacion) {
+    const res = await apiDirecto('resetAllData', { confirmacion: confirmacion || '' });
+    if (res && res.status === 'success') {
+      limpiarDatosLocales();
+    }
+    return res;
+  }
+
+  function limpiarDatosLocales() {
+    [
+      'thor_cached_system_data', 'thor_cached_system_data_v2', 'thor_cached_system_data_v3',
+      'thor_cached_system_data_v4', STORAGE_KEYS.CACHE_DATA, STORAGE_KEYS.SERVER_SNAPSHOT,
+      STORAGE_KEYS.OUTBOX_QUEUE, 'thor_dead_letter_queue_v1'
+    ].forEach(k => {
+      try { localStorage.removeItem(k); } catch (e) {}
+    });
+    setCachedData(JSON.parse(JSON.stringify(INITIAL_DEMO_DATA)));
+    window.dispatchEvent(new CustomEvent('thor:outbox-updated', { detail: { count: 0 } }));
   }
 
   function obtenerProximaQuincenaJS(baseDate, step) {
@@ -723,77 +836,157 @@ return { success: false, message: 'No se pudo conectar con el servidor de autent
     return cuotas;
   }
 
+  // Redondeo a centavos para montos de dinero
+  function r2(n) {
+    return Math.round((Number(n) || 0) * 100) / 100;
+  }
+
+  /**
+   * Fecha y hora local en el mismo formato que usa el servidor: yyyy-MM-dd HH:mm:ss
+   */
+  function fechaLocal(d = new Date()) {
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+
+  /**
+   * Convierte fechas heredadas (toLocaleString "d/m/aaaa, hh:mm") al formato yyyy-MM-dd HH:mm:ss.
+   */
+  function normalizarFecha(valor) {
+    const s = String(valor || '');
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s;
+    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? s : fechaLocal(d);
+  }
+
+  function estadoPorStock(cantidad, stockMinimo) {
+    const min = stockMinimo === undefined || stockMinimo === null || isNaN(parseInt(stockMinimo)) ? 3 : parseInt(stockMinimo);
+    return cantidad <= 0 ? 'Agotado' : (cantidad <= min ? 'Stock Bajo' : 'En Stock');
+  }
+
+  function stockMinimoValido(valor) {
+    const n = parseInt(valor);
+    return isNaN(n) || n < 0 ? 3 : n;
+  }
+
+  // Precio sugerido para productos nuevos de un tanque sin precio (igual que el backend)
+  function precioSugerido(costoDop) {
+    return r2((Number(costoDop) || 0) * 1.5);
+  }
+
+  /**
+   * Aplica una operación en la caché local y la guarda (respuesta inmediata en pantalla).
+   */
   function operarEnLocal(action, data) {
     const current = getCachedData();
+    const resultado = aplicarOperacion(current, action, data);
+    if (resultado && resultado.status === 'success' && !resultado.sinCambios) {
+      recalcularMetricasLocales(current);
+      setCachedData(current);
+    }
+    return resultado;
+  }
+
+  /**
+   * Aplica una operación sobre un objeto de datos (caché o copia de la foto del servidor),
+   * reproduciendo las mismas reglas que el backend.
+   */
+  function aplicarOperacion(current, action, data) {
+    if (!current.inventario) current.inventario = [];
+    if (!current.ventas) current.ventas = [];
+    if (!current.recepciones) current.recepciones = [];
+    if (!current.cobros) current.cobros = [];
 
     if (action === 'saveProduct') {
       const p = data;
       const id = p.id || generarId('PROD');
       p.id = id;
-      p.costo_usd = parseFloat(p.costo_usd) || 0;
-      p.costo_dop = parseFloat(p.costo_dop) || (p.costo_usd * getUsdRate());
-      p.precio_venta_dop = parseFloat(p.precio_venta_dop) || 0;
-      p.cantidad = parseInt(p.cantidad) || 0;
-      p.stock_minimo = parseInt(p.stock_minimo) || 3;
-      p.estado = p.cantidad > 0 ? 'En Stock' : 'Agotado';
-      p.fecha_actualizacion = new Date().toLocaleString();
+      const costoUsd = parseFloat(p.costo_usd) || 0;
+      const costoDop = parseFloat(p.costo_dop) || (costoUsd * getUsdRate());
+      const precio = parseFloat(p.precio_venta_dop) || 0;
+      const cantidadNueva = parseInt(p.cantidad) || 0;
+      if (cantidadNueva < 0) return { status: 'error', message: 'La cantidad no puede ser negativa' };
+      if (costoUsd < 0 || costoDop < 0 || precio < 0) return { status: 'error', message: 'Los costos y el precio no pueden ser negativos' };
 
-      const idx = current.inventario.findIndex(x => x.id === id);
-      if (idx >= 0) {
-        current.inventario[idx] = { ...current.inventario[idx], ...p };
-      } else {
-        p.fecha_ingreso = new Date().toLocaleString();
-        current.inventario.unshift(p);
+      const campos = {
+        id: id,
+        nombre: String(p.nombre || '').trim(),
+        categoria: p.categoria || 'Variedades',
+        descripcion: p.descripcion || '',
+        stock_minimo: stockMinimoValido(p.stock_minimo),
+        costo_usd: costoUsd,
+        costo_dop: costoDop,
+        precio_venta_dop: precio,
+        ubicacion: p.ubicacion || 'Almacén Principal',
+        fecha_actualizacion: fechaLocal()
+      };
+
+      const existente = current.inventario.find(x => x.id === id);
+      if (existente) {
+        // Al editar, la cantidad NO se toca: el stock solo cambia con ajustes, ventas y tanques
+        Object.assign(existente, campos);
+        existente.estado = estadoPorStock(existente.cantidad, existente.stock_minimo);
+        return { status: 'success', message: 'Producto actualizado', id: id };
       }
-      recalcularMetricasLocales(current);
-      setCachedData(current);
-return { status: 'success', message: 'Producto guardado en modo local', id: id };
+      current.inventario.unshift(Object.assign(campos, {
+        cantidad: cantidadNueva,
+        estado: estadoPorStock(cantidadNueva, campos.stock_minimo),
+        fecha_ingreso: fechaLocal()
+      }));
+      return { status: 'success', message: 'Producto guardado', id: id };
     }
 
     if (action === 'deleteProduct') {
-      current.inventario = current.inventario.filter(x => x.id !== data);
-      recalcularMetricasLocales(current);
-      setCachedData(current);
-return { status: 'success', message: 'Producto eliminado' };
+      const id = (data && typeof data === 'object') ? data.id : data;
+      current.inventario = current.inventario.filter(x => x.id !== id);
+      return { status: 'success', message: 'Producto eliminado' };
     }
 
     if (action === 'adjustStock') {
       const item = current.inventario.find(x => x.id === data.id);
-      if (item) {
-        item.cantidad = Math.max(0, item.cantidad + parseInt(data.delta));
-        item.estado = item.cantidad > 0 ? 'En Stock' : 'Agotado';
-        recalcularMetricasLocales(current);
-        setCachedData(current);
-  return { status: 'success', message: 'Stock actualizado', nuevoStock: item.cantidad };
-      }
-return { status: 'error', message: 'Producto no encontrado' };
+      if (!item) return { status: 'error', message: 'Producto no encontrado' };
+      const delta = parseInt(data.delta);
+      if (isNaN(delta)) return { status: 'error', message: 'Ajuste inválido' };
+      item.cantidad = Math.max(0, (parseInt(item.cantidad) || 0) + delta);
+      item.estado = estadoPorStock(item.cantidad, item.stock_minimo);
+      item.fecha_actualizacion = fechaLocal();
+      return { status: 'success', message: 'Stock actualizado', nuevoStock: item.cantidad };
     }
 
     if (action === 'registerSale') {
       const v = data;
+      if (current.ventas.some(x => x.id_venta === v.id_venta)) {
+        return { status: 'success', sinCambios: true, id_venta: v.id_venta, message: 'Venta ya registrada' };
+      }
       const prod = current.inventario.find(x => x.id === v.id_articulo);
       if (!prod) return { status: 'error', message: 'Producto no encontrado' };
 
       const cant = parseInt(v.cantidad);
-      if (prod.cantidad < cant) return { status: 'error', message: 'Stock insuficiente' };
-
-      prod.cantidad -= cant;
-      prod.estado = prod.cantidad > 0 ? 'En Stock' : 'Agotado';
+      if (isNaN(cant) || cant <= 0) return { status: 'error', message: 'Cantidad inválida' };
+      if (prod.cantidad < cant) return { status: 'error', message: `Stock insuficiente: solo quedan ${prod.cantidad} unidades` };
 
       const precioUnitario = parseFloat(v.precio_unitario_dop) || prod.precio_venta_dop;
-      const total = precioUnitario * cant;
-      const costo = (prod.costo_dop || 0) * cant;
-      const ganancia = total - costo;
+      const abonoInicial = parseFloat(v.abono_inicial) || 0;
+      if (precioUnitario < 0) return { status: 'error', message: 'El precio no puede ser negativo' };
+      if (abonoInicial < 0) return { status: 'error', message: 'El abono inicial no puede ser negativo' };
+
+      prod.cantidad -= cant;
+      prod.estado = estadoPorStock(prod.cantidad, prod.stock_minimo);
+
+      const total = r2(precioUnitario * cant);
+      const ganancia = r2(total - (prod.costo_dop || 0) * cant);
 
       const esCredito = esVentaCredito(v);
-      const estadoVenta = esCredito ? 'Pendiente de Cobro' : 'Completada';
       const metodoPago = esCredito ? 'Crédito / Fiado' : (v.metodo_pago || 'Efectivo');
-      const clienteNombre = v.cliente || 'Cliente General';
+      const clienteNombre = String(v.cliente || 'Consumidor Final').trim();
       const clienteTel = v.telefono || '';
+      const ahora = new Date();
 
       const nuevaVenta = {
         id_venta: v.id_venta || generarId('VTA'),
-        fecha_venta: new Date().toLocaleString(),
+        fecha_venta: fechaLocal(ahora),
         id_articulo: prod.id,
         nombre_articulo: prod.nombre,
         categoria: prod.categoria,
@@ -805,35 +998,28 @@ return { status: 'error', message: 'Producto no encontrado' };
         cliente: clienteNombre,
         telefono: clienteTel,
         metodo_pago: metodoPago,
-        notas: v.notas || (esCredito ? `${v.num_cuotas || 2} cuotas ${v.frecuencia || 'quincenal'}` : ''),
-        estado: estadoVenta
+        notas: v.notas || '',
+        estado: esCredito ? 'Pendiente de Cobro' : 'Completada'
       };
-
       current.ventas.unshift(nuevaVenta);
 
       let nuevoCobro = null;
       if (esCredito) {
-        if (!current.cobros) current.cobros = [];
-        const abonoInicial = parseFloat(v.abono_inicial) || 0;
-        const saldoPendiente = Math.max(0, total - abonoInicial);
+        const saldoPendiente = r2(Math.max(0, total - abonoInicial));
         const numCuotas = parseInt(v.num_cuotas) || 2;
         const frecuencia = v.frecuencia || 'quincenal';
-
-        const planCuotas = calcularPlanCuotasJS(total, abonoInicial, numCuotas, frecuencia, new Date());
+        const planCuotas = calcularPlanCuotasJS(total, abonoInicial, numCuotas, frecuencia, ahora);
         const historialAbonos = [];
         if (abonoInicial > 0) {
           historialAbonos.push({
             id_abono: v.id_abono_inicial || generarId('ABN'),
-            fecha: new Date().toLocaleString(),
+            fecha: fechaLocal(ahora),
             monto: abonoInicial,
             metodo_pago: 'Efectivo',
             nota: 'Abono inicial en venta'
           });
         }
-
-        let proximoVencimiento = '';
         const primerPendiente = planCuotas.find(c => c.estado === 'Pendiente');
-        if (primerPendiente) proximoVencimiento = primerPendiente.fecha_vencimiento;
 
         nuevoCobro = {
           id_cobro: v.id_cobro || generarId('COB'),
@@ -849,18 +1035,14 @@ return { status: 'error', message: 'Producto no encontrado' };
           num_cuotas: numCuotas,
           frecuencia: frecuencia,
           estado: saldoPendiente <= 0 ? 'Saldada' : (abonoInicial > 0 ? 'Parcial' : 'Pendiente'),
-          proximo_vencimiento: proximoVencimiento,
+          proximo_vencimiento: primerPendiente ? primerPendiente.fecha_vencimiento : '',
           historial_abonos: historialAbonos,
           plan_cuotas: planCuotas
         };
-
         current.cobros.unshift(nuevoCobro);
       }
 
-      recalcularMetricasLocales(current);
-      setCachedData(current);
-
-return {
+      return {
         status: 'success',
         message: esCredito ? 'Venta a crédito ("fiado") registrada con éxito.' : 'Venta registrada con éxito',
         id_venta: nuevaVenta.id_venta,
@@ -872,19 +1054,23 @@ return {
     }
 
     if (action === 'registerPayment') {
-      if (!current.cobros) current.cobros = [];
       const { id_cobro, id_abono, monto, metodo_pago, nota } = data;
       const cobro = current.cobros.find(x => x.id_cobro === id_cobro);
       if (!cobro) return { status: 'error', message: 'Cuenta por cobrar no encontrada' };
 
       const montoAbono = parseFloat(monto) || 0;
       if (montoAbono <= 0) return { status: 'error', message: 'El monto debe ser mayor a 0' };
+      if (id_abono && (cobro.historial_abonos || []).some(a => a && a.id_abono === id_abono)) {
+        return { status: 'success', sinCambios: true, message: 'Abono ya registrado', cobro: cobro };
+      }
+      if (cobro.estado === 'Cancelada') return { status: 'error', message: 'Esta cuenta fue anulada junto con su venta' };
+      if ((parseFloat(cobro.saldo_pendiente_dop) || 0) <= 0) return { status: 'error', message: 'Esta cuenta ya está totalmente saldada' };
 
-      const abonoEfectivo = Math.min(montoAbono, cobro.saldo_pendiente_dop);
-      cobro.total_cobrado_dop = (cobro.total_cobrado_dop || 0) + abonoEfectivo;
-      cobro.saldo_pendiente_dop = Math.max(0, cobro.monto_total_dop - cobro.total_cobrado_dop);
+      const abonoEfectivo = r2(Math.min(montoAbono, cobro.saldo_pendiente_dop));
+      cobro.total_cobrado_dop = r2((parseFloat(cobro.total_cobrado_dop) || 0) + abonoEfectivo);
+      cobro.saldo_pendiente_dop = r2(Math.max(0, cobro.monto_total_dop - cobro.total_cobrado_dop));
 
-      const fechaStr = new Date().toLocaleString();
+      const fechaStr = fechaLocal();
       if (!cobro.historial_abonos) cobro.historial_abonos = [];
       cobro.historial_abonos.push({
         id_abono: id_abono || generarId('ABN'),
@@ -894,28 +1080,22 @@ return {
         nota: nota || 'Abono a cuenta'
       });
 
-      // Distribuir entre cuotas
+      // Distribuir entre cuotas (con tolerancia de medio centavo)
       let rem = abonoEfectivo;
-      if (cobro.plan_cuotas) {
-        for (let i = 0; i < cobro.plan_cuotas.length; i++) {
-          if (cobro.plan_cuotas[i].estado !== 'Cobrada') {
-            const montoCuota = parseFloat(cobro.plan_cuotas[i].monto) || 0;
-            const yaAbonado = parseFloat(cobro.plan_cuotas[i].monto_abonado) || 0;
-            const falta = montoCuota - yaAbonado;
-
-            if (rem >= falta) {
-              cobro.plan_cuotas[i].monto_abonado = montoCuota;
-              cobro.plan_cuotas[i].estado = 'Cobrada';
-              cobro.plan_cuotas[i].fecha_pago = fechaStr;
-              rem -= falta;
-            } else if (rem > 0) {
-              cobro.plan_cuotas[i].monto_abonado = yaAbonado + rem;
-              cobro.plan_cuotas[i].estado = 'Parcial';
-              rem = 0;
-            }
-          }
+      (cobro.plan_cuotas || []).forEach(c => {
+        if (c.estado === 'Cobrada' || rem <= 0) return;
+        const falta = r2((parseFloat(c.monto) || 0) - (parseFloat(c.monto_abonado) || 0));
+        if (rem >= falta - 0.005) {
+          c.monto_abonado = parseFloat(c.monto) || 0;
+          c.estado = 'Cobrada';
+          c.fecha_pago = fechaStr;
+          rem = r2(rem - falta);
+        } else {
+          c.monto_abonado = r2((parseFloat(c.monto_abonado) || 0) + rem);
+          c.estado = 'Parcial';
+          rem = 0;
         }
-      }
+      });
 
       const primerPendiente = (cobro.plan_cuotas || []).find(c => c.estado !== 'Cobrada');
       cobro.proximo_vencimiento = primerPendiente ? primerPendiente.fecha_vencimiento : '';
@@ -926,13 +1106,10 @@ return {
         if (v) v.estado = 'Completada';
       }
 
-      recalcularMetricasLocales(current);
-      setCachedData(current);
-
-return {
+      return {
         status: 'success',
-        message: cobro.saldo_pendiente_dop <= 0 
-          ? '¡Cuenta saldada en su totalidad! RD$ 0.00 restante.' 
+        message: cobro.saldo_pendiente_dop <= 0
+          ? '¡Cuenta saldada en su totalidad! RD$ 0.00 restante.'
           : `Abono de RD$ ${abonoEfectivo.toFixed(2)} registrado. Saldo pendiente: RD$ ${cobro.saldo_pendiente_dop.toFixed(2)}`,
         cobro: cobro
       };
@@ -940,40 +1117,53 @@ return {
 
     if (action === 'cancelSale') {
       const v = current.ventas.find(x => x.id_venta === data.id_venta);
-      if (v && v.estado !== 'Cancelada') {
-        v.estado = 'Cancelada';
-        const prod = current.inventario.find(x => x.id === v.id_articulo);
-        if (prod) {
-          prod.cantidad += v.cantidad;
-          prod.estado = 'En Stock';
-        }
-        if (current.cobros) {
-          const cob = current.cobros.find(x => x.id_venta === data.id_venta);
-          if (cob) cob.estado = 'Cancelada';
-        }
-        recalcularMetricasLocales(current);
-        setCachedData(current);
-  return { status: 'success', message: 'Venta cancelada y stock devuelto' };
+      if (!v) return { status: 'error', message: 'Venta no encontrada' };
+      if (v.estado === 'Cancelada') return { status: 'success', sinCambios: true, message: 'La venta ya estaba anulada' };
+
+      v.estado = 'Cancelada';
+      const prod = current.inventario.find(x => x.id === v.id_articulo);
+      if (prod) {
+        prod.cantidad = (parseInt(prod.cantidad) || 0) + (parseInt(v.cantidad) || 0);
+        prod.estado = estadoPorStock(prod.cantidad, prod.stock_minimo);
       }
-return { status: 'error', message: 'Venta no encontrada o ya cancelada' };
+      const cob = current.cobros.find(x => x.id_venta === data.id_venta);
+      if (cob) {
+        cob.estado = 'Cancelada';
+        cob.saldo_pendiente_dop = 0;
+      }
+      return { status: 'success', message: 'Venta anulada y stock devuelto' };
     }
 
     if (action === 'registerReception') {
       const rec = data;
+      if (rec.id_recepcion && current.recepciones.some(r => r.id_recepcion === rec.id_recepcion)) {
+        return { status: 'success', sinCambios: true, message: 'Tanque ya registrado', total_unidades: 0 };
+      }
       const items = rec.articulos || [];
       const tasa = parseFloat(rec.tasa_cambio) || getUsdRate();
-      let totalUnidades = 0;
       // Misma normalización de nombres que registrarRecepcionTanque() en el backend
       const norm = str => String(str || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+      let totalUnidades = 0;
+      items.forEach(item => {
+        const c = parseInt(item.cantidad) || 0;
+        if (c > 0) totalUnidades += c;
+      });
+      const fleteUsd = parseFloat(rec.flete_usd) || 0;
+      const prorratear = String((current.configuracion || {}).PRORRATEAR_FLETE || 'NO').toUpperCase() === 'SI';
+      const fletePorUnidadUsd = prorratear && totalUnidades > 0 ? fleteUsd / totalUnidades : 0;
 
       items.forEach(item => {
         const cant = parseInt(item.cantidad) || 0;
         if (cant <= 0) return;
-        totalUnidades += cant;
 
-        const costoUsd = parseFloat(item.costo_usd) || 0;
-        const costoDop = parseFloat(item.costo_dop) || (costoUsd * tasa);
-        const precioVentaDop = parseFloat(item.precio_venta_dop) || (costoDop * 1.5);
+        let costoUsd = Math.max(0, parseFloat(item.costo_usd) || 0);
+        let costoDop = Math.max(0, parseFloat(item.costo_dop) || (costoUsd * tasa));
+        if (fletePorUnidadUsd > 0) {
+          costoUsd = r2(costoUsd + fletePorUnidadUsd);
+          costoDop = r2(costoDop + fletePorUnidadUsd * tasa);
+        }
+        const precioIndicado = Math.max(0, parseFloat(item.precio_venta_dop) || 0);
 
         const existing = (item.id && current.inventario.find(x => x.id === item.id)) ||
           (item.nombre && current.inventario.find(x => norm(x.nombre) === norm(item.nombre)));
@@ -981,31 +1171,30 @@ return { status: 'error', message: 'Venta no encontrada o ya cancelada' };
         if (existing) {
           // El servidor recibe el ID del producto existente y suma sobre él
           item.id = existing.id;
-          existing.cantidad += cant;
+          existing.cantidad = (parseInt(existing.cantidad) || 0) + cant;
           if (costoUsd > 0) existing.costo_usd = costoUsd;
           if (costoDop > 0) existing.costo_dop = costoDop;
-          if (precioVentaDop > 0) existing.precio_venta_dop = precioVentaDop;
-          if (item.categoria) existing.categoria = item.categoria;
-          existing.estado = 'En Stock';
+          if (precioIndicado > 0) existing.precio_venta_dop = precioIndicado;
+          existing.estado = estadoPorStock(existing.cantidad, existing.stock_minimo);
           existing.ubicacion = rec.nombre_tanque;
-          existing.fecha_actualizacion = new Date().toLocaleString();
+          existing.fecha_actualizacion = fechaLocal();
         } else {
           // Producto nuevo: el ID se genera aquí y el servidor lo respeta
           if (!item.id) item.id = generarId('PROD');
           current.inventario.unshift({
             id: item.id,
-            nombre: item.nombre,
+            nombre: String(item.nombre || '').trim(),
             categoria: item.categoria || 'Variedades',
-            descripcion: item.descripcion || '',
+            descripcion: 'Tanque: ' + rec.nombre_tanque,
             cantidad: cant,
-            stock_minimo: parseInt(item.stock_minimo) || 3,
+            stock_minimo: 3,
             costo_usd: costoUsd,
             costo_dop: costoDop,
-            precio_venta_dop: precioVentaDop,
+            precio_venta_dop: precioIndicado > 0 ? precioIndicado : precioSugerido(costoDop),
             ubicacion: rec.nombre_tanque,
-            estado: 'En Stock',
-            fecha_ingreso: new Date().toLocaleString(),
-            fecha_actualizacion: new Date().toLocaleString()
+            estado: estadoPorStock(cant, 3),
+            fecha_ingreso: fechaLocal(),
+            fecha_actualizacion: fechaLocal()
           });
         }
       });
@@ -1013,32 +1202,27 @@ return { status: 'error', message: 'Venta no encontrada o ya cancelada' };
       // Igual que en el servidor: cada envío es una recepción propia (la UI agrupa por nombre de tanque)
       current.recepciones.unshift({
         id_recepcion: rec.id_recepcion || generarId('TANQ'),
-        fecha: rec.fecha || new Date().toISOString().substring(0, 10),
+        fecha: fechaLocal(),
         nombre_tanque: rec.nombre_tanque,
         origen: rec.origen || 'EE.UU.',
         total_unidades: totalUnidades,
-        flete_usd: parseFloat(rec.flete_usd) || 0,
+        flete_usd: fleteUsd,
         tasa_cambio: tasa,
         notas: rec.notas || '',
         articulos: items
       });
-      recalcularMetricasLocales(current);
-      setCachedData(current);
 
-return {
+      return {
         status: 'success',
         message: 'Tanque recibido registrado con éxito: ' + totalUnidades + ' unidades ingresadas.',
         total_unidades: totalUnidades
       };
     }
 
-  
-
-  return { status: 'success', message: 'Acción ejecutada en modo local' };
+    return { status: 'success', sinCambios: true, message: 'Acción ejecutada en modo local' };
   }
 
   function recalcularMetricasLocales(data) {
-    let totalProd = data.inventario.length;
     let totalUnidades = 0;
     let costoTotal = 0;
     let ventaTotal = 0;
@@ -1046,19 +1230,28 @@ return {
     let agotados = 0;
 
     data.inventario.forEach(p => {
-      totalUnidades += p.cantidad;
-      costoTotal += (p.cantidad * (p.costo_dop || 0));
-      ventaTotal += (p.cantidad * (p.precio_venta_dop || 0));
-      if (p.cantidad === 0) agotados++;
-      else if (p.cantidad <= p.stock_minimo) stockBajo++;
+      const cant = parseInt(p.cantidad) || 0;
+      totalUnidades += cant;
+      costoTotal += cant * (p.costo_dop || 0);
+      ventaTotal += cant * (p.precio_venta_dop || 0);
+      if (cant === 0) agotados++;
+      else if (cant <= stockMinimoValido(p.stock_minimo)) stockBajo++;
     });
 
-    let ventasMes = 0;
-    let gananciaMes = 0;
-    data.ventas.forEach(v => {
-      if (v.estado !== 'Cancelada') {
-        ventasMes += v.total_dop;
-        gananciaMes += v.ganancia_dop;
+    // "Hoy" y "este mes" según la hora local del dispositivo (no UTC)
+    const hoy = fechaLocal().substring(0, 10);
+    const mes = hoy.substring(0, 7);
+    let ventasHoy = 0, gananciaHoy = 0, ventasMes = 0, gananciaMes = 0;
+    (data.ventas || []).forEach(v => {
+      if (v.estado === 'Cancelada') return;
+      const f = normalizarFecha(v.fecha_venta);
+      if (f.startsWith(hoy)) {
+        ventasHoy += Number(v.total_dop) || 0;
+        gananciaHoy += Number(v.ganancia_dop) || 0;
+      }
+      if (f.startsWith(mes)) {
+        ventasMes += Number(v.total_dop) || 0;
+        gananciaMes += Number(v.ganancia_dop) || 0;
       }
     });
 
@@ -1066,27 +1259,22 @@ return {
     let totalPorCobrar = 0;
     let cuotasPendientesHoy = 0;
     let clientesConDeuda = 0;
-    const hoyStr = new Date().toISOString().substring(0, 10);
-
     data.cobros.forEach(c => {
-      if (c.estado !== 'Saldada' && c.estado !== 'Cancelada') {
-        totalPorCobrar += (parseFloat(c.saldo_pendiente_dop) || 0);
-        clientesConDeuda++;
-        if (c.proximo_vencimiento && c.proximo_vencimiento <= hoyStr) {
-          cuotasPendientesHoy++;
-        }
-      }
+      if (c.estado === 'Saldada' || c.estado === 'Cancelada') return;
+      totalPorCobrar += parseFloat(c.saldo_pendiente_dop) || 0;
+      clientesConDeuda++;
+      if (c.proximo_vencimiento && c.proximo_vencimiento <= hoy) cuotasPendientesHoy++;
     });
 
     data.metricas = {
-      total_productos: totalProd,
+      total_productos: data.inventario.length,
       total_unidades_stock: totalUnidades,
       valor_inventario_costo_dop: Math.round(costoTotal),
       valor_inventario_venta_dop: Math.round(ventaTotal),
       productos_stock_bajo: stockBajo,
       productos_agotados: agotados,
-      ventas_hoy_dop: 0,
-      ganancia_hoy_dop: 0,
+      ventas_hoy_dop: Math.round(ventasHoy),
+      ganancia_hoy_dop: Math.round(gananciaHoy),
       ventas_mes_dop: Math.round(ventasMes),
       ganancia_mes_dop: Math.round(gananciaMes),
       total_por_cobrar_dop: Math.round(totalPorCobrar),
@@ -1113,20 +1301,6 @@ return {
 
 
 
-  function resetSystemData() {
-    try {
-      localStorage.removeItem('thor_cached_system_data');
-      localStorage.removeItem('thor_cached_system_data_v2');
-      localStorage.removeItem('thor_cached_system_data_v3');
-      localStorage.removeItem('thor_cached_system_data_v4');
-      localStorage.removeItem('thor_cached_system_data_v5');
-      setCachedData(INITIAL_DEMO_DATA);
-      return { success: true };
-    } catch (e) {
-      console.error('Error al resetear datos:', e);
-      return { success: false, error: e.message };
-    }
-  }
 
   return {
     getConfig,
@@ -1135,8 +1309,8 @@ return {
     setUsdRate,
     fetchLiveExchangeRate,
     getCachedData,
-    resetSystemData,
     setCachedData,
+    limpiarDatosLocales,
     testConnection,
     // Autenticación & Sesiones en Servidor (RLS)
     login,
@@ -1161,7 +1335,23 @@ return {
       lastFetchAllTimestamp = now;
       inFlightFetchAll = (async () => {
         try {
-          return await apiGet('getAllData');
+          const res = await apiGet('getAllData');
+          if (res && res.status === 'success' && res.data) {
+            // Operaciones que el servidor ya aplicó (p. ej. respuesta perdida): no deben re-aplicarse
+            const aplicadas = new Set(res.data.ops_aplicadas || []);
+            delete res.data.ops_aplicadas;
+            if (aplicadas.size) {
+              const queue = getOutbox();
+              const restantes = queue.filter(q => !aplicadas.has(q.opId));
+              if (restantes.length !== queue.length) {
+                saveOutbox(restantes);
+                window.dispatchEvent(new CustomEvent('thor:outbox-updated', { detail: { count: restantes.length } }));
+              }
+            }
+            setSnapshot(res.data);
+            res.data = reconstruirCache();
+          }
+          return res;
         } finally {
           inFlightFetchAll = null;
         }
@@ -1179,12 +1369,14 @@ return {
     registerReception: (r) => apiPost('registerReception', r),
     saveConfig: (c) => apiPost('saveConfig', c),
     calcularPlanCuotas: calcularPlanCuotasJS,
+    fechaLocal,
+    normalizarFecha,
     obtenerProximaQuincena: obtenerProximaQuincenaJS,
     // Confiabilidad, Cola Outbox y Autoconciliación
     flushOutbox,
     getPendingOutboxCount: () => getOutbox().length,
-    reconcileWithCloud: () => apiPost('reconcileInventory', {}),
-    resetSystemData: (confirmacion) => apiPost('resetAllData', { confirmacion: confirmacion || '' }),
+    reconcileWithCloud: () => apiDirecto('reconcileInventory', {}),
+    resetSystemData: purgarTodo,
     getDeadLetterQueue,
     clearDeadLetterQueue: () => localStorage.removeItem('thor_dead_letter_queue_v1'),
     enqueueOutbox,

@@ -8,7 +8,7 @@
  * - Network-First con fallback a caché para APIs dinámicas
  */
 
-const CACHE_NAME = 'thor-essence-cache-v4';
+const CACHE_NAME = 'thor-essence-cache-v5';
 const STATIC_ASSETS = [
   './',
   './index.html',

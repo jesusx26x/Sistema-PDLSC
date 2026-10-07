@@ -524,10 +524,17 @@ function doGet(e) {
     inicializarHojasSiNoExisten();
 
     if (action === 'getAllData') {
-      return jsonResponse({
-        status: 'success',
-        data: obtenerTodosLosDatos()
-      });
+      // Se espera a que termine cualquier escritura en curso para no leer una venta a medio registrar
+      const lock = LockService.getScriptLock();
+      const conLock = lock.tryLock(10000);
+      try {
+        return jsonResponse({
+          status: 'success',
+          data: obtenerTodosLosDatos()
+        });
+      } finally {
+        if (conLock) lock.releaseLock();
+      }
     }
 
     if (action === 'getInventory') {
@@ -561,7 +568,8 @@ function doGet(e) {
     return jsonResponse({ status: 'error', message: 'Acción GET no reconocida' }, 400);
 
   } catch (err) {
-    return jsonResponse({ status: 'error', message: err.toString() }, 500);
+    console.error('doGet:', err);
+    return jsonResponse({ status: 'error', code: 'SERVER_ERROR', message: err.toString() }, 500);
   }
 }
 
@@ -616,7 +624,7 @@ function doPost(e) {
     }
   } catch (err) {
     console.error('doPost (' + action + '):', err);
-    return jsonResponse({ status: 'error', message: err.toString() }, 500);
+    return jsonResponse({ status: 'error', code: 'SERVER_ERROR', message: err.toString() }, 500);
   }
 
   const lock = LockService.getScriptLock();
@@ -624,7 +632,7 @@ function doPost(e) {
 
   try {
     if (!lockAcquired) {
-      return jsonResponse({ status: 'error', message: 'El servidor está ocupado procesando otra transacción. Reintenta en unos segundos.' }, 503);
+      return jsonResponse({ status: 'error', code: 'SERVER_BUSY', message: 'El servidor está ocupado procesando otra transacción. Reintenta en unos segundos.' }, 503);
     }
 
     inicializarHojasSiNoExisten();
@@ -650,7 +658,7 @@ function doPost(e) {
 
   } catch (err) {
     console.error('doPost (' + action + '):', err);
-    return jsonResponse({ status: 'error', message: err.toString() }, 500);
+    return jsonResponse({ status: 'error', code: 'SERVER_ERROR', message: err.toString() }, 500);
   } finally {
     if (lockAcquired) lock.releaseLock();
   }
@@ -723,6 +731,13 @@ function ejecutarAccion(action, payload) {
  * ID legible y único: PREFIJO-yyyyMMdd-XXXXXXXX (8 hex aleatorios de un UUID).
  * El frontend genera el mismo formato para que el ID local y el de la nube coincidan.
  */
+/**
+ * Redondeo a centavos para montos de dinero (evita saldos de 0.0000001).
+ */
+function r2(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
 function generarId(prefijo) {
   const fecha = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyyMMdd');
   return prefijo + '-' + fecha + '-' + Utilities.getUuid().replace(/-/g, '').substring(0, 8).toUpperCase();
@@ -811,8 +826,21 @@ function obtenerTodosLosDatos() {
     recepciones: obtenerRecepciones(),
     cobros: obtenerCobros(),
     configuracion: obtenerConfiguracion(),
-    metricas: calcularMetricasGenerales()
+    metricas: calcularMetricasGenerales(),
+    // El cliente descarta de su cola local las operaciones que ya están aplicadas aquí
+    ops_aplicadas: obtenerOperacionesRecientes(500)
   };
+}
+
+function obtenerOperacionesRecientes(limite) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA_OPERACIONES);
+  if (!sheet) return [];
+  const ultima = sheet.getLastRow();
+  if (ultima < 2) return [];
+  const desde = Math.max(2, ultima - limite + 1);
+  return sheet.getRange(desde, 1, ultima - desde + 1, 1).getValues()
+    .map(f => String(f[0] || ''))
+    .filter(Boolean);
 }
 
 function obtenerInventario() {
@@ -833,7 +861,7 @@ function obtenerInventario() {
       categoria: String(row[2] || 'Variedades'),
       descripcion: String(row[3] || ''),
       cantidad: Number(row[4]) || 0,
-      stock_minimo: Number(row[5]) || 3,
+      stock_minimo: stockMinimoDe(row[5]),
       costo_usd: Number(row[6]) || 0,
       costo_dop: Number(row[7]) || 0,
       precio_venta_dop: Number(row[8]) || 0,
@@ -859,14 +887,22 @@ function guardarOActualizarProducto(prod) {
   const nombre = String(prod.nombre).trim();
   const categoria = String(prod.categoria || 'Variedades').trim();
   const descripcion = String(prod.descripcion || '').trim();
-  const cantidad = parseInt(prod.cantidad) || 0;
-  const stockMinimo = parseInt(prod.stock_minimo) || 3;
+  const cantidadRaw = parseInt(prod.cantidad);
+  const cantidad = isNaN(cantidadRaw) ? 0 : cantidadRaw;
+  const stockMinimoRaw = parseInt(prod.stock_minimo);
+  const stockMinimo = (isNaN(stockMinimoRaw) || stockMinimoRaw < 0) ? 3 : stockMinimoRaw;
   const costoUsd = parseFloat(prod.costo_usd) || 0;
   const tasaConfig = (typeof obtenerConfiguracion === 'function') ? (parseFloat(obtenerConfiguracion().TASA_CAMBIO_USD_DOP) || 60.50) : 60.50;
   const costoDop = parseFloat(prod.costo_dop) || (costoUsd * tasaConfig);
   const precioVentaDop = parseFloat(prod.precio_venta_dop) || 0;
   const ubicacion = String(prod.ubicacion || 'Almacén Principal').trim();
-  const estado = cantidad === 0 ? 'Agotado' : (cantidad <= stockMinimo ? 'Stock Bajo' : 'En Stock');
+
+  if (cantidad < 0) {
+    return { status: 'error', code: 'VALIDACION', message: 'La cantidad no puede ser negativa' };
+  }
+  if (costoUsd < 0 || costoDop < 0 || precioVentaDop < 0) {
+    return { status: 'error', code: 'VALIDACION', message: 'Los costos y el precio no pueden ser negativos' };
+  }
 
   let filaEncontrada = -1;
   for (let i = 1; i < data.length; i++) {
@@ -881,22 +917,20 @@ function guardarOActualizarProducto(prod) {
     if (String(filaActual[10]) === 'Eliminado') {
       return { status: 'error', code: 'PRODUCTO_ELIMINADO', message: 'El producto "' + filaActual[1] + '" fue eliminado del inventario y no se puede modificar.' };
     }
-    const cantidadAnterior = parseInt(filaActual[4]) || 0;
+    // Al editar, la cantidad NO se sobrescribe: el stock solo cambia con ajustes, ventas y tanques.
+    // Así un dispositivo con datos viejos no puede pisar ventas registradas desde otro.
+    const cantidadActual = parseInt(filaActual[4]) || 0;
     const fechaIngresoOriginal = filaActual[11] || ahora;
     sheet.getRange(filaEncontrada, 1, 1, 13).setValues([[
-      id, nombre, categoria, descripcion, cantidad, stockMinimo,
-      costoUsd, costoDop, precioVentaDop, ubicacion, estado,
+      id, nombre, categoria, descripcion, cantidadActual, stockMinimo,
+      costoUsd, costoDop, precioVentaDop, ubicacion, estadoPorStock(cantidadActual, stockMinimo),
       fechaIngresoOriginal, ahora
     ]]);
-    registrarMovimientos([{
-      id: id, nombre: nombre, tipo: 'EDICION', delta: cantidad - cantidadAnterior, stock: cantidad,
-      detalle: 'Cantidad editada en el formulario del producto'
-    }]);
-    return { status: 'success', message: 'Producto actualizado exitosamente', id: id };
+    return { status: 'success', message: 'Producto actualizado exitosamente', id: id, cantidad: cantidadActual };
   } else {
     sheet.appendRow([
       id, nombre, categoria, descripcion, cantidad, stockMinimo,
-      costoUsd, costoDop, precioVentaDop, ubicacion, estado,
+      costoUsd, costoDop, precioVentaDop, ubicacion, estadoPorStock(cantidad, stockMinimo),
       ahora, ahora
     ]);
     registrarMovimientos([{
@@ -952,7 +986,7 @@ function ajustarStockProducto(id, delta, motivo, tipo, referencia) {
 
       const actual = parseInt(data[i][4]) || 0;
       const nuevo = Math.max(0, actual + deltaN);
-      const stockMin = parseInt(data[i][5]) || 3;
+      const stockMin = stockMinimoDe(data[i][5]);
 
       sheet.getRange(i + 1, 5).setValue(nuevo);
       sheet.getRange(i + 1, 11).setValue(estadoPorStock(nuevo, stockMin));
@@ -1025,9 +1059,15 @@ function registrarVenta(venta) {
   const ahora = new Date();
   const idVenta = String(venta.id_venta || '').trim() || generarId('VTA');
   const precioUnitarioDop = parseFloat(venta.precio_unitario_dop) || parseFloat(producto[8]) || 0;
-  const totalVentaDop = precioUnitarioDop * cantidadVenta;
+  if (precioUnitarioDop < 0) {
+    return { status: 'error', code: 'VALIDACION', message: 'El precio de venta no puede ser negativo' };
+  }
+  if ((parseFloat(venta.abono_inicial) || 0) < 0) {
+    return { status: 'error', code: 'VALIDACION', message: 'El abono inicial no puede ser negativo' };
+  }
+  const totalVentaDop = r2(precioUnitarioDop * cantidadVenta);
   const costoUnitarioDop = parseFloat(producto[7]) || 0;
-  const gananciaNetaDop = totalVentaDop - (costoUnitarioDop * cantidadVenta);
+  const gananciaNetaDop = r2(totalVentaDop - (costoUnitarioDop * cantidadVenta));
 
   // Modalidad: Contado vs Crédito / Fiado
   const esCredito = (venta.tipo_venta === 'credito' || venta.metodo_pago === 'Crédito' || venta.metodo_pago === 'Fiado' || venta.es_credito === true);
@@ -1074,7 +1114,7 @@ function registrarVenta(venta) {
 
   // Solo tras asegurar el registro contable, deducir stock en Inventario
   const nuevoStock = stockActual - cantidadVenta;
-  const stockMin = parseInt(producto[5]) || 3;
+  const stockMin = stockMinimoDe(producto[5]);
   const nuevoEstado = nuevoStock === 0 ? 'Agotado' : (nuevoStock <= stockMin ? 'Stock Bajo' : 'En Stock');
 
   invSheet.getRange(filaProd, 5).setValue(nuevoStock);
@@ -1104,7 +1144,7 @@ function crearRegistroCobro(info) {
   
   const totalDop = parseFloat(info.total_dop) || 0;
   const abonoInicial = parseFloat(info.abono_inicial) || 0;
-  const saldoPendiente = Math.max(0, totalDop - abonoInicial);
+  const saldoPendiente = r2(Math.max(0, totalDop - abonoInicial));
   const numCuotas = parseInt(info.num_cuotas) || 1;
   const frecuencia = info.frecuencia || 'quincenal';
 
@@ -1274,13 +1314,16 @@ function registrarAbono(pago) {
     };
   }
 
+  if (String(filaData[12]) === 'Cancelada') {
+    return { status: 'error', code: 'VALIDACION', message: 'Esta cuenta fue anulada junto con su venta' };
+  }
   if (saldoPendiente <= 0) {
-    return { status: 'error', message: 'Esta cuenta ya está totalmente saldada' };
+    return { status: 'error', code: 'VALIDACION', message: 'Esta cuenta ya está totalmente saldada' };
   }
 
-  const abonoEfectivo = Math.min(montoAbono, saldoPendiente);
-  totalCobrado += abonoEfectivo;
-  saldoPendiente = Math.max(0, totalDop - totalCobrado);
+  const abonoEfectivo = r2(Math.min(montoAbono, saldoPendiente));
+  totalCobrado = r2(totalCobrado + abonoEfectivo);
+  saldoPendiente = r2(Math.max(0, totalDop - totalCobrado));
 
   const ahora = new Date();
   const fechaStr = Utilities.formatDate(ahora, Session.getScriptTimeZone() || 'America/Santo_Domingo', 'yyyy-MM-dd HH:mm:ss');
@@ -1303,15 +1346,16 @@ function registrarAbono(pago) {
     if (planCuotas[i].estado !== 'Cobrada') {
       const montoTotalCuota = parseFloat(planCuotas[i].monto) || 0;
       const yaAbonado = parseFloat(planCuotas[i].monto_abonado) || 0;
-      const faltaEnCuota = montoTotalCuota - yaAbonado;
+      const faltaEnCuota = r2(montoTotalCuota - yaAbonado);
 
-      if (rem >= faltaEnCuota) {
+      // Tolerancia de medio centavo para no dejar cuotas "casi pagadas"
+      if (rem > 0 && rem >= faltaEnCuota - 0.005) {
         planCuotas[i].monto_abonado = montoTotalCuota;
         planCuotas[i].estado = 'Cobrada';
         planCuotas[i].fecha_pago = fechaStr;
-        rem -= faltaEnCuota;
+        rem = r2(rem - faltaEnCuota);
       } else if (rem > 0) {
-        planCuotas[i].monto_abonado = yaAbonado + rem;
+        planCuotas[i].monto_abonado = r2(yaAbonado + rem);
         planCuotas[i].estado = 'Parcial';
         rem = 0;
       }
@@ -1518,6 +1562,10 @@ function registrarRecepcionTanque(rec) {
 
   const norm = str => String(str || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
+  // Flete prorrateado en el costo unitario (Configuracion › PRORRATEAR_FLETE = SI)
+  const prorratearFlete = String(obtenerConfiguracion().PRORRATEAR_FLETE || 'NO').trim().toUpperCase() === 'SI';
+  const fletePorUnidadUsd = (prorratearFlete && totalUnidades > 0) ? fleteUsd / totalUnidades : 0;
+
   // Guardar cada artículo en Inventario (sumando acumulativamente al stock existente)
   const invSheet = getSheet(SHEETS.INVENTARIO);
   const invData = invSheet.getDataRange().getValues();
@@ -1542,9 +1590,13 @@ function registrarRecepcionTanque(rec) {
     const cant = parseInt(art.cantidad) || 0;
     if (cant <= 0) return;
 
-    const costoUsd = parseFloat(art.costo_usd) || 0;
-    const costoDop = parseFloat(art.costo_dop) || (costoUsd * tasaCambio);
-    const precioVentaDop = parseFloat(art.precio_venta_dop) || 0;
+    let costoUsd = Math.max(0, parseFloat(art.costo_usd) || 0);
+    let costoDop = Math.max(0, parseFloat(art.costo_dop) || (costoUsd * tasaCambio));
+    if (fletePorUnidadUsd > 0) {
+      costoUsd = r2(costoUsd + fletePorUnidadUsd);
+      costoDop = r2(costoDop + fletePorUnidadUsd * tasaCambio);
+    }
+    const precioVentaDop = Math.max(0, parseFloat(art.precio_venta_dop) || 0);
     const artId = String(art.id || '').trim();
     const artNom = norm(art.nombre);
 
@@ -1560,7 +1612,7 @@ function registrarRecepcionTanque(rec) {
       // PRODUCTO EXISTENTE: SUMAR EXISTENCIA ACUMULATIVAMENTE (NUNCA SOBREESCRIBIR)
       const stockAnterior = parseInt(invData[rowIdx][4]) || 0;
       const nuevoStock = stockAnterior + cant;
-      const stockMin = parseInt(invData[rowIdx][5]) || 3;
+      const stockMin = stockMinimoDe(invData[rowIdx][5]);
       const nuevoEstado = nuevoStock === 0 ? 'Agotado' : (nuevoStock <= stockMin ? 'Stock Bajo' : 'En Stock');
 
       invData[rowIdx][4] = nuevoStock;
@@ -1592,7 +1644,8 @@ function registrarRecepcionTanque(rec) {
         3,
         costoUsd,
         costoDop,
-        precioVentaDop,
+        // Sin precio indicado: precio sugerido costo × 1.5 (igual que el frontend) para no vender a RD$ 0
+        precioVentaDop > 0 ? precioVentaDop : r2(costoDop * 1.5),
         nombreTanque,
         estado,
         ahora,
@@ -1713,7 +1766,7 @@ function calcularMetricasGenerales() {
   let clientesConDeuda = 0;
 
   cobros.forEach(c => {
-    if (c.estado !== 'Saldada') {
+    if (c.estado !== 'Saldada' && c.estado !== 'Cancelada') {
       totalPorCobrarDop += (c.saldo_pendiente_dop || 0);
       clientesConDeuda++;
       if (c.proximo_vencimiento && c.proximo_vencimiento <= hoyStr) {
@@ -1746,7 +1799,8 @@ function obtenerConfiguracion() {
     NOMBRE_NEGOCIO: 'Thor Essence',
     MONEDA_PRINCIPAL: 'DOP',
     TASA_CAMBIO_USD_DOP: 60.50,
-    CATEGORIAS: 'Perfumes, Splash, Cremas, Body Wash, Accesorios, Maquillaje, Variedades'
+    CATEGORIAS: 'Perfumes, Splash, Cremas, Body Wash, Accesorios, Maquillaje, Variedades',
+    PRORRATEAR_FLETE: 'NO'
   };
 
   for (let i = 1; i < rows.length; i++) {
@@ -1834,7 +1888,8 @@ function inicializarHojasSiNoExisten(forzar) {
       ['SLOGAN', 'Belleza, aroma y estilo en un solo lugar'],
       ['MONEDA_PRINCIPAL', 'DOP'],
       ['TASA_CAMBIO_USD_DOP', 60.50],
-      ['CATEGORIAS', 'Perfumes, Splash, Cremas, Body Wash, Accesorios, Maquillaje, Variedades']
+      ['CATEGORIAS', 'Perfumes, Splash, Cremas, Body Wash, Accesorios, Maquillaje, Variedades'],
+      ['PRORRATEAR_FLETE', 'NO']
     ];
     cfgSheet.getRange(2, 1, defaultValues.length, 2).setValues(defaultValues);
   }
@@ -1914,6 +1969,14 @@ function purgarTodasLasHojas(confirmacion) {
  * producto debe ser siempre igual a su stock en Inventario.
  */
 const HOJA_MOVIMIENTOS = 'Movimientos';
+
+/**
+ * Stock mínimo de una fila: acepta 0; vacío o inválido → 3.
+ */
+function stockMinimoDe(valor) {
+  const n = parseInt(valor);
+  return (isNaN(n) || n < 0) ? 3 : n;
+}
 
 function estadoPorStock(cantidad, stockMin) {
   return cantidad <= 0 ? 'Agotado' : (cantidad <= stockMin ? 'Stock Bajo' : 'En Stock');
@@ -2333,7 +2396,7 @@ function aplicarCorreccionesMarcadas() {
           return;
         }
         inv[idx][4] = nuevo;
-        inv[idx][10] = estadoPorStock(nuevo, parseInt(inv[idx][5]) || 3);
+        inv[idx][10] = estadoPorStock(nuevo, stockMinimoDe(inv[idx][5]));
         inv[idx][12] = ahora;
         movimientos.push({ id: id, nombre: inv[idx][1], tipo: 'CORRECCION', delta: nuevo - stockActual, stock: nuevo,
           detalle: 'Corrección desde el diagnóstico de inventario' });
@@ -2420,7 +2483,7 @@ function eliminarRecepcion(idRecepcion) {
     if (quitar < cant) faltantes.push(inv[idx][1] + ': solo había ' + actual + ' de ' + cant + ' u.');
     const nuevo = actual - quitar;
     inv[idx][4] = nuevo;
-    inv[idx][10] = estadoPorStock(nuevo, parseInt(inv[idx][5]) || 3);
+    inv[idx][10] = estadoPorStock(nuevo, stockMinimoDe(inv[idx][5]));
     inv[idx][12] = ahora;
     movimientos.push({ id: inv[idx][0], nombre: inv[idx][1], tipo: 'REVERSION_RECEPCION', delta: -quitar, stock: nuevo,
       referencia: idRecepcion, detalle: 'Tanque eliminado: ' + rows[filaRec][2] });

@@ -82,12 +82,29 @@ Los códigos (C1, A3, M5…) refieren a los hallazgos de esa auditoría.
 - Quitar la doble aplicación local de `quickAdjustStock`.
 - `resetAllData`/`reconcileInventory` nunca pasan por el outbox; arreglar la clave duplicada `resetSystemData`; la purga limpia también `AJUSTES`.
 
+**Implementado:**
+- La pantalla muestra la última foto del servidor (`thor_server_snapshot_v1`) con las operaciones pendientes re-aplicadas encima (`reconstruirCache`): descargar ya no borra lo pendiente y una operación rechazada se deshace sola.
+- `getAllData` lee con lock (sin estados a medio escribir) y devuelve `ops_aplicadas`; el cliente quita de su cola lo que el servidor ya aplicó.
+- `procesarCola`: envío estrictamente en orden; se detiene ante red caída, sesión vencida (`UNAUTHORIZED_RLS`) o `SERVER_BUSY` sin gastar reintentos; solo `SERVER_ERROR` cuenta para la cola de recuperación; los rechazos de negocio se descartan, se revierten y se avisan (`thor:operacion-rechazada`).
+- `apiPost` devuelve el error real cuando el servidor rechaza (antes decía "guardado"); lo inválido en local no se encola.
+- Sin sesión no se sube ni descarga nada; un solo aviso de sesión vencida.
+- Ajuste rápido, anulación y eliminación: una sola aplicación local (antes el ajuste se aplicaba dos veces).
+- Purga y diagnóstico por `apiDirecto` (requieren conexión, nunca en cola); la purga solo limpia el dispositivo si el servidor confirma.
+
 ## Fase 5 — Integridad de producto y reglas de negocio (A3, M4, M9, M10) · 🟠
 
 - `saveProduct` en modo edición no modifica `cantidad`; el stock solo cambia por movimientos (delta).
 - Validación en servidor: sin cantidades/precios negativos, `stock_minimo` 0 permitido.
 - Redondeo a centavos en abonos/saldos; deudas canceladas fuera de las métricas por cobrar.
 - Prorrateo opcional del flete del tanque en el costo unitario; mismo precio por defecto en cliente y servidor.
+
+**Implementado:**
+- `saveProduct` en edición ignora `cantidad`; el formulario envía la corrección como `adjustStock` (delta) y "sumar a existente" también.
+- Validación (código `VALIDACION`): cantidades, costos, precios y abonos negativos; `stock_minimo` 0 permitido.
+- Dinero redondeado a centavos (`r2`) en ventas, cobros y abonos, con tolerancia de medio centavo por cuota; mensaje claro para cuentas anuladas.
+- Cuentas `Cancelada` fuera de las métricas por cobrar (servidor y dispositivo).
+- Tanque: precio sugerido costo × 1.5 solo para productos nuevos sin precio (igual en ambos lados; ya no pisa el precio de existentes); flete prorrateado si `Configuracion › PRORRATEAR_FLETE = SI` (por defecto `NO`).
+- Fase 6 adelantada: fechas locales en formato `yyyy-MM-dd HH:mm:ss`, métricas de hoy/mes en hora local.
 
 ## Fase 6 — Métricas y fechas (M2, M3) · 🟡
 
@@ -108,8 +125,8 @@ Los códigos (C1, A3, M5…) refieren a los hallazgos de esa auditoría.
 |---|---|
 | 1 — Credenciales y sesiones | ✅ Desplegado (pendiente: regenerar el manual PDF sin credenciales) |
 | 2 — Idempotencia e IDs | ✅ Desplegado |
-| 3 — Conciliación | 🟡 Código listo y probado — pendiente de desplegar y limpiar datos |
-| 4 — Cola y sincronización | ⏳ Pendiente |
-| 5 — Reglas de negocio | ⏳ Pendiente |
-| 6 — Métricas y fechas | ⏳ Pendiente |
+| 3 — Conciliación | ✅ Desplegado y datos corregidos (tanque duplicado + 2 productos con 62 u. de más) |
+| 4 — Cola y sincronización | 🟡 Código listo y probado — pendiente de desplegar |
+| 5 — Reglas de negocio | 🟡 Código listo y probado — pendiente de desplegar |
+| 6 — Métricas y fechas | 🟡 Mayormente cubierta en la Fase 5 (métricas locales y formato de fecha) |
 | 7 — PWA, XSS, rendimiento | ⏳ Pendiente |
