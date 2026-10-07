@@ -136,5 +136,5 @@ Los códigos (C1, A3, M5…) refieren a los hallazgos de esa auditoría.
 | 3 — Conciliación | ✅ Desplegado y datos corregidos (tanque duplicado + 2 productos con 62 u. de más) |
 | 4 — Cola y sincronización | ✅ Desplegado |
 | 5 — Reglas de negocio | ✅ Desplegado (prorrateo de flete pospuesto por decisión del negocio) |
-| 6 — Métricas y fechas | 🟡 Código listo y probado — pendiente de desplegar |
-| 7 — PWA, XSS, rendimiento | 🟡 Código listo y probado — pendiente de desplegar |
+| 6 — Métricas y fechas | ✅ Desplegado |
+| 7 — PWA, XSS, rendimiento | ✅ Desplegado |
